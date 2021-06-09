@@ -1,2 +1,3 @@
-# fcpeg
-Parsing Expression Grammar for Ches, Ches Markdown, FunCobal, etc.
+# FCPEG
+
+(FunCobal | Functional Ches) Parsing Expression Grammar
