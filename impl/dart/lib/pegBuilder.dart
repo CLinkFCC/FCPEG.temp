@@ -19,7 +19,6 @@ class FCPEG{
     });
   }
   void addBlock(String tag,String lines)=>this.bl.add(Block(tag).update(lines));
-  SyntaxNode parseCode(String im){}
 }
 
 extension IndexedMap<T, E> on List<T> {
