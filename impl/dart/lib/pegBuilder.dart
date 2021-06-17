@@ -1,4 +1,4 @@
-import "package:FCPEG/node.dart";
+import "package:FCPEG/PegNode.dart";
 
 class FCPEG{
   List<Block> bl;
