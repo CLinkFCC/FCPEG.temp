@@ -1,2 +1,5 @@
-import "package:FCPEG/PegBuilder.dart";
-import "package:FCPEG/PegParser.dart";
+import "pegBuilder.dart";
+import "pegParser.dart";
+
+export "pegBuilder.dart";
+export "pegParser.dart";
