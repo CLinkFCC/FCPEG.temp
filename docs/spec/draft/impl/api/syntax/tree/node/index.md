@@ -8,10 +8,14 @@
 
 #### フィールド
 
+##### key: string
+
+構文ノードのキー。
+
 ##### child_nodes: vector\<[SyntaxNode](./index.md#SyntaxNode%20%構造体)>
 
-構文木が持つ子ノードの一覧。
+構文ノードが持つ子ノードの一覧。
 
 ##### leaf_nodes: vector\<string>
 
-構文木が持つ葉ノードの一覧。
+構文ノードが持つ葉ノードの一覧。

@@ -24,9 +24,9 @@
 
 ブロックのキー。
 
-##### commands: map\<string, [Command](./command/index.md#Command%20%構造体)>
+##### pragma: map\<string, [Pragma](./pragma/index.md#Pragma%20%構造体)>
 
-ブロックが持つコマンドとそのキーのマップ。
+ブロックが持つ Pragma 命令とそのキーのマップ。
 
 検索時の手間を減らすためキーをもつ。
 

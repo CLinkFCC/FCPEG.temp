@@ -46,18 +46,6 @@
 
 Rust を除き、フィールドの初期化には `init(string)` を用いる。
 
-##### × init(source: string)
-
-フィールドを初期化してインスタンスを再利用できるようにする。
-
-###### 引数
-
-- `source` ... パース対象の FCPEG ソース。
-
-###### 実装
-
-`source` は引数として渡されたソース、`index` は `0` で初期化する。
-
 ##### priv load_source(fcpeg_file_path: string)
 
 ###### 引数
