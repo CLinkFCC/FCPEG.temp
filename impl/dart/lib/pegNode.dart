@@ -38,9 +38,3 @@ class RuleDef{
 class Comments extends String{
   static docCom(List<Comments> coms){}
 }
-
-class SyntaxNode{
-  String name;
-
-  SyntaxNode(String name)=>this.name=name;
-}

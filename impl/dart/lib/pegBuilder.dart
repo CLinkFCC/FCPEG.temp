@@ -1,7 +1,7 @@
-import "package:FCPEG/PegNode.dart";
+import "pegNode.dart";
 
 class FCPEG{
-  List<Block> bl;
+  List<Block> bls;
   FCPEG()=>List();
   //Str block_tag, Str kind, Str data/RuleDef rule
   static FCPEG parsePEG(String imput) {
@@ -18,7 +18,7 @@ class FCPEG{
       });
     });
   }
-  void addBlock(String tag,String lines)=>this.bl.add(Block(tag).update(lines));
+  void addBlock(String tag,String lines)=>this.bls.add(Block(tag).update(lines));
 }
 
 extension IndexedMap<T, E> on List<T> {
