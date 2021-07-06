@@ -32,6 +32,14 @@
 
 `0`
 
+##### has_parse_started
+
+パースが開始されたか。
+
+###### 初期値
+
+`false`
+
 #### メソッド
 
 ##### new(source: string)

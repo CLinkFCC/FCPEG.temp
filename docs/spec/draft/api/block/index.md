@@ -24,11 +24,23 @@
 
 ブロックのキー。
 
-##### pragma: map\<string, [Pragma](./pragma/index.md#Pragma%20%構造体)>
+<!-- ##### pragma: map\<string, [Pragma](./pragma/index.md#Pragma%20%構造体)>
 
 ブロックが持つ Pragma 命令とそのキーのマップ。
 
-検索時の手間を減らすためキーをもつ。
+検索時の手間を減らすためキーをもつ。 -->
+
+##### using_blocks: map\<string, string>
+
+use 文で記述されたブロック名と置換先のブロック名。
+
+##### start_block: string
+
+start 文で記述された規則名。
+
+###### 初期値
+
+`""` もしくは `None`
 
 ##### rules: map\<string, [Rule](./rule/index.md)>
 
