@@ -44,14 +44,14 @@ impl std::fmt::Display for RegexMode {
 }
 
 pub struct SettingFile {
-    file_alias: std::collections::HashMap::<String, String>,
-    regex_mode: RegexMode,
+    pub file_alias_map: std::collections::HashMap<String, String>,
+    pub regex_mode: RegexMode,
 }
 
 impl SettingFile {
     pub fn new() -> Self {
         return SettingFile {
-            file_alias: std::collections::HashMap::new(),
+            file_alias_map: std::collections::HashMap::new(),
             regex_mode: RegexMode::Default,
         }
     }
@@ -84,7 +84,7 @@ impl SettingFile {
                         None => return Err(SettingFileError::InvalidPropValueLength(prop_name.to_string())),
                     };
 
-                    self.file_alias.insert(prop_name.to_string(), file_alias_path.to_string());
+                    self.file_alias_map.insert(prop_name.to_string(), file_alias_path.to_string());
                 }
             }
         }
@@ -143,7 +143,7 @@ impl SettingFile {
         println!("regex mode: {}", self.regex_mode);
         println!("file aliases:");
 
-        for (alias_name, alias_path) in self.file_alias.iter() {
+        for (alias_name, alias_path) in self.file_alias_map.iter() {
             println!("\t{}: {}", alias_name, alias_path);
         }
     }
