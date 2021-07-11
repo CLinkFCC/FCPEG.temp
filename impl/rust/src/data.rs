@@ -1,3 +1,4 @@
+#[derive(PartialOrd, PartialEq, Debug)]
 pub enum TokenKind {
     ID,
     Space,
@@ -63,7 +64,7 @@ impl Block {
 }
 
 pub enum Command {
-    Import(String),
+    Define(Rule),
     Start(String),
     Use(String, String),
 }

@@ -105,7 +105,7 @@ impl SettingFile {
             }
 
             // コンマを除いた行
-            let pure_line = each_line[0..each_line.len() - 1].to_string();
+            let pure_line = each_line[..each_line.len() - 1].to_string();
             // 右辺と左辺
             let both_sides: Vec<&str> = pure_line.split(": ").collect();
 

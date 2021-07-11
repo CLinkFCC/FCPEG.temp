@@ -28,9 +28,11 @@ impl FCPEGFileManError {
 #[derive(Debug)]
 pub enum BlockSyntaxError {
     Unknown(),
+    ExpectedBlockDef(usize),
     ExpectedID(usize),
     UnexpectedEOF(usize, String),
     UnexpectedToken(usize, String, String),
+    UnknownSyntax(usize, String),
     UnknownToken(usize, String),
 }
 
@@ -45,10 +47,12 @@ impl std::fmt::Display for BlockSyntaxError {
 impl BlockSyntaxError {
     pub fn get_log_data(&self) -> console::ConsoleLogData {
         match self {
-            BlockSyntaxError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown", vec![], vec![]),
+            BlockSyntaxError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown error", vec![], vec![]),
+            BlockSyntaxError::ExpectedBlockDef(line) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "expected block definition", vec![format!("line: {}", line + 1)], vec![]),
             BlockSyntaxError::ExpectedID(line) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "expected ID", vec![format!("line: {}", line + 1)], vec![]),
             BlockSyntaxError::UnexpectedEOF(line, expected_str) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unexpected EOF, expected '{}'", expected_str), vec![format!("line: {}", line + 1)], vec![]),
             BlockSyntaxError::UnexpectedToken(line, unexpected_token, expected_token) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unexpected token '{}', expected '{}'", unexpected_token, expected_token), vec![format!("line: {}", line + 1)], vec![]),
+            BlockSyntaxError::UnknownSyntax(line, target_token) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown syntax"), vec![format!("line: {}", line + 1), format!("target token: '{}'", target_token)], vec![]),
             BlockSyntaxError::UnknownToken(line, unknown_token) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown token '{}'", unknown_token), vec![format!("line: {}", line + 1)], vec![]),
         }
     }
@@ -102,21 +106,32 @@ impl FCPEGFileMan {
     }
 
     pub fn parse_all(&mut self) -> std::result::Result<(), BlockSyntaxError> {
+        let mut block_parser = BlockParser::new();
+
         for (alias_name, alias_item) in self.src_file_map.iter() {
             println!("parsing all: {} {}", alias_name, alias_item.0);
 
             let tokens = BlockParser::get_tokens(&alias_item.1)?;
-
-            self.file_alias_blocks.insert(alias_name.to_string(), BlockParser::parse(&alias_item.1)?);
+            self.file_alias_blocks.insert(alias_name.to_string(), block_parser.parse(tokens)?);
         }
 
         return Ok(());
     }
 }
 
-pub struct BlockParser {}
+pub struct BlockParser {
+    token_i: usize,
+    tokens: Vec<data::Token>
+}
 
 impl BlockParser {
+    pub fn new() -> Self {
+        return BlockParser {
+            token_i: 0,
+            tokens: vec![],
+        }
+    }
+
     pub fn get_tokens(src_content: &String) -> std::result::Result<Vec<data::Token>, BlockSyntaxError> {
         let mut tokens: Vec<data::Token> = vec![];
 
@@ -129,12 +144,6 @@ impl BlockParser {
 
         let chars: Vec<char> = src_content.chars().collect();
         let mut char_i: usize = 0;
-
-        // for ch in &chars {
-        //     if *ch != '\n' {
-        //         print!("{}", ch);
-        //     }
-        // }
 
         while char_i < chars.len() {
             let each_char = chars.get(char_i).unwrap();
@@ -161,6 +170,7 @@ impl BlockParser {
                     char_i += 1;
 
                     if *next_char == '\n' {
+                        line_i += 1;
                         break;
                     }
                 }
@@ -310,26 +320,97 @@ impl BlockParser {
             tmp_id = "".to_string();
         }
 
-        // for (token_i, each_token) in tokens.iter().enumerate() {
-        //     print!("{}[{}] {}: {}", "\t".to_string().repeat(token_i % 5), token_i, each_token.kind, each_token.value);
-
-        //     if token_i % 5 == 0 {
-        //         println!();
-        //     }
-        // }
-
         for (token_i, each_token) in tokens.iter().enumerate() {
-            println!("[{}] {}\t\t{}", token_i, each_token.value, each_token.kind);
+            println!("[{};{}] {}\t\t{}", each_token.line, token_i, each_token.value, each_token.kind);
         }
 
         return Ok(tokens);
     }
 
-    pub fn parse(src_content: &String) -> std::result::Result<std::collections::HashMap<String, data::Block>, BlockSyntaxError> {
-        // let rule_map = std::collections::HashMap::<String, data::Rule>::new();
-        // let blocks = BlockParser::get_blocks(src_content)?;
+    // フィールドが初期化されるためインスタンスを使い回せる
+    pub fn parse(&mut self, tokens: Vec<data::Token>) -> std::result::Result<std::collections::HashMap<String, data::Block>, BlockSyntaxError> {
+        // フィールド初期化
+        self.token_i = 0;
+        self.tokens = tokens;
 
-        // return Ok(blocks);
-        return Ok(std::collections::HashMap::new());
+        let rule_map = std::collections::HashMap::<String, data::Rule>::new();
+        let block_map = self.get_blocks()?;
+
+        return Ok(block_map);
+    }
+
+    fn get_blocks(&mut self) -> std::result::Result<std::collections::HashMap<String, data::Block>, BlockSyntaxError> {
+        let mut block_map = std::collections::HashMap::<String, data::Block>::new();
+
+        while self.token_i < self.tokens.len() {
+            let each_token = self.tokens.get(self.token_i).unwrap();
+
+            // ブロック定義前にスペースがあれば飛ばす
+            if each_token.kind == data::TokenKind::Space {
+                self.token_i += 1;
+                continue;
+            }
+
+            if each_token.kind == data::TokenKind::StringInBracket {
+                self.token_i += 1;
+
+                match self.tokens.get(self.token_i) {
+                    Some(v) => {
+                        if v.kind != data::TokenKind::Symbol || v.value != "{" {
+                            return Err(BlockSyntaxError::UnknownToken(each_token.line, each_token.value.clone()));
+                        }
+
+                        ()
+                    },
+                    None => return Err(BlockSyntaxError::UnknownToken(each_token.line, each_token.value.clone())),
+                }
+
+                self.token_i += 1;
+
+                // token_i がブロック終了位置 + 1 に設定される
+                let block = self.get_block_content()?;
+                block_map.insert(block.name.to_string(), block);
+
+                continue;
+            }
+
+            return Err(BlockSyntaxError::ExpectedBlockDef(each_token.line));
+        }
+
+        return Ok(block_map);
+    }
+
+    // token_i がブロックの中身の開始位置であること
+    // token_i はブロック終了位置 ( 閉じ括弧の位置 ) + 1 に設定される
+    fn get_block_content(&mut self) -> std::result::Result<data::Block, BlockSyntaxError> {
+        while self.token_i < self.tokens.len() {
+            let each_token = self.tokens.get(self.token_i).unwrap();
+
+            if each_token.kind == data::TokenKind::Symbol && each_token.value == "}" {
+                self.token_i += 1;
+
+                let block = data::Block::new("".to_string(), vec![], vec![]);
+                return Ok(block);
+            }
+
+            self.token_i += 1;
+        }
+
+        // 閉じ括弧が見つからないためエラーを返す
+
+        if self.tokens.len() == 0 {
+            return Err(BlockSyntaxError::UnexpectedEOF(0, "}".to_string()));
+        }
+
+        let last_token = self.tokens.get(self.tokens.len() - 1).unwrap();
+        return Err(BlockSyntaxError::UnexpectedEOF(last_token.line, "}".to_string()));
+    }
+
+    fn get_commands(&mut self) {
+        while self.token_i < self.tokens.len() {
+            let each_token = self.tokens.get(self.token_i).unwrap();
+
+            
+        }
     }
 }
