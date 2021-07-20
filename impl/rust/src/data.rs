@@ -1,4 +1,4 @@
-#[derive(PartialOrd, PartialEq, Debug)]
+#[derive(PartialOrd, PartialEq, Debug, Clone)]
 pub enum TokenKind {
     ID,
     Space,
@@ -19,6 +19,7 @@ impl std::fmt::Display for TokenKind {
     }
 }
 
+#[derive(Clone)]
 pub struct Token {
     pub line: usize,
     pub kind: TokenKind,
@@ -47,36 +48,123 @@ impl SyntaxNode {
     }
 }
 
+#[derive(Clone)]
 pub struct Block {
     pub name: String,
     pub cmds: Vec<Command>,
-    pub rules: Vec<Rule>,
 }
 
 impl Block {
-    pub fn new(name: String, cmds: Vec<Command>, rules: Vec<Rule>) -> Self {
+    pub fn new(name: String, cmds: Vec<Command>) -> Self {
         return Block {
             name: name,
             cmds: cmds,
-            rules: rules,
         };
     }
 }
 
+#[derive(Clone)]
 pub enum Command {
     Define(Rule),
     Start(String),
+    // ブロック名, ブロックエイリアス名
     Use(String, String),
 }
 
+impl std::fmt::Display for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Command::Define(rule) => return write!(f, "rule '{}'", rule),
+            Command::Start(block_name) => return write!(f, "start block '{}'", block_name),
+            Command::Use(block_name, block_alias_name) => return write!(f, "use block '{}' as '{}'", block_name, block_alias_name),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Rule {
     pub name: String,
+    pub choices: Vec<RuleChoice>,
+}
+
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
 }
 
 impl Rule {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, choices: Vec<RuleChoice>) -> Self {
         return Rule {
             name: name,
+            choices: choices,
         };
+    }
+}
+
+#[derive(Clone)]
+pub struct RuleChoice {
+    pub seqs: Vec<RuleSequence>,
+}
+
+impl RuleChoice {
+    pub fn new(seqs: Vec<RuleSequence>) -> Self {
+        return RuleChoice {
+            seqs: seqs,
+        };
+    }
+}
+
+#[derive(Clone)]
+pub struct RuleSequence {
+    pub exprs: Vec<RuleExpression>,
+}
+
+impl RuleSequence {
+    pub fn new(exprs: Vec<RuleExpression>) -> Self {
+        return RuleSequence {
+            exprs: exprs,
+        };
+    }
+}
+
+#[derive(Clone)]
+pub enum RuleExpressionKind {
+    CharClass,
+    String,
+    Wildcard,
+}
+
+#[derive(Clone)]
+pub enum RuleExpressionLoopKind {
+    One,
+    OneOrMore,
+    ZeroOrOne,
+    ZeroOrMore,
+}
+
+#[derive(Clone)]
+pub enum RuleExpressionLookaheadKind {
+    None,
+    Positive,
+    Negative,
+}
+
+#[derive(Clone)]
+pub struct RuleExpression {
+    pub kind: RuleExpressionKind,
+    pub loop_type: RuleExpressionLoopKind,
+    pub lookahead_type: RuleExpressionLookaheadKind,
+    pub value: String,
+}
+
+impl RuleExpression {
+    pub fn new(kind: RuleExpressionKind, loop_type: RuleExpressionLoopKind, lookahead_type: RuleExpressionLookaheadKind, value: String,) -> Self {
+        return RuleExpression {
+            kind: kind,
+            loop_type: loop_type,
+            lookahead_type: lookahead_type,
+            value: value,
+        }
     }
 }
