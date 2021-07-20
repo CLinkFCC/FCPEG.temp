@@ -74,7 +74,7 @@ pub enum Command {
 impl std::fmt::Display for Command {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Command::Define(rule) => return write!(f, "rule '{}'", rule),
+            Command::Define(rule) => return write!(f, "rule {}", rule),
             Command::Start(block_name) => return write!(f, "start block '{}'", block_name),
             Command::Use(block_name, block_alias_name) => return write!(f, "use block '{}' as '{}'", block_name, block_alias_name),
         }
@@ -89,7 +89,13 @@ pub struct Rule {
 
 impl std::fmt::Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.name)
+        let mut choice_text = Vec::<String>::new();
+
+        for each_choice in &self.choices {
+            choice_text.push(each_choice.to_string());
+        }
+
+        write!(f, "{}\n{}", self.name, choice_text.join(" : "))
     }
 }
 
@@ -104,14 +110,51 @@ impl Rule {
 
 #[derive(Clone)]
 pub struct RuleChoice {
-    pub seqs: Vec<RuleSequence>,
+    pub seq_groups: Vec<RuleSequenceGroup>,
 }
 
 impl RuleChoice {
-    pub fn new(seqs: Vec<RuleSequence>) -> Self {
+    pub fn new(seq_groups: Vec<RuleSequenceGroup>) -> Self {
         return RuleChoice {
+            seq_groups: seq_groups,
+        };
+    }
+}
+
+impl std::fmt::Display for RuleChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut seq_group_text = Vec::<String>::new();
+
+        for each_group in &self.seq_groups {
+            seq_group_text.push(each_group.to_string());
+        }
+
+        write!(f, "{}", seq_group_text.join(":"))
+    }
+}
+
+#[derive(Clone)]
+pub struct RuleSequenceGroup {
+    pub seqs: Vec<RuleSequence>,
+}
+
+impl RuleSequenceGroup {
+    pub fn new(seqs: Vec<RuleSequence>) -> Self {
+        return RuleSequenceGroup {
             seqs: seqs,
         };
+    }
+}
+
+impl std::fmt::Display for RuleSequenceGroup {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut seq_text = Vec::<String>::new();
+
+        for each_seq in &self.seqs {
+            seq_text.push(format!("({})", each_seq));
+        }
+
+        write!(f, "{}", seq_text.join(" "))
     }
 }
 
@@ -128,11 +171,33 @@ impl RuleSequence {
     }
 }
 
+impl std::fmt::Display for RuleSequence {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut expr_text = Vec::<String>::new();
+
+        for each_expr in &self.exprs {
+            expr_text.push(each_expr.to_string());
+        }
+
+        write!(f, "{}", expr_text.join(" "))
+    }
+}
+
 #[derive(Clone)]
 pub enum RuleExpressionKind {
     CharClass,
     String,
     Wildcard,
+}
+
+impl RuleExpressionKind {
+    pub fn to_token_string(&self, value: String) -> String {
+        return match self {
+            RuleExpressionKind::CharClass => value.to_string(),
+            RuleExpressionKind::String => format!("\"{}\"", value),
+            RuleExpressionKind::Wildcard => ".".to_string(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -143,11 +208,32 @@ pub enum RuleExpressionLoopKind {
     ZeroOrMore,
 }
 
+impl RuleExpressionLoopKind {
+    pub fn to_symbol_string(&self) -> String {
+        return match self {
+            RuleExpressionLoopKind::One => "".to_string(),
+            RuleExpressionLoopKind::OneOrMore => "+".to_string(),
+            RuleExpressionLoopKind::ZeroOrOne => "?".to_string(),
+            RuleExpressionLoopKind::ZeroOrMore => "*".to_string(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum RuleExpressionLookaheadKind {
     None,
     Positive,
     Negative,
+}
+
+impl RuleExpressionLookaheadKind {
+    pub fn to_symbol_string(&self) -> String {
+        return match self {
+            RuleExpressionLookaheadKind::None => "".to_string(),
+            RuleExpressionLookaheadKind::Positive => "&".to_string(),
+            RuleExpressionLookaheadKind::Negative => "!".to_string(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -166,5 +252,11 @@ impl RuleExpression {
             lookahead_type: lookahead_type,
             value: value,
         }
+    }
+}
+
+impl std::fmt::Display for RuleExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}{}{}", self.lookahead_type.to_symbol_string(), self.kind.to_token_string(self.value.to_string()), self.loop_type.to_symbol_string())
     }
 }
