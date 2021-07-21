@@ -329,8 +329,6 @@ impl BlockParser {
                 continue;
             }
 
-            char_i += 1;
-
             println!("+ {} {}", *each_char as i32, *each_char);
             return Err(BlockSyntaxError::UnknownToken(line_i, each_char.to_string()));
         }
@@ -338,7 +336,6 @@ impl BlockParser {
         // 最後に tmp_id が残っていないかチェック
         if tmp_id.len() != 0 {
             tokens.push(data::Token::new(line_i, data::TokenKind::ID, tmp_id.to_string()));
-            tmp_id = "".to_string();
         }
 
         for (token_i, each_token) in tokens.iter().enumerate() {
@@ -354,9 +351,7 @@ impl BlockParser {
         self.token_i = 0;
         self.tokens = tokens;
 
-        let rule_map = std::collections::HashMap::<String, data::Rule>::new();
         let block_map = self.get_blocks()?;
-
         return Ok(block_map);
     }
 
@@ -450,15 +445,6 @@ impl BlockParser {
         }
 
         return Ok(cmds);
-
-        // コマンドが見つからないためエラーを返す
-
-        // if self.tokens.len() == 0 {
-        //     return Err(BlockSyntaxError::UnexpectedEOF(0, "'}'".to_string()));
-        // }
-
-        // let last_token = self.tokens.get(self.tokens.len() - 1).unwrap();
-        // return Err(BlockSyntaxError::UnexpectedEOF(last_token.line, "'}'".to_string()));
     }
 
     // 各コマンドの中身を取得する
@@ -609,7 +595,6 @@ impl BlockParser {
                     Some(v) => {
                         if v.kind == data::TokenKind::Space {
                             self.token_i += 1;
-                            line_num = v.line;
                         }
                     },
                     None => return Err(BlockSyntaxError::UnexpectedEOF(line_num, "' '".to_string())),
@@ -787,9 +772,6 @@ impl BlockParser {
 
             // スペース
             if each_token.kind == data::TokenKind::Space {
-                // tmp_seqs.push(data::RuleSequence::new(tmp_exprs.clone()));
-                // tmp_exprs.clear();
-
                 token_i += 1;
                 continue;
             }
@@ -797,27 +779,30 @@ impl BlockParser {
             // 文字クラス
             if each_token.kind == data::TokenKind::StringInBracket {
                 tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::CharClass, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
-                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
+                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
                 token_i += 1;
+
                 continue;
             }
 
             // ID
             if each_token.kind == data::TokenKind::ID {
                 tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::ID, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
-                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
+                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
                 token_i += 1;
+
                 continue;
             }
 
             // 文字列
             if each_token.kind == data::TokenKind::String {
                 tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::String, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
-                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
+                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
                 token_i += 1;
+
                 continue;
             }
 
@@ -826,9 +811,10 @@ impl BlockParser {
                 // ワイルドカード
                 if each_token.value == "." {
                     tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::Wildcard, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
-                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
+                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
                     token_i += 1;
+
                     continue;
                 }
 
@@ -856,8 +842,10 @@ impl BlockParser {
                     // 先読みの種類を括弧終了時に使えるようにキャッシュを取る
                     previous_group_seq_lookahead_kind = previous_lookahead_kind.clone();
                     previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+
                     is_in_paren = true;
                     token_i += 1;
+
                     continue;
                 }
 
@@ -881,10 +869,12 @@ impl BlockParser {
 
                     tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), previous_loop_kind.clone(), previous_group_seq_lookahead_kind.clone()));
                     previous_group_seq_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+
                     tmp_seqs.clear();
 
                     is_in_paren = false;
                     token_i += 1;
+
                     continue;
                 }
 
@@ -918,6 +908,7 @@ impl BlockParser {
                     tmp_seq_groups.clear();
 
                     token_i += 1;
+
                     continue;
                 }
 
@@ -930,6 +921,7 @@ impl BlockParser {
 
                     previous_lookahead_kind = data::RuleExpressionLookaheadKind::Positive;
                     token_i += 1;
+
                     continue;
                 }
 
@@ -942,6 +934,7 @@ impl BlockParser {
 
                     previous_lookahead_kind = data::RuleExpressionLookaheadKind::Negative;
                     token_i += 1;
+
                     continue;
                 }
             }
