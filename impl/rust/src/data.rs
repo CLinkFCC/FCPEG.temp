@@ -87,6 +87,15 @@ pub struct Rule {
     pub choices: Vec<RuleChoice>,
 }
 
+impl Rule {
+    pub fn new(name: String, choices: Vec<RuleChoice>) -> Self {
+        return Rule {
+            name: name,
+            choices: choices,
+        };
+    }
+}
+
 impl std::fmt::Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut choice_text = Vec::<String>::new();
@@ -95,16 +104,7 @@ impl std::fmt::Display for Rule {
             choice_text.push(each_choice.to_string());
         }
 
-        write!(f, "{}\n{}", self.name, choice_text.join(" : "))
-    }
-}
-
-impl Rule {
-    pub fn new(name: String, choices: Vec<RuleChoice>) -> Self {
-        return Rule {
-            name: name,
-            choices: choices,
-        };
+        write!(f, "{} <- {}", self.name, choice_text.join(" : "))
     }
 }
 
@@ -129,7 +129,7 @@ impl std::fmt::Display for RuleChoice {
             seq_group_text.push(each_group.to_string());
         }
 
-        write!(f, "{}", seq_group_text.join(":"))
+        write!(f, "{}", seq_group_text.join(" "))
     }
 }
 
@@ -186,6 +186,7 @@ impl std::fmt::Display for RuleSequence {
 #[derive(Clone)]
 pub enum RuleExpressionKind {
     CharClass,
+    ID,
     String,
     Wildcard,
 }
@@ -194,7 +195,8 @@ impl RuleExpressionKind {
     pub fn to_token_string(&self, value: String) -> String {
         return match self {
             RuleExpressionKind::CharClass => value.to_string(),
-            RuleExpressionKind::String => format!("\"{}\"", value),
+            RuleExpressionKind::ID => value.to_string(),
+            RuleExpressionKind::String => value.to_string(),
             RuleExpressionKind::Wildcard => ".".to_string(),
         }
     }
