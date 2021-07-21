@@ -126,7 +126,7 @@ impl std::fmt::Display for RuleChoice {
         let mut seq_group_text = Vec::<String>::new();
 
         for each_group in &self.seq_groups {
-            seq_group_text.push(each_group.to_string());
+            seq_group_text.push(format!("{}{}{}", each_group.lookahead_type.to_symbol_string(), each_group.to_string(), each_group.loop_type.to_symbol_string()));
         }
 
         write!(f, "{}", seq_group_text.join(" "))
@@ -136,12 +136,16 @@ impl std::fmt::Display for RuleChoice {
 #[derive(Clone)]
 pub struct RuleSequenceGroup {
     pub seqs: Vec<RuleSequence>,
+    pub loop_type: RuleExpressionLoopKind,
+    pub lookahead_type: RuleExpressionLookaheadKind,
 }
 
 impl RuleSequenceGroup {
-    pub fn new(seqs: Vec<RuleSequence>) -> Self {
+    pub fn new(seqs: Vec<RuleSequence>, loop_type: RuleExpressionLoopKind, lookahead_type: RuleExpressionLookaheadKind) -> Self {
         return RuleSequenceGroup {
             seqs: seqs,
+            loop_type: loop_type,
+            lookahead_type: lookahead_type,
         };
     }
 }
@@ -221,7 +225,7 @@ impl RuleExpressionLoopKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub enum RuleExpressionLookaheadKind {
     None,
     Positive,

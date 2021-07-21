@@ -159,7 +159,7 @@ impl BlockParser {
         let id_regex = regex::Regex::new(r"[a-zA-Z0-9_]").unwrap();
         let mut tmp_id = "".to_string();
 
-        let symbol_regex = regex::Regex::new(r"[!?\-+*.,:(){}<>]").unwrap();
+        let symbol_regex = regex::Regex::new(r"[&!?\-+*.,:(){}<>]").unwrap();
 
         let mut line_i: usize = 0;
 
@@ -761,6 +761,10 @@ impl BlockParser {
         let mut tmp_seqs = Vec::<data::RuleSequence>::new();
         let mut tmp_exprs = Vec::<data::RuleExpression>::new();
 
+        let mut previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+        // 括弧内でのキャッシュ
+        let mut previous_group_seq_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+
         let mut is_in_paren = false;
 
         while token_i < tokens.len() {
@@ -768,8 +772,8 @@ impl BlockParser {
 
             // スペース
             if each_token.kind == data::TokenKind::Space {
-                tmp_seqs.push(data::RuleSequence::new(tmp_exprs.clone()));
-                tmp_exprs.clear();
+                // tmp_seqs.push(data::RuleSequence::new(tmp_exprs.clone()));
+                // tmp_exprs.clear();
 
                 token_i += 1;
                 continue;
@@ -777,7 +781,8 @@ impl BlockParser {
 
             // 文字クラス
             if each_token.kind == data::TokenKind::StringInBracket {
-                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::CharClass, data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None, each_token.value.to_string()));
+                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::CharClass, data::RuleExpressionLoopKind::One, previous_lookahead_kind.clone(), each_token.value.to_string()));
+                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
                 token_i += 1;
                 continue;
@@ -785,7 +790,8 @@ impl BlockParser {
 
             // ID
             if each_token.kind == data::TokenKind::ID {
-                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::ID, data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None, each_token.value.to_string()));
+                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::ID, data::RuleExpressionLoopKind::One, previous_lookahead_kind.clone(), each_token.value.to_string()));
+                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
                 token_i += 1;
                 continue;
@@ -793,7 +799,8 @@ impl BlockParser {
 
             // 文字列
             if each_token.kind == data::TokenKind::String {
-                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::String, data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None, each_token.value.to_string()));
+                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::String, data::RuleExpressionLoopKind::One, previous_lookahead_kind.clone(), each_token.value.to_string()));
+                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
                 token_i += 1;
                 continue;
@@ -803,7 +810,8 @@ impl BlockParser {
             if each_token.kind == data::TokenKind::Symbol {
                 // ワイルドカード
                 if each_token.value == "." {
-                    tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::Wildcard, data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None, each_token.value.to_string()));
+                    tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::Wildcard, data::RuleExpressionLoopKind::One, previous_lookahead_kind.clone(), each_token.value.to_string()));
+                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
                     token_i += 1;
                     continue;
@@ -821,10 +829,13 @@ impl BlockParser {
                     }
 
                     if tmp_seqs.len() != 0 {
-                        tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone()));
+                        tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None));
                         tmp_seqs.clear();
                     }
 
+                    // 先読みの種類を括弧終了時に使えるようにキャッシュを取る
+                    previous_group_seq_lookahead_kind = previous_lookahead_kind.clone();
+                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
                     is_in_paren = true;
                     token_i += 1;
                     continue;
@@ -843,7 +854,8 @@ impl BlockParser {
                         return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression".to_string()));
                     }
 
-                    tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone()));
+                    tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, previous_group_seq_lookahead_kind.clone()));
+                    previous_group_seq_lookahead_kind = data::RuleExpressionLookaheadKind::None;
                     tmp_seqs.clear();
 
                     is_in_paren = false;
@@ -853,6 +865,11 @@ impl BlockParser {
 
                 // 選択区切り
                 if each_token.value == ":" {
+                    // 先読み文字が区切り文字の前に来た場合は構文エラー
+                    if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+                        return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and '('".to_string()));
+                    }
+
                     // 括弧内で選択の区切りはできないため構文エラー
                     if is_in_paren {
                         return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression".to_string()));
@@ -864,7 +881,7 @@ impl BlockParser {
                     }
 
                     if tmp_seqs.len() != 0 {
-                        tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone()));
+                        tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None));
                         tmp_seqs.clear();
                     }
 
@@ -878,16 +895,47 @@ impl BlockParser {
                     token_i += 1;
                     continue;
                 }
+
+                // 肯定先読み
+                if each_token.value == "&" {
+                    // 先読み文字が先読み文字の前に来た場合は構文エラー
+                    if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+                        return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and '('".to_string()));
+                    }
+
+                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::Positive;
+                    token_i += 1;
+                    continue;
+                }
+
+                // 否定先読み
+                if each_token.value == "!" {
+                    // 先読み文字が先読み文字の前に来た場合は構文エラー
+                    if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+                        return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and '('".to_string()));
+                    }
+
+                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::Negative;
+                    token_i += 1;
+                    continue;
+                }
             }
 
             // マッチするトークンがない場合は構文エラー
             return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and some symbols".to_string()));
         }
 
-        // 括弧が最後まで閉じられていない場合はエラー
-        // トークンの長さは最初にチェックしているので get() では unwrap() できる
+        // トークンの長さは最初にチェックしているので unwrap() できる
+        let last_token_line_num = tokens.get(tokens.len() - 1).unwrap().line;
+
+        // 最後に先読み文字が来た場合は構文エラー
+        if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+            return Err(BlockSyntaxError::UnexpectedToken(last_token_line_num, previous_lookahead_kind.to_symbol_string(), "expression and '('".to_string()));
+        }
+
+        // 最後まで括弧が閉じられていない場合はエラー
         if is_in_paren {
-            return Err(BlockSyntaxError::UnexpectedToken(tokens.get(tokens.len() - 1).unwrap().line, ",".to_string(), "')'".to_string()));
+            return Err(BlockSyntaxError::UnexpectedToken(last_token_line_num, ",".to_string(), "')'".to_string()));
         }
 
         // 最後に残った expression などを choice に追加する
@@ -902,7 +950,7 @@ impl BlockParser {
         }
 
         if tmp_seqs.len() != 0 {
-            tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone()));
+            tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None));
             tmp_seqs.clear();
         }
 
