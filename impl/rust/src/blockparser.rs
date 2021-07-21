@@ -770,6 +770,21 @@ impl BlockParser {
         while token_i < tokens.len() {
             let each_token = tokens.get(token_i).unwrap();
 
+            // 1つ先のループ文字を取得
+            // ここと括弧開始時以外ではループ文字が予期しないトークンとして扱われるため特段エラー処理は必要ない
+            let previous_loop_kind = match tokens.get(token_i + 1) {
+                Some(v) => {
+                    match data::RuleExpressionLoopKind::to_loop_kind(v.value.to_string()) {
+                        Some(v2) => {
+                            token_i += 1;
+                            v2
+                        },
+                        None => data::RuleExpressionLoopKind::One,
+                    }
+                },
+                None => data::RuleExpressionLoopKind::One,
+            };
+
             // スペース
             if each_token.kind == data::TokenKind::Space {
                 // tmp_seqs.push(data::RuleSequence::new(tmp_exprs.clone()));
@@ -781,7 +796,7 @@ impl BlockParser {
 
             // 文字クラス
             if each_token.kind == data::TokenKind::StringInBracket {
-                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::CharClass, data::RuleExpressionLoopKind::One, previous_lookahead_kind.clone(), each_token.value.to_string()));
+                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::CharClass, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
                 previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
                 token_i += 1;
@@ -790,7 +805,7 @@ impl BlockParser {
 
             // ID
             if each_token.kind == data::TokenKind::ID {
-                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::ID, data::RuleExpressionLoopKind::One, previous_lookahead_kind.clone(), each_token.value.to_string()));
+                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::ID, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
                 previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
                 token_i += 1;
@@ -799,7 +814,7 @@ impl BlockParser {
 
             // 文字列
             if each_token.kind == data::TokenKind::String {
-                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::String, data::RuleExpressionLoopKind::One, previous_lookahead_kind.clone(), each_token.value.to_string()));
+                tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::String, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
                 previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
                 token_i += 1;
@@ -810,7 +825,7 @@ impl BlockParser {
             if each_token.kind == data::TokenKind::Symbol {
                 // ワイルドカード
                 if each_token.value == "." {
-                    tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::Wildcard, data::RuleExpressionLoopKind::One, previous_lookahead_kind.clone(), each_token.value.to_string()));
+                    tmp_exprs.push(data::RuleExpression::new(data::RuleExpressionKind::Wildcard, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
                     previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
 
                     token_i += 1;
@@ -819,6 +834,11 @@ impl BlockParser {
 
                 // 括弧開始
                 if each_token.value == "(" {
+                    // ループ文字が括弧開始の後ろに来た場合は構文エラー
+                    if previous_loop_kind != data::RuleExpressionLoopKind::One {
+                        return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and some symbols".to_string()));
+                    }
+
                     if is_in_paren {
                         return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "')'".to_string()));
                     }
@@ -843,6 +863,11 @@ impl BlockParser {
 
                 // 括弧終了
                 if each_token.value == ")" {
+                    // 先読み文字が括弧終了の前に来た場合は構文エラー
+                    if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+                        return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and '('".to_string()));
+                    }
+
                     if !is_in_paren {
                         return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "'('".to_string()));
                     }
@@ -854,7 +879,7 @@ impl BlockParser {
                         return Err(BlockSyntaxError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression".to_string()));
                     }
 
-                    tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, previous_group_seq_lookahead_kind.clone()));
+                    tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), previous_loop_kind.clone(), previous_group_seq_lookahead_kind.clone()));
                     previous_group_seq_lookahead_kind = data::RuleExpressionLookaheadKind::None;
                     tmp_seqs.clear();
 

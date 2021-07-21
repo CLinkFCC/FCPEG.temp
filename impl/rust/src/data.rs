@@ -206,7 +206,7 @@ impl RuleExpressionKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub enum RuleExpressionLoopKind {
     One,
     OneOrMore,
@@ -215,6 +215,16 @@ pub enum RuleExpressionLoopKind {
 }
 
 impl RuleExpressionLoopKind {
+    // ret: 文字がマッチすれば Some() 、マッチしなければ None
+    pub fn to_loop_kind(value: String) -> std::option::Option<RuleExpressionLoopKind> {
+        return match value.as_str() {
+            "+" => Some(RuleExpressionLoopKind::OneOrMore),
+            "?" => Some(RuleExpressionLoopKind::ZeroOrOne),
+            "*" => Some(RuleExpressionLoopKind::ZeroOrMore),
+            _ => None,
+        }
+    }
+
     pub fn to_symbol_string(&self) -> String {
         return match self {
             RuleExpressionLoopKind::One => "".to_string(),
