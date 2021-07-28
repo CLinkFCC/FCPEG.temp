@@ -5,6 +5,7 @@ pub enum SyntaxParseError {
     Unknown(),
     InternalErr(String),
     NoSucceededRule(String, usize),
+    TooDeepRecursion(usize),
     UnknownRuleID(String),
 }
 
@@ -14,6 +15,7 @@ impl SyntaxParseError {
             SyntaxParseError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown error", vec![], vec![]),
             SyntaxParseError::InternalErr(err_msg) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("internal error: {}", err_msg), vec![], vec![]),
             SyntaxParseError::NoSucceededRule(rule_id, src_i) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), vec![], vec![]),
+            SyntaxParseError::TooDeepRecursion(max_recur_count) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "too deep recursion", vec![format!("max recursion count: {}", max_recur_count)], vec![]),
             SyntaxParseError::UnknownRuleID(rule_id) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown rule id '{}'", rule_id), vec![], vec![]),
         }
     }
@@ -23,6 +25,8 @@ pub struct SyntaxParser {
     rule_map: data::RuleMap,
     src_i: usize,
     src_content: String,
+    recursion_count: usize,
+    max_recursion_count: usize,
 }
 
 impl SyntaxParser {
@@ -31,6 +35,8 @@ impl SyntaxParser {
             rule_map: rule_map,
             src_i: 0,
             src_content: "".to_string(),
+            recursion_count: 1,
+            max_recursion_count: 128,
         });
     }
 
@@ -38,8 +44,11 @@ impl SyntaxParser {
         // フィールドを初期化
         self.src_i = 0;
         self.src_content = src_content;
+        self.recursion_count = 1;
 
         let mut tree = data::SyntaxNode::new(self.rule_map.start_rule_id.to_string());
+
+        self.recursion_count += 1;
 
         while self.src_i < self.src_content.len() {
             let (mut nodes, mut leaves) = match self.is_rule_successful(&self.rule_map.start_rule_id.to_string())? {
@@ -51,6 +60,7 @@ impl SyntaxParser {
             tree.leaves.append(&mut leaves);
         }
 
+        self.recursion_count -= 1;
         return Ok(tree);
     }
 
@@ -158,14 +168,26 @@ impl SyntaxParser {
                 }
             },
             data::RuleExpressionKind::ID => {
+                self.recursion_count += 1;
+
+                if self.max_recursion_count < self.recursion_count {
+                    return Err(SyntaxParseError::TooDeepRecursion(self.max_recursion_count));
+                }
+
                 match self.is_rule_successful(&expr.value.to_string())? {
                     Some((sub_nodes, sub_leaves)) => {
                         let mut new_node = data::SyntaxNode::new(expr.value.to_string());
                         new_node.nodes = sub_nodes;
                         new_node.leaves = sub_leaves;
                         nodes.push(new_node);
+
+                        self.recursion_count -= 1;
+                        return Ok(Some(()));
                     },
-                    None => return Ok(None),
+                    None => {
+                        self.recursion_count -= 1;
+                        return Ok(None);
+                    },
                 };
             },
             data::RuleExpressionKind::String => {
@@ -189,7 +211,5 @@ impl SyntaxParser {
                 return Ok(Some(()));
             },
         }
-
-        return Ok(Some(()));
     }
 }
