@@ -38,6 +38,7 @@ impl Token {
     }
 }
 
+#[derive(Clone)]
 pub struct SyntaxNode {
     pub name: String,
     pub nodes: Vec<SyntaxNode>,
@@ -54,7 +55,7 @@ impl SyntaxNode {
     }
 
     pub fn print(&self, nest: usize) {
-        println!("{}: {}{}", self.name, "  ".repeat(nest), self.leaves.join(", "));
+        println!("{}{}: {}", "    ".repeat(nest), self.name, self.leaves.join(",").replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t"));
 
         for each_node in &self.nodes {
             each_node.print(nest + 1);

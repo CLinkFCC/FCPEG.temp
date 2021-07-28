@@ -237,8 +237,6 @@ impl BlockParser {
 
                     char_i += 1;
 
-                    string.push(next_char.clone());
-
                     // エスケープシーケンスの解析
                     if *next_char == '\\' {
                         // エスケープ文字の後ろが EOF である場合は弾く
@@ -247,15 +245,29 @@ impl BlockParser {
                             None => return Err(BlockParseError::UnexpectedEOF(line_i, "'\"'".to_string())),
                         };
 
-                        string.push(esc_char.clone());
+                        let escaped_char = match esc_char {
+                            '\\' => '\\',
+                            'n' => '\n',
+                            't' => '\t',
+                            _ => return Err(BlockParseError::UnexpectedToken(line_i, esc_char.to_string(), "'\\', 'n' and 't'".to_string())),
+                        };
+
+                        string.push(escaped_char.clone());
 
                         char_i += 1;
                         continue;
                     }
 
+                    string.push(next_char.clone());
+
                     if *next_char == '"' {
                         break;
                     }
+                }
+
+                // 文字列が空であれば構文エラー
+                if string == "\"\"" {
+                    return Err(BlockParseError::UnexpectedToken(line_i, "\"".to_string(), "character of string".to_string()));
                 }
 
                 tokens.push(data::Token::new(line_i, data::TokenKind::String, string));
