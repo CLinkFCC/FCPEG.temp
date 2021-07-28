@@ -36,7 +36,6 @@ pub enum BlockParseError {
     UnexpectedEOF(usize, String),
     UnexpectedToken(usize, String, String),
     UnknownPragmaName(usize, String),
-    UnknownRuleID(usize, String),
     UnknownSyntax(usize, String),
     UnknownToken(usize, String),
 }
@@ -60,7 +59,6 @@ impl BlockParseError {
             BlockParseError::UnexpectedEOF(line, expected_str) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unexpected EOF, expected {}", expected_str), vec![format!("line: {}", line + 1)], vec![]),
             BlockParseError::UnexpectedToken(line, unexpected_token, expected_str) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unexpected token '{}', expected {}", unexpected_token, expected_str), vec![format!("line: {}", line + 1)], vec![]),
             BlockParseError::UnknownPragmaName(line, unknown_pragma_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown pragma name", vec![format!("line: {}", line + 1), format!("pragma name: {}", unknown_pragma_name)], vec![]),
-            BlockParseError::UnknownRuleID(line, unknown_rule_id) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown rule id '{}'", unknown_rule_id), vec![format!("line: {}", line + 1)], vec![]),
             BlockParseError::UnknownSyntax(line, target_token) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown syntax", vec![format!("line: {}", line + 1), format!("target token: '{}'", target_token)], vec![]),
             BlockParseError::UnknownToken(line, unknown_token) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown token '{}'", unknown_token), vec![format!("line: {}", line + 1)], vec![]),
         }

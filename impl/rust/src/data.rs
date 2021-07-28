@@ -52,6 +52,14 @@ impl SyntaxNode {
             leaves: vec![],
         };
     }
+
+    pub fn print(&self, nest: usize) {
+        println!("{}: {}{}", self.name, "  ".repeat(nest), self.leaves.join(", "));
+
+        for each_node in &self.nodes {
+            each_node.print(nest + 1);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -116,6 +124,7 @@ impl RuleMap {
         self.rule_map.insert(rule_id, rule);
     }
 
+    #[inline(always)]
     pub fn get_rule(&mut self, rule_id: &String) -> std::option::Option<&Rule> {
         return self.rule_map.get(rule_id);
     }
@@ -187,8 +196,6 @@ impl RuleMap {
             if each_block.name == "Main" {
                 continue;
             }
-
-            println!("{}", self.start_rule_id);
 
             let mut block_alias_map = std::collections::HashMap::<String, String>::new();
 
