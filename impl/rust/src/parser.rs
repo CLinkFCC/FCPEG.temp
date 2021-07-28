@@ -3,6 +3,7 @@ use rustnutlib::console;
 
 pub enum SyntaxParseError {
     Unknown(),
+    InternalErr(String),
     NoSucceededRule(String, usize),
     UnknownRuleID(String),
 }
@@ -11,6 +12,7 @@ impl SyntaxParseError {
     pub fn get_log_data(&self) -> console::ConsoleLogData {
         match self {
             SyntaxParseError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown error", vec![], vec![]),
+            SyntaxParseError::InternalErr(err_msg) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("internal error: {}", err_msg), vec![], vec![]),
             SyntaxParseError::NoSucceededRule(rule_id, src_i) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), vec![], vec![]),
             SyntaxParseError::UnknownRuleID(rule_id) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown rule id '{}'", rule_id), vec![], vec![]),
         }
@@ -139,6 +141,22 @@ impl SyntaxParser {
     #[inline(always)]
     fn is_expr_successful(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
         match expr.kind {
+            data::RuleExpressionKind::CharClass => {
+                let pattern = match self.rule_map.regex_map.get(&expr.value) {
+                    Some(v) => v,
+                    None => return Err(SyntaxParseError::InternalErr("regex pattern of character class not found".to_string())),
+                };
+
+                let tar_char = self.src_content[self.src_i..self.src_i + 1].to_string();
+
+                if pattern.is_match(&tar_char) {
+                    leaves.push(tar_char);
+                    self.src_i += 1;
+                    return Ok(Some(()));
+                } else {
+                    return Ok(None);
+                }
+            },
             data::RuleExpressionKind::ID => {
                 match self.is_rule_successful(&expr.value.to_string())? {
                     Some((sub_nodes, sub_leaves)) => {
@@ -165,7 +183,11 @@ impl SyntaxParser {
                     return Ok(None);
                 }
             },
-            _ => (),
+            data::RuleExpressionKind::Wildcard => {
+                leaves.push(self.src_content[self.src_i..self.src_i + 1].to_string());
+                self.src_i += 1;
+                return Ok(Some(()));
+            },
         }
 
         return Ok(Some(()));

@@ -28,6 +28,7 @@ pub enum BlockParseError {
     ExpectedBlockDef(usize),
     ExpectedToken(usize, String),
     InternalErr(String),
+    InvalidCharClassFormat(usize, String),
     MainBlockNotFound(),
     NoStartCmdInMainBlock(),
     RuleHasNoChoice(String),
@@ -51,6 +52,7 @@ impl BlockParseError {
             BlockParseError::ExpectedBlockDef(line) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "expected block definition", vec![format!("line: {}", line + 1)], vec![]),
             BlockParseError::ExpectedToken(line, expected_str) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("expected token {}", expected_str), vec![format!("line: {}", line + 1)], vec![]),
             BlockParseError::InternalErr(err_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("internal error: {}", err_name), vec![], vec![]),
+            BlockParseError::InvalidCharClassFormat(line, value) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("invalid character class format '{}'", value), vec![format!("line: {}", line + 1)], vec![]),
             BlockParseError::MainBlockNotFound() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "main block not found", vec![], vec![]),
             BlockParseError::NoStartCmdInMainBlock() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "no start command in main block", vec![], vec![]),
             BlockParseError::RuleHasNoChoice(rule_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("rule '{}' has no choice", rule_name), vec![], vec![]),
@@ -290,8 +292,6 @@ impl BlockParser {
 
                     char_i += 1;
 
-                    string.push(next_char.clone());
-
                     // エスケープシーケンスの解析
                     if *next_char == '\\' {
                         // エスケープ文字の後ろが EOF である場合は弾く
@@ -300,11 +300,26 @@ impl BlockParser {
                             None => return Err(BlockParseError::UnexpectedEOF(line_i, "']'".to_string())),
                         };
 
-                        string.push(esc_char.clone());
+                        let escaped_char = match esc_char {
+                            '\\' => '\\',
+                            '[' => '[',
+                            ']' => ']',
+                            'n' => '\n',
+                            't' => '\t',
+                            _ => return Err(BlockParseError::UnexpectedToken(line_i, esc_char.to_string(), "'\\', '[', ']', 'n' and 't'".to_string())),
+                        };
+
+                        string.push(escaped_char.clone());
 
                         char_i += 1;
                         continue;
                     }
+
+                    if *next_char == '[' {
+                        return Err(BlockParseError::UnexpectedToken(line_i, next_char.to_string(), "'\\' before '['".to_string()));
+                    }
+
+                    string.push(next_char.clone());
 
                     if *next_char == ']' {
                         break;

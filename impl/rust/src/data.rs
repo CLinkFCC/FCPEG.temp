@@ -1,4 +1,5 @@
 use crate::blockparser;
+use regex;
 
 #[derive(PartialOrd, PartialEq, Debug, Clone)]
 pub enum TokenKind {
@@ -97,6 +98,7 @@ impl std::fmt::Display for Command {
 
 pub struct RuleMap {
     pub rule_map: std::collections::HashMap<String, Rule>,
+    pub regex_map: std::collections::HashMap::<String, regex::Regex>,
     pub start_rule_id: String,
 }
 
@@ -108,6 +110,10 @@ impl std::fmt::Display for RuleMap {
             rule_text_lines.push(each_rule.to_string());
         }
 
+        for each_key in self.regex_map.keys() {
+            rule_text_lines.push(format!("reg {}", each_key));
+        }
+
         return writeln!(f, "{}", rule_text_lines.join("\n"));
     }
 }
@@ -116,6 +122,7 @@ impl RuleMap {
     pub fn new(start_rule_id: String) -> Self {
         return RuleMap {
             rule_map: std::collections::HashMap::new(),
+            regex_map: std::collections::HashMap::new(),
             start_rule_id: start_rule_id,
         };
     }
@@ -260,6 +267,19 @@ impl RuleMap {
                                             }
 
                                             return Err(blockparser::BlockParseError::InternalErr(format!("invalid id expression '{}'", each_expr.value)));
+                                        }
+
+                                        if each_expr.kind == RuleExpressionKind::CharClass {
+                                            if self.regex_map.contains_key(&each_expr.value) {
+                                                continue;
+                                            }
+
+                                            let pattern = match regex::Regex::new(&each_expr.to_string()) {
+                                                Err(_e) => return Err(blockparser::BlockParseError::InvalidCharClassFormat(each_expr.line, each_expr.to_string())),
+                                                Ok(v) => v,
+                                            };
+
+                                            self.regex_map.insert(each_expr.value.to_string(), pattern);
                                         }
                                     }
                                 }
