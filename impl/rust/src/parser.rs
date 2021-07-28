@@ -127,25 +127,55 @@ impl SyntaxParser {
         return Ok(Some((result_nodes, result_leaves)));
     }
 
-    // ret: 成功すれば expr のベクタ列; 失敗すれば None
     #[inline(always)]
     fn is_seq_successful(&mut self, seq: &data::RuleSequence) -> std::result::Result<std::option::Option<(Vec<data::SyntaxNode>, Vec<String>)>, SyntaxParseError> {
         let mut nodes = Vec::<data::SyntaxNode>::new();
         let mut leaves = Vec::<String>::new();
 
         for each_expr in &seq.exprs {
-            let start_src_i = self.src_i;
+            match each_expr.loop_type {
+                data::RuleExpressionLoopKind::One => {
+                    match self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)? {
+                        Some(()) => continue,
+                        None => return Ok(None),
+                    }
+                },
+                data::RuleExpressionLoopKind::OneOrMore => {
+                    match self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)? {
+                        Some(()) => (),
+                        None => return Ok(None),
+                    }
 
-            match self.is_expr_successful(each_expr, &mut nodes, &mut leaves)? {
-                Some(()) => (),
-                None => {
-                    self.src_i = start_src_i;
-                    return Ok(None);
+                    while self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?.is_some() {}
+
+                    continue;
+                },
+                data::RuleExpressionLoopKind::ZeroOrMore => {
+                    while self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?.is_some() {}
+
+                    continue;
+                },
+                data::RuleExpressionLoopKind::ZeroOrOne => {
+                    self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?;
+                    continue;
                 },
             }
         }
 
         return Ok(Some((nodes, leaves)));
+    }
+
+    #[inline(always)]
+    fn is_expr_vec_successful(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
+        let start_src_i = self.src_i;
+
+        return match self.is_expr_successful(expr, nodes, leaves)? {
+            Some(()) => Ok(Some(())),
+            None => {
+                self.src_i = start_src_i;
+                Ok(None)
+            },
+        };
     }
 
     #[inline(always)]
@@ -202,6 +232,8 @@ impl SyntaxParser {
                     self.src_i += pure_str.len();
                     return Ok(Some(()));
                 } else {
+                    println!("{}", self.src_content[self.src_i..self.src_i + pure_str.len()].to_string());
+                    println!("{}", pure_str.to_string());
                     return Ok(None);
                 }
             },
