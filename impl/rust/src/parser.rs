@@ -116,6 +116,34 @@ impl SyntaxParser {
 
     #[inline(always)]
     fn is_expr_successful(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
+        match expr.kind {
+            // data::RuleExpressionKind::ID => {
+            //     match self.is_rule_successful(&self.rule_map.start_rule_id.to_string())? {
+            //         Some((sub_nodes, sub_leaves)) => {
+            //             let mut new_node = data::SyntaxNode::new(expr.value.to_string());
+            //             new_node.nodes = sub_nodes;
+            //             new_node.leaves = sub_leaves;
+            //             nodes.push(new_node);
+            //         },
+            //         None => return Ok(None),
+            //     };
+            // },
+            data::RuleExpressionKind::String => {
+                if self.src_content.len() < self.src_i + expr.value.len() {
+                    return Ok(None);
+                }
+
+                if self.src_content[self.src_i..expr.value.len()] == expr.value {
+                    leaves.push(expr.value.to_string());
+                    self.src_i += expr.value.len();
+                    return Ok(Some(()));
+                } else {
+                    return Ok(None);
+                }
+            },
+            _ => (),
+        }
+
         return Ok(Some(()));
     }
 }
