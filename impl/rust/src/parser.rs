@@ -182,6 +182,10 @@ impl SyntaxParser {
     fn is_expr_successful(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
         match expr.kind {
             data::RuleExpressionKind::CharClass => {
+                if self.src_content.len() < self.src_i + 1 {
+                    return Ok(None);
+                }
+
                 let pattern = match self.rule_map.regex_map.get(&expr.value) {
                     Some(v) => v,
                     None => return Err(SyntaxParseError::InternalErr("regex pattern of character class not found".to_string())),
@@ -238,6 +242,10 @@ impl SyntaxParser {
                 }
             },
             data::RuleExpressionKind::Wildcard => {
+                if self.src_content.len() < self.src_i + 1 {
+                    return Ok(None);
+                }
+
                 leaves.push(self.src_content[self.src_i..self.src_i + 1].to_string());
                 self.src_i += 1;
                 return Ok(Some(()));
