@@ -133,30 +133,41 @@ impl SyntaxParser {
         let mut leaves = Vec::<String>::new();
 
         for each_expr in &seq.exprs {
+            let is_lookahead = each_expr.lookahead_type != data::RuleExpressionLookaheadKind::None;
+            // 否定先読みをする場合はマッチ結果を反転させる
+            let rev_match_result = each_expr.lookahead_type == data::RuleExpressionLookaheadKind::Negative;
+
             match each_expr.loop_type {
                 data::RuleExpressionLoopKind::One => {
-                    match self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)? {
-                        Some(()) => continue,
-                        None => return Ok(None),
+                    if !rev_match_result {
+                        match self.is_expr_vec_matched(each_expr, &mut nodes, &mut leaves, is_lookahead)? {
+                            Some(()) => continue,
+                            None => return Ok(None),
+                        }
+                    } else {
+                        match self.is_expr_vec_matched(each_expr, &mut nodes, &mut leaves, is_lookahead)? {
+                            Some(()) => return Ok(None),
+                            None => continue,
+                        }
                     }
                 },
                 data::RuleExpressionLoopKind::OneOrMore => {
-                    match self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)? {
+                    match self.is_expr_vec_matched(each_expr, &mut nodes, &mut leaves, is_lookahead)? {
                         Some(()) => (),
                         None => return Ok(None),
                     }
 
-                    while self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?.is_some() {}
+                    while self.is_expr_vec_matched(each_expr, &mut nodes, &mut leaves, is_lookahead)?.is_some() {}
 
                     continue;
                 },
                 data::RuleExpressionLoopKind::ZeroOrMore => {
-                    while self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?.is_some() {}
+                    while self.is_expr_vec_matched(each_expr, &mut nodes, &mut leaves, is_lookahead)?.is_some() {}
 
                     continue;
                 },
                 data::RuleExpressionLoopKind::ZeroOrOne => {
-                    self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?;
+                    self.is_expr_vec_matched(each_expr, &mut nodes, &mut leaves, is_lookahead)?;
                     continue;
                 },
             }
@@ -166,11 +177,18 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_expr_vec_successful(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
+    // arg: is_lookahead: true であればマッチした場合でも入力を戻す; なおかつ nodes / leaves を変更しない (先読み用)
+    fn is_expr_vec_matched(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>, is_lookahead: bool) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
         let start_src_i = self.src_i;
 
-        return match self.is_expr_successful(expr, nodes, leaves)? {
-            Some(()) => Ok(Some(())),
+        return match self.is_expr_successful(expr, nodes, leaves, is_lookahead)? {
+            Some(()) => {
+                if is_lookahead {
+                    self.src_i = start_src_i;
+                }
+
+                Ok(Some(()))
+            },
             None => {
                 self.src_i = start_src_i;
                 Ok(None)
@@ -179,7 +197,7 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_expr_successful(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
+    fn is_expr_successful(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>, conserve_node_data: bool) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
         match expr.kind {
             data::RuleExpressionKind::CharClass => {
                 let pattern = match self.rule_map.regex_map.get(&expr.value) {
@@ -190,7 +208,10 @@ impl SyntaxParser {
                 let tar_char = self.src_content[self.src_i..self.src_i + 1].to_string();
 
                 if pattern.is_match(&tar_char) {
-                    leaves.push(tar_char);
+                    if !conserve_node_data {
+                        leaves.push(tar_char);
+                    }
+
                     self.src_i += 1;
                     return Ok(Some(()));
                 } else {
@@ -206,10 +227,12 @@ impl SyntaxParser {
 
                 match self.is_rule_successful(&expr.value.to_string())? {
                     Some((sub_nodes, sub_leaves)) => {
-                        let mut new_node = data::SyntaxNode::new(expr.value.to_string());
-                        new_node.nodes = sub_nodes;
-                        new_node.leaves = sub_leaves;
-                        nodes.push(new_node);
+                        if !conserve_node_data {
+                            let mut new_node = data::SyntaxNode::new(expr.value.to_string());
+                            new_node.nodes = sub_nodes;
+                            new_node.leaves = sub_leaves;
+                            nodes.push(new_node);
+                        }
 
                         self.recursion_count -= 1;
                         return Ok(Some(()));
@@ -228,7 +251,10 @@ impl SyntaxParser {
                 }
 
                 if self.src_content[self.src_i..self.src_i + pure_str.len()] == pure_str {
-                    leaves.push(pure_str.to_string());
+                    if !conserve_node_data {
+                        leaves.push(pure_str.to_string());
+                    }
+
                     self.src_i += pure_str.len();
                     return Ok(Some(()));
                 } else {
@@ -238,7 +264,10 @@ impl SyntaxParser {
                 }
             },
             data::RuleExpressionKind::Wildcard => {
-                leaves.push(self.src_content[self.src_i..self.src_i + 1].to_string());
+                if !conserve_node_data {
+                    leaves.push(self.src_content[self.src_i..self.src_i + 1].to_string());
+                }
+
                 self.src_i += 1;
                 return Ok(Some(()));
             },
