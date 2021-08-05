@@ -691,7 +691,9 @@ impl BlockParser {
                     return Err(BlockParseError::InternalErr("invalid pragma argument length".to_string()));
                 }
 
-                let rule = BlockParser::get_rule(line_num, pragma_args.get(0).unwrap().value.to_string(), pragma_args[1..].to_vec())?;
+                let rule_name = pragma_args.get(0).unwrap().value.to_string();
+                let choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), pragma_args[1..].to_vec())?;
+                let rule = rule::Rule::new(rule_name.to_string(), choices);
                 data::Command::Define(line_num, rule)
             },
             "start" => {
@@ -795,7 +797,7 @@ impl BlockParser {
         return Ok(cmd);
     }
 
-    fn get_rule(line_num: usize, rule_name: String, tokens: Vec<data::Token>) -> std::result::Result<rule::Rule, BlockParseError> {
+    fn get_choice_vec(line_num: usize, rule_name: String, tokens: Vec<data::Token>) -> std::result::Result<Vec<rule::RuleChoice>, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::RuleHasNoChoice(rule_name.to_string()));
         }
@@ -805,16 +807,40 @@ impl BlockParser {
         let mut token_i = 0;
         let mut choice_start_i = 0;
 
+        let mut paren_nest: usize = 0;
+
         while token_i < tokens.len() {
             let each_token = tokens.get(token_i).unwrap();
 
-            if each_token.kind == data::TokenKind::Symbol && each_token.value == ":" {
-                let choice_tokens = tokens[choice_start_i..token_i].to_vec();
-                choices.push(BlockParser::get_choice(line_num, choice_tokens)?);
-                choice_start_i = token_i + 1;
+            if each_token.kind == data::TokenKind::Symbol {
+                match each_token.value.as_str() {
+                    ":" => {
+                        if paren_nest == 0 {
+                            let choice_tokens = tokens[choice_start_i..token_i].to_vec();
+                            choices.push(BlockParser::get_choice(line_num, choice_tokens)?);
+                            choice_start_i = token_i + 1;
+                        }
+                    },
+                    "(" => {
+                        paren_nest += 1;
+                    },
+                    ")" => {
+                        if paren_nest == 0 {
+                            return Err(BlockParseError::UnexpectedToken(line_num, each_token.value.to_string(), "'('".to_string()));
+                        }
+
+                        paren_nest -= 1;
+                    }
+                    _ => (),
+                }
             }
 
             token_i += 1;
+        }
+
+        if paren_nest != 0 {
+            // 最後まで閉じ括弧がなければ構文エラー
+            return Err(BlockParseError::ExpectedToken(line_num, "')'".to_string()));
         }
 
         choices.push(BlockParser::get_choice(line_num, tokens[choice_start_i..tokens.len()].to_vec())?);
@@ -864,7 +890,7 @@ impl BlockParser {
         }
         */
 
-        return Ok(rule::Rule::new(rule_name.to_string(), choices));
+        return Ok(choices);
     }
 
     // 外側の丸括弧や先読み, 繰り返し, 順不同などの記号は含めてもよい
@@ -891,13 +917,13 @@ impl BlockParser {
         let mut elem_tokens = Vec::<Vec<data::Token>>::new();
         let mut elem_start_i = 0;
 
-        let mut is_in_paren = false;
+        let mut paren_nest: usize = 0;
 
         while token_i < tokens.len() {
             let each_token = tokens.get(token_i).unwrap();
 
             if each_token.kind == data::TokenKind::Space {
-                if !is_in_paren {
+                if paren_nest == 0 {
                     // トークン列を追加
 
                     let new_elem_tokens = tokens[elem_start_i..token_i].to_vec();
@@ -912,32 +938,10 @@ impl BlockParser {
             if each_token.kind == data::TokenKind::Symbol {
                 match each_token.value.as_str() {
                     "(" => {
-                        if is_in_paren {
-                            return Err(BlockParseError::UnexpectedToken(line_num, each_token.value.to_string(), "')'".to_string()));
-                        }
-
-                        if elem_start_i != token_i {
-                            return Err(BlockParseError::UnexpectedToken(line_num, each_token.value.to_string(), "' '".to_string()));
-                        }
-
-                        elem_start_i = token_i;
-                        is_in_paren = true;
+                        paren_nest += 1;
                     },
                     ")" => {
-                        if !is_in_paren {
-                            return Err(BlockParseError::UnexpectedToken(line_num, each_token.value.to_string(), "'('".to_string()));
-                        }
-
-                        is_in_paren = false;
-
-                        match tokens.get(token_i + 1) {
-                            Some(v) => {
-                                if v.kind != data::TokenKind::Space {
-                                    return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "' '".to_string()));
-                                }
-                            },
-                            None => (),
-                        }
+                        paren_nest -= 1;
                     },
                     _ => (),
                 }
@@ -946,11 +950,6 @@ impl BlockParser {
             token_i += 1;
 
             if token_i >= tokens.len() {
-                if is_in_paren {
-                    // 最後まで閉じ括弧がなければ構文エラー
-                    return Err(BlockParseError::ExpectedToken(line_num, "')'".to_string()));
-                }
-
                 // 残ったトークン列を追加
 
                 let new_elem_tokens = tokens[elem_start_i..tokens.len()].to_vec();
