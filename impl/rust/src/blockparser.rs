@@ -1,4 +1,5 @@
 use crate::data;
+use crate::rule;
 use crate::setting;
 use rustnutlib::*;
 
@@ -651,11 +652,11 @@ impl BlockParser {
                 while self.token_i < self.tokens.len() {
                     let next_token = self.tokens.get(self.token_i).unwrap();
 
-                    // スペースがあれば除去する
-                    if next_token.kind == data::TokenKind::Space {
-                        self.token_i += 1;
-                        continue;
-                    }
+                    // todo: delete here: スペースがあれば除去する
+                    // if next_token.kind == data::TokenKind::Space {
+                    //     self.token_i += 1;
+                    //     continue;
+                    // }
 
                     if next_token.kind == data::TokenKind::Symbol && next_token.value == "," {
                         self.token_i += 1;
@@ -690,7 +691,7 @@ impl BlockParser {
                     return Err(BlockParseError::InternalErr("invalid pragma argument length".to_string()));
                 }
 
-                let rule = BlockParser::get_define_command(pragma_args.get(0).unwrap().value.to_string(), pragma_args[1..].to_vec())?;
+                let rule = BlockParser::get_rule(line_num, pragma_args.get(0).unwrap().value.to_string(), pragma_args[1..].to_vec())?;
                 data::Command::Define(line_num, rule)
             },
             "start" => {
@@ -794,24 +795,184 @@ impl BlockParser {
         return Ok(cmd);
     }
 
-    fn get_define_command(rule_name: String, tokens: Vec<data::Token>) -> std::result::Result<data::Rule, BlockParseError> {
+    fn get_rule(line_num: usize, rule_name: String, tokens: Vec<data::Token>) -> std::result::Result<rule::Rule, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::RuleHasNoChoice(rule_name.to_string()));
         }
 
+        let mut choices = Vec::<rule::RuleChoice>::new();
+
         let mut token_i = 0;
+        let mut choice_start_i = 0;
 
-        let mut choices = Vec::<data::RuleChoice>::new();
-        let mut tmp_seq_groups = Vec::<data::RuleSequenceGroup>::new();
-        let mut tmp_seqs = Vec::<data::RuleSequence>::new();
-        let mut tmp_exprs = Vec::<data::RuleExpression>::new();
+        while token_i < tokens.len() {
+            let each_token = tokens.get(token_i).unwrap();
 
-        let mut previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+            if each_token.kind == data::TokenKind::Symbol && each_token.value == ":" {
+                let choice_tokens = tokens[choice_start_i..token_i].to_vec();
+                choices.push(BlockParser::get_choice(line_num, choice_tokens)?);
+                choice_start_i = token_i + 1;
+            }
+
+            token_i += 1;
+        }
+
+        choices.push(BlockParser::get_choice(line_num, tokens[choice_start_i..tokens.len()].to_vec())?);
+
+        /*
+        let mut previous_lookahead_kind = rule::RuleLookaheadKind::None;
         // 括弧内でのキャッシュ
-        let mut previous_group_seq_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+        let mut previous_group_seq_lookahead_kind = rule::RuleLookaheadKind::None;
 
         let mut is_in_paren = false;
 
+        // トークンの長さは最初にチェックしているので unwrap() できる
+        let last_token_line_num = tokens.get(tokens.len() - 1).unwrap().line;
+
+        // 最後に先読み文字が来た場合は構文エラー
+        if previous_lookahead_kind != rule::RuleLookaheadKind::None {
+            return Err(BlockParseError::UnexpectedToken(last_token_line_num, previous_lookahead_kind.to_symbol_string(), "expression and '('".to_string()));
+        }
+
+        // 最後まで括弧が閉じられていない場合はエラー
+        if is_in_paren {
+            return Err(BlockParseError::UnexpectedToken(last_token_line_num, ",".to_string(), "')'".to_string()));
+        }
+
+        // 最後に残った expression などを choice に追加する
+
+        if tmp_exprs.len() == 0 && tmp_seq_groups.len() == 0 {
+            return Err(BlockParseError::UnexpectedToken(tokens.get(tokens.len() - 1).unwrap().line, ",".to_string(), "expression".to_string()));
+        }
+
+        if tmp_exprs.len() != 0 {
+            tmp_seqs.push(data::RuleSequence::new(tmp_exprs.clone()));
+            tmp_exprs.clear();
+        }
+
+        if tmp_seqs.len() != 0 {
+            tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, rule::RuleLookaheadKind::None));
+            tmp_seqs.clear();
+        }
+
+        if tmp_seq_groups.len() != 0 {
+            choices.push(data::RuleChoice::new(tmp_seq_groups.clone()));
+        }
+
+        if choices.len() == 0 {
+            return Err(BlockParseError::RuleHasNoChoice(rule_name.to_string()));
+        }
+        */
+
+        return Ok(rule::Rule::new(rule_name.to_string(), choices));
+    }
+
+    // 外側の丸括弧や先読み, 繰り返し, 順不同などの記号は含めてもよい
+    fn get_choice(line_num: usize, tokens: Vec<data::Token>) -> std::result::Result<rule::RuleChoice, BlockParseError> {
+        // tokens の長さが 0 もしくはスペースしかなければ構文エラー
+        if tokens.len() == 0 || (tokens.len() == 1 && tokens.get(0).unwrap().kind == data::TokenKind::Space) {
+            return Err(BlockParseError::UnexpectedToken(line_num, ":".to_string(), "choice and sequence".to_string()));
+        }
+
+        let mut token_i = 0;
+
+        // todo: args
+        let mut choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, rule::RuleLoopKind::One);
+
+        let mut tmp_seqs = Vec::<rule::RuleSequence>::new();
+        let mut tmp_exprs = Vec::<rule::RuleExpression>::new();
+
+        let mut previous_lookahead_kind = rule::RuleLookaheadKind::None;
+        // 括弧内でのキャッシュ
+        let mut previous_group_seq_lookahead_kind = rule::RuleLookaheadKind::None;
+
+        // トークン列を要素ごとに分割する
+
+        let mut elem_tokens = Vec::<Vec<data::Token>>::new();
+        let mut elem_start_i = 0;
+
+        let mut is_in_paren = false;
+
+        while token_i < tokens.len() {
+            let each_token = tokens.get(token_i).unwrap();
+
+            if each_token.kind == data::TokenKind::Space {
+                if !is_in_paren {
+                    // トークン列を追加
+
+                    let new_elem_tokens = tokens[elem_start_i..token_i].to_vec();
+
+                    if new_elem_tokens.len() != 0 {
+                        elem_tokens.push(new_elem_tokens);
+                        elem_start_i = token_i + 1;
+                    }
+                }
+            }
+
+            if each_token.kind == data::TokenKind::Symbol {
+                match each_token.value.as_str() {
+                    "(" => {
+                        if is_in_paren {
+                            return Err(BlockParseError::UnexpectedToken(line_num, each_token.value.to_string(), "')'".to_string()));
+                        }
+
+                        if elem_start_i != token_i {
+                            return Err(BlockParseError::UnexpectedToken(line_num, each_token.value.to_string(), "' '".to_string()));
+                        }
+
+                        elem_start_i = token_i;
+                        is_in_paren = true;
+                    },
+                    ")" => {
+                        if !is_in_paren {
+                            return Err(BlockParseError::UnexpectedToken(line_num, each_token.value.to_string(), "'('".to_string()));
+                        }
+
+                        is_in_paren = false;
+
+                        match tokens.get(token_i + 1) {
+                            Some(v) => {
+                                if v.kind != data::TokenKind::Space {
+                                    return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "' '".to_string()));
+                                }
+                            },
+                            None => (),
+                        }
+                    },
+                    _ => (),
+                }
+            }
+
+            token_i += 1;
+
+            if token_i >= tokens.len() {
+                if is_in_paren {
+                    // 最後まで閉じ括弧がなければ構文エラー
+                    return Err(BlockParseError::ExpectedToken(line_num, "')'".to_string()));
+                }
+
+                // 残ったトークン列を追加
+
+                let new_elem_tokens = tokens[elem_start_i..tokens.len()].to_vec();
+
+                if new_elem_tokens.len() != 0 {
+                    elem_tokens.push(new_elem_tokens);
+                }
+            }
+        }
+
+        println!();
+        println!("--- elem ranges ---");
+
+        for each_token_vec in &elem_tokens {
+            for each_token in each_token_vec {
+                print!("{},", each_token.value);
+            }
+
+            println!();
+        }
+
+        /*
         while token_i < tokens.len() {
             let each_token = tokens.get(token_i).unwrap();
 
@@ -820,29 +981,29 @@ impl BlockParser {
             // ここと括弧開始時以外ではループ文字が予期しないトークンとして扱われるため特段エラー処理は必要ない
             let previous_loop_kind = match tokens.get(token_i + 1) {
                 Some(v) => {
-                    match data::RuleExpressionLoopKind::to_loop_kind(v.value.to_string()) {
+                    match rule::RuleLoopKind::to_loop_kind(v.value.to_string()) {
                         Some(v2) => {
                             token_i += 1;
                             v2
                         },
-                        None => data::RuleExpressionLoopKind::One,
+                        None => rule::RuleLoopKind::One,
                     }
                 },
-                None => data::RuleExpressionLoopKind::One,
+                None => rule::RuleLoopKind::One,
             };
-
-            // スペース
-            if each_token.kind == data::TokenKind::Space {
-                token_i += 1;
-                continue;
-            }
 
             // 文字クラス
             if each_token.kind == data::TokenKind::StringInBracket {
-                tmp_exprs.push(data::RuleExpression::new(each_token.line, data::RuleExpressionKind::CharClass, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
+                if token_len_until_next_spacing >= 2 {
+                    let unexpected_token = tokens.get(token_i + 1).unwrap();
+                    return Err(BlockParseError::UnexpectedToken(unexpected_token.line, unexpected_token.value.to_string(), "spacing and ','".to_string()));
+                }
 
-                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
-                token_i += 1;
+                let new_expr = rule::RuleExpression::new(each_token.line, rule::RuleExpressionKind::CharClass, previous_lookahead_kind.clone(), previous_loop_kind.clone(), each_token.value.to_string());
+                tmp_exprs.push(new_expr);
+
+                previous_lookahead_kind = rule::RuleLookaheadKind::None;
+                token_i += token_len_until_next_spacing + 1;
 
                 continue;
             }
@@ -864,8 +1025,8 @@ impl BlockParser {
 
                 if is_id_token_len_one {
                     // トークンが1個であるためループ文字チェックは必要ない
-                    tmp_exprs.push(data::RuleExpression::new(each_token.line, data::RuleExpressionKind::ID, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
-                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+                    tmp_exprs.push(rule::RuleExpression::new(each_token.line, rule::RuleExpressionKind::ID, previous_lookahead_kind.clone(), previous_loop_kind.clone(), each_token.value.to_string()));
+                    previous_lookahead_kind = rule::RuleLookaheadKind::None;
                     continue;
                 }
 
@@ -899,19 +1060,19 @@ impl BlockParser {
                 if is_id_token_len_two {
                     let loop_kind = match tokens.get(token_i) {
                         Some(v) => {
-                            match data::RuleExpressionLoopKind::to_loop_kind(v.value.to_string()) {
+                            match rule::RuleLoopKind::to_loop_kind(v.value.to_string()) {
                                 Some(v2) => {
                                     token_i += 1;
                                     v2
                                 },
-                                None => data::RuleExpressionLoopKind::One,
+                                None => rule::RuleLoopKind::One,
                             }
                         },
-                        None => data::RuleExpressionLoopKind::One,
+                        None => rule::RuleLoopKind::One,
                     };
 
-                    tmp_exprs.push(data::RuleExpression::new(each_token.line, data::RuleExpressionKind::ID, loop_kind, previous_lookahead_kind.clone(), format!("{}.{}", each_token.value, second_id)));
-                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+                    tmp_exprs.push(rule::RuleExpression::new(each_token.line, rule::RuleExpressionKind::ID, previous_lookahead_kind.clone(), loop_kind, format!("{}.{}", each_token.value, second_id)));
+                    previous_lookahead_kind = rule::RuleLookaheadKind::None;
                     continue;
                 }
 
@@ -933,28 +1094,34 @@ impl BlockParser {
 
                 let loop_kind = match tokens.get(token_i) {
                     Some(v) => {
-                        match data::RuleExpressionLoopKind::to_loop_kind(v.value.to_string()) {
+                        match rule::RuleLoopKind::to_loop_kind(v.value.to_string()) {
                             Some(v2) => {
                                 token_i += 1;
                                 v2
                             },
-                            None => data::RuleExpressionLoopKind::One,
+                            None => rule::RuleLoopKind::One,
                         }
                     },
-                    None => data::RuleExpressionLoopKind::One,
+                    None => rule::RuleLoopKind::One,
                 };
 
-                tmp_exprs.push(data::RuleExpression::new(each_token.line, data::RuleExpressionKind::ID, loop_kind, previous_lookahead_kind.clone(), format!("{}.{}.{}", each_token.value, second_id, third_id)));
-                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+                tmp_exprs.push(rule::RuleExpression::new(each_token.line, rule::RuleExpressionKind::ID, previous_lookahead_kind.clone(), loop_kind, format!("{}.{}.{}", each_token.value, second_id, third_id)));
+                previous_lookahead_kind = rule::RuleLookaheadKind::None;
                 continue;
             }
 
             // 文字列
             if each_token.kind == data::TokenKind::String {
-                tmp_exprs.push(data::RuleExpression::new(each_token.line, data::RuleExpressionKind::String, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
+                if token_len_until_next_spacing >= 2 {
+                    let unexpected_token = tokens.get(token_i + 1).unwrap();
+                    return Err(BlockParseError::UnexpectedToken(unexpected_token.line, unexpected_token.value.to_string(), "spacing and ','".to_string()));
+                }
 
-                previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
-                token_i += 1;
+                let new_expr = rule::RuleExpression::new(each_token.line, rule::RuleExpressionKind::String, previous_lookahead_kind.clone(), previous_loop_kind.clone(), each_token.value.to_string());
+                tmp_exprs.push(new_expr);
+
+                previous_lookahead_kind = rule::RuleLookaheadKind::None;
+                token_i += token_len_until_next_spacing + 1;
 
                 continue;
             }
@@ -963,10 +1130,16 @@ impl BlockParser {
             if each_token.kind == data::TokenKind::Symbol {
                 // ワイルドカード
                 if each_token.value == "." {
-                    tmp_exprs.push(data::RuleExpression::new(each_token.line, data::RuleExpressionKind::Wildcard, previous_loop_kind.clone(), previous_lookahead_kind.clone(), each_token.value.to_string()));
+                    if token_len_until_next_spacing >= 2 {
+                        let unexpected_token = tokens.get(token_i + 1).unwrap();
+                        return Err(BlockParseError::UnexpectedToken(unexpected_token.line, unexpected_token.value.to_string(), "spacing and ','".to_string()));
+                    }
 
-                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
-                    token_i += 1;
+                    let new_expr = rule::RuleExpression::new(each_token.line, rule::RuleExpressionKind::Wildcard, previous_lookahead_kind.clone(), previous_loop_kind.clone(), each_token.value.to_string());
+                    tmp_exprs.push(new_expr);
+
+                    previous_lookahead_kind = rule::RuleLookaheadKind::None;
+                    token_i += token_len_until_next_spacing + 1;
 
                     continue;
                 }
@@ -974,7 +1147,7 @@ impl BlockParser {
                 // 括弧開始
                 if each_token.value == "(" {
                     // ループ文字が括弧開始の後ろに来た場合は構文エラー
-                    if previous_loop_kind != data::RuleExpressionLoopKind::One {
+                    if previous_loop_kind != rule::RuleLoopKind::One {
                         return Err(BlockParseError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and some symbols".to_string()));
                     }
 
@@ -983,18 +1156,20 @@ impl BlockParser {
                     }
 
                     if tmp_exprs.len() != 0 {
-                        tmp_seqs.push(data::RuleSequence::new(tmp_exprs.clone()));
+                        // todo: some arguments...
+                        tmp_seqs.push(rule::RuleSequence::new(tmp_exprs.clone()));
                         tmp_exprs.clear();
                     }
 
                     if tmp_seqs.len() != 0 {
-                        tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None));
+                        // todo: some arguments...
+                        tmp_seq_groups.push(rule::RuleSequenceGroup::new(tmp_seqs.clone(), rule::RuleLoopKind::One, rule::RuleLookaheadKind::None));
                         tmp_seqs.clear();
                     }
 
                     // 先読みの種類を括弧終了時に使えるようにキャッシュを取る
                     previous_group_seq_lookahead_kind = previous_lookahead_kind.clone();
-                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+                    previous_lookahead_kind = rule::RuleLookaheadKind::None;
 
                     is_in_paren = true;
                     token_i += 1;
@@ -1005,7 +1180,7 @@ impl BlockParser {
                 // 括弧終了
                 if each_token.value == ")" {
                     // 先読み文字が括弧終了の前に来た場合は構文エラー
-                    if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+                    if previous_lookahead_kind != rule::RuleLookaheadKind::None {
                         return Err(BlockParseError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and '('".to_string()));
                     }
 
@@ -1021,7 +1196,7 @@ impl BlockParser {
                     }
 
                     tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), previous_loop_kind.clone(), previous_group_seq_lookahead_kind.clone()));
-                    previous_group_seq_lookahead_kind = data::RuleExpressionLookaheadKind::None;
+                    previous_group_seq_lookahead_kind = rule::RuleLookaheadKind::None;
 
                     tmp_seqs.clear();
 
@@ -1034,7 +1209,7 @@ impl BlockParser {
                 // 選択区切り
                 if each_token.value == ":" {
                     // 先読み文字が区切り文字の前に来た場合は構文エラー
-                    if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+                    if previous_lookahead_kind != rule::RuleLookaheadKind::None {
                         return Err(BlockParseError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and '('".to_string()));
                     }
 
@@ -1044,12 +1219,12 @@ impl BlockParser {
                     }
 
                     if tmp_exprs.len() != 0 {
-                        tmp_seqs.push(data::RuleSequence::new(tmp_exprs.clone()));
+                        tmp_seqs.push(rule::RuleSequence::new(tmp_exprs.clone()));
                         tmp_exprs.clear();
                     }
 
                     if tmp_seqs.len() != 0 {
-                        tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None));
+                        tmp_seq_groups.push(rule::RuleSequenceGroup::new(tmp_seqs.clone(), rule::RuleLoopKind::One, rule::RuleLookaheadKind::None));
                         tmp_seqs.clear();
                     }
 
@@ -1068,11 +1243,11 @@ impl BlockParser {
                 // 肯定先読み
                 if each_token.value == "&" {
                     // 先読み文字が先読み文字の前に来た場合は構文エラー
-                    if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+                    if previous_lookahead_kind != rule::RuleLookaheadKind::None {
                         return Err(BlockParseError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and '('".to_string()));
                     }
 
-                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::Positive;
+                    previous_lookahead_kind = rule::RuleLookaheadKind::Positive;
                     token_i += 1;
 
                     continue;
@@ -1081,11 +1256,11 @@ impl BlockParser {
                 // 否定先読み
                 if each_token.value == "!" {
                     // 先読み文字が先読み文字の前に来た場合は構文エラー
-                    if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
+                    if previous_lookahead_kind != rule::RuleLookaheadKind::None {
                         return Err(BlockParseError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and '('".to_string()));
                     }
 
-                    previous_lookahead_kind = data::RuleExpressionLookaheadKind::Negative;
+                    previous_lookahead_kind = rule::RuleLookaheadKind::Negative;
                     token_i += 1;
 
                     continue;
@@ -1095,44 +1270,29 @@ impl BlockParser {
             // マッチするトークンがない場合は構文エラー
             return Err(BlockParseError::UnexpectedToken(each_token.line, each_token.value.to_string(), "expression and some symbols".to_string()));
         }
+        */
 
-        // トークンの長さは最初にチェックしているので unwrap() できる
-        let last_token_line_num = tokens.get(tokens.len() - 1).unwrap().line;
+        return Ok(choice);
+    }
 
-        // 最後に先読み文字が来た場合は構文エラー
-        if previous_lookahead_kind != data::RuleExpressionLookaheadKind::None {
-            return Err(BlockParseError::UnexpectedToken(last_token_line_num, previous_lookahead_kind.to_symbol_string(), "expression and '('".to_string()));
-        }
+    fn get_expr(tokens: Vec<data::Token>) -> std::result::Result<rule::RuleExpression, BlockParseError> {
+        if tokens.len() == 0 {}
 
-        // 最後まで括弧が閉じられていない場合はエラー
-        if is_in_paren {
-            return Err(BlockParseError::UnexpectedToken(last_token_line_num, ",".to_string(), "')'".to_string()));
-        }
+        let first_token = tokens.get(0).unwrap();
 
-        // 最後に残った expression などを choice に追加する
+        let new_expr = match first_token.kind {
+            data::TokenKind::String => {
+                if tokens.len() >= 2 {
+                    let unexpected_token = tokens.get(1).unwrap();
+                    return Err(BlockParseError::UnexpectedToken(unexpected_token.line, unexpected_token.value.to_string(), "spacing and ','".to_string()));
+                }
 
-        if tmp_exprs.len() == 0 && tmp_seq_groups.len() == 0 {
-            return Err(BlockParseError::UnexpectedToken(tokens.get(tokens.len() - 1).unwrap().line, ",".to_string(), "expression".to_string()));
-        }
+                // todo: args
+                rule::RuleExpression::new(first_token.line, rule::RuleExpressionKind::String, rule::RuleLookaheadKind::None, rule::RuleLoopKind::One, first_token.value.to_string())
+            },
+            _ => panic!("aaa"),
+        };
 
-        if tmp_exprs.len() != 0 {
-            tmp_seqs.push(data::RuleSequence::new(tmp_exprs.clone()));
-            tmp_exprs.clear();
-        }
-
-        if tmp_seqs.len() != 0 {
-            tmp_seq_groups.push(data::RuleSequenceGroup::new(tmp_seqs.clone(), data::RuleExpressionLoopKind::One, data::RuleExpressionLookaheadKind::None));
-            tmp_seqs.clear();
-        }
-
-        if tmp_seq_groups.len() != 0 {
-            choices.push(data::RuleChoice::new(tmp_seq_groups.clone()));
-        }
-
-        if choices.len() == 0 {
-            return Err(BlockParseError::RuleHasNoChoice(rule_name.to_string()));
-        }
-
-        return Ok(data::Rule::new(rule_name.to_string(), choices));
+        return Ok(new_expr);
     }
 }

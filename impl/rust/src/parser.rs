@@ -1,4 +1,5 @@
 use crate::data;
+use crate::rule;
 use rustnutlib::console;
 
 pub enum SyntaxParseError {
@@ -22,7 +23,7 @@ impl SyntaxParseError {
 }
 
 pub struct SyntaxParser {
-    rule_map: data::RuleMap,
+    rule_map: rule::RuleMap,
     src_i: usize,
     src_content: String,
     recursion_count: usize,
@@ -30,7 +31,7 @@ pub struct SyntaxParser {
 }
 
 impl SyntaxParser {
-    pub fn new(rule_map: data::RuleMap) -> std::result::Result<Self, SyntaxParseError> {
+    pub fn new(rule_map: rule::RuleMap) -> std::result::Result<Self, SyntaxParseError> {
         return Ok(SyntaxParser {
             rule_map: rule_map,
             src_i: 0,
@@ -40,6 +41,7 @@ impl SyntaxParser {
         });
     }
 
+    /*
     pub fn get_syntax_tree(&mut self, src_content: String) -> std::result::Result<data::SyntaxNode, SyntaxParseError> {
         // フィールドを初期化
         self.src_i = 0;
@@ -252,4 +254,5 @@ impl SyntaxParser {
             },
         }
     }
+    */
 }
