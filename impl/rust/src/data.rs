@@ -3,6 +3,7 @@ use crate::rule;
 #[derive(PartialOrd, PartialEq, Debug, Clone)]
 pub enum TokenKind {
     ID,
+    Number,
     Space,
     String,
     StringInBracket,
@@ -13,6 +14,7 @@ impl std::fmt::Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             TokenKind::ID => return write!(f, "ID"),
+            TokenKind::Number => return write!(f, "Number"),
             TokenKind::Space => return write!(f, "Space"),
             TokenKind::String => return write!(f, "String"),
             TokenKind::StringInBracket => return write!(f, "StringInBracket"),

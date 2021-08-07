@@ -211,6 +211,32 @@ impl RuleMap {
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
+pub enum RuleLookaheadKind {
+    None,
+    Positive,
+    Negative,
+}
+
+impl RuleLookaheadKind {
+    // ret: 文字がマッチしなければ RuleLookaheadKind::None
+    pub fn to_lookahead_kind(value: &str) -> RuleLookaheadKind {
+        return match value {
+            "&" => RuleLookaheadKind::Positive,
+            "!" => RuleLookaheadKind::Negative,
+            _ => RuleLookaheadKind::None,
+        }
+    }
+
+    pub fn to_symbol_string(&self) -> String {
+        return match self {
+            RuleLookaheadKind::None => "".to_string(),
+            RuleLookaheadKind::Positive => "&".to_string(),
+            RuleLookaheadKind::Negative => "!".to_string(),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, PartialOrd)]
 pub enum RuleLoopKind {
     One,
     OneOrMore,
@@ -220,8 +246,8 @@ pub enum RuleLoopKind {
 
 impl RuleLoopKind {
     // ret: 文字がマッチすれば Some() 、マッチしなければ None
-    pub fn to_loop_kind(value: String) -> std::option::Option<RuleLoopKind> {
-        return match value.as_str() {
+    pub fn to_loop_kind(value: &str) -> std::option::Option<RuleLoopKind> {
+        return match value {
             "+" => Some(RuleLoopKind::OneOrMore),
             "?" => Some(RuleLoopKind::ZeroOrOne),
             "*" => Some(RuleLoopKind::ZeroOrMore),
@@ -235,23 +261,6 @@ impl RuleLoopKind {
             RuleLoopKind::OneOrMore => "+".to_string(),
             RuleLoopKind::ZeroOrOne => "?".to_string(),
             RuleLoopKind::ZeroOrMore => "*".to_string(),
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, PartialOrd)]
-pub enum RuleLookaheadKind {
-    None,
-    Positive,
-    Negative,
-}
-
-impl RuleLookaheadKind {
-    pub fn to_symbol_string(&self) -> String {
-        return match self {
-            RuleLookaheadKind::None => "".to_string(),
-            RuleLookaheadKind::Positive => "&".to_string(),
-            RuleLookaheadKind::Negative => "!".to_string(),
         }
     }
 }
