@@ -271,6 +271,18 @@ pub struct Rule {
     pub choices: Vec<RuleChoice>,
 }
 
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut choice_text = Vec::<String>::new();
+
+        for each_choice in &self.choices {
+            choice_text.push(each_choice.to_string());
+        }
+
+        return write!(f, "{} <- {}", self.name, choice_text.join(" : "))
+    }
+}
+
 impl Rule {
     pub fn new(name: String, choices: Vec<RuleChoice>) -> Self {
         return Rule {
@@ -280,97 +292,56 @@ impl Rule {
     }
 }
 
-impl std::fmt::Display for Rule {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let mut choice_text = Vec::<String>::new();
-
-        for each_choice in &self.choices {
-            choice_text.push(each_choice.to_string());
-        }
-
-        write!(f, "{} <- {}", self.name, choice_text.join(" : "))
-    }
-}
-
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum RuleElementContainerKind {
     RuleChoice,
-    RuleSequence,
+    RuleExpression,
 }
 
 #[derive(Clone)]
 pub struct RuleChoice {
-    pub elem_container_kinds: Vec<RuleElementContainerKind>,
-    pub choices: Vec<RuleChoice>,
-    pub seqs: Vec<RuleSequence>,
+    elem_container_kinds: Vec<RuleElementContainerKind>,
+    choices: Vec<RuleChoice>,
+    seq_exprs: Vec<RuleExpression>,
     pub lookahead_kind: RuleLookaheadKind,
     pub loop_kind: RuleLoopKind,
+    pub is_random_order: bool,
 }
 
 impl std::fmt::Display for RuleChoice {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut seq_text = Vec::<String>::new();
 
-        for each_seq in &self.seqs {
-            seq_text.push(format!("{}{}{}{}", each_seq.lookahead_kind.to_symbol_string(), each_seq.to_string(), each_seq.loop_kind.to_symbol_string(), if each_seq.is_random_order { "^" } else { "" }));
+        let mut choice_i = 0usize;
+        let mut expr_i = 0usize;
+
+        for each_container_kind in &self.elem_container_kinds {
+            match *each_container_kind {
+                RuleElementContainerKind::RuleChoice => {
+                    let each_choice = self.choices.get(choice_i).unwrap();
+                    seq_text.push(format!("{}({}){}{}", each_choice.lookahead_kind.to_symbol_string(), each_choice, each_choice.loop_kind.to_symbol_string(), if each_choice.is_random_order { "^" } else { "" }));
+                    choice_i += 1;
+                },
+                RuleElementContainerKind::RuleExpression => {
+                    let each_expr = self.seq_exprs.get(expr_i).unwrap();
+                    seq_text.push(format!("{}", each_expr));
+                    expr_i += 1;
+                },
+            }
         }
 
-        return write!(f, "{}", seq_text.join(" "));
+        let separator = if self.seq_exprs.len() == 0 { " : " } else { " " };
+        return write!(f, "{}", seq_text.join(separator));
+
     }
 }
 
 impl RuleChoice {
-    pub fn new(lookahead_kind: RuleLookaheadKind, loop_kind: RuleLoopKind) -> Self {
+    pub fn new(lookahead_kind: RuleLookaheadKind, loop_kind: RuleLoopKind, is_random_order: bool) -> Self {
         return RuleChoice {
             elem_container_kinds: vec![],
             choices: vec![],
-            seqs: vec![],
-            lookahead_kind: lookahead_kind,
-            loop_kind: loop_kind,
-        };
-    }
-
-    pub fn add_choice(&mut self, new_choice: RuleChoice) {
-        self.elem_container_kinds.push(RuleElementContainerKind::RuleChoice);
-        self.choices.push(new_choice);
-    }
-
-    pub fn add_seq(&mut self, new_seq: RuleChoice) {
-        self.elem_container_kinds.push(RuleElementContainerKind::RuleSequence);
-        self.choices.push(new_seq);
-    }
-}
-
-#[derive(Clone)]
-pub struct RuleSequence {
-    pub elem_container_kinds: Vec<RuleElementContainerKind>,
-    pub choices: Vec<RuleChoice>,
-    pub seqs: Vec<RuleSequence>,
-    pub exprs: Vec<RuleExpression>,
-    pub lookahead_kind: RuleLookaheadKind,
-    pub loop_kind: RuleLoopKind,
-    pub is_random_order: bool,
-}
-
-impl std::fmt::Display for RuleSequence {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let mut expr_text = Vec::<String>::new();
-
-        for each_expr in &self.exprs {
-            expr_text.push(each_expr.to_string());
-        }
-
-        return write!(f, "{}", expr_text.join(" "));
-    }
-}
-
-impl RuleSequence {
-    pub fn new(exprs: Vec<RuleExpression>, lookahead_kind: RuleLookaheadKind, loop_kind: RuleLoopKind, is_random_order: bool) -> Self {
-        return RuleSequence {
-            elem_container_kinds: vec![],
-            choices: vec![],
-            seqs: vec![],
-            exprs: exprs,
+            seq_exprs: vec![],
             lookahead_kind: lookahead_kind,
             loop_kind: loop_kind,
             is_random_order: is_random_order,
@@ -382,9 +353,9 @@ impl RuleSequence {
         self.choices.push(new_choice);
     }
 
-    pub fn add_seq(&mut self, new_seq: RuleChoice) {
-        self.elem_container_kinds.push(RuleElementContainerKind::RuleSequence);
-        self.choices.push(new_seq);
+    pub fn add_seq_expr(&mut self, new_seq_expr: RuleExpression) {
+        self.elem_container_kinds.push(RuleElementContainerKind::RuleExpression);
+        self.seq_exprs.push(new_seq_expr);
     }
 }
 
@@ -411,18 +382,18 @@ impl RuleExpressionKind {
 pub struct RuleExpression {
     pub line: usize,
     pub kind: RuleExpressionKind,
-    pub lookahead_type: RuleLookaheadKind,
-    pub loop_type: RuleLoopKind,
+    pub lookahead_kind: RuleLookaheadKind,
+    pub loop_kind: RuleLoopKind,
     pub value: String,
 }
 
 impl RuleExpression {
-    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_type: RuleLookaheadKind, loop_type: RuleLoopKind, value: String,) -> Self {
+    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_kind: RuleLoopKind, value: String,) -> Self {
         return RuleExpression {
             line: line,
             kind: kind,
-            lookahead_type: lookahead_type,
-            loop_type: loop_type,
+            lookahead_kind: lookahead_kind,
+            loop_kind: loop_kind,
             value: value,
         }
     }
@@ -430,6 +401,6 @@ impl RuleExpression {
 
 impl std::fmt::Display for RuleExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}{}{}", self.lookahead_type.to_symbol_string(), self.kind.to_token_string(self.value.to_string()), self.loop_type.to_symbol_string())
+        write!(f, "{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(self.value.to_string()), self.loop_kind.to_symbol_string())
     }
 }
