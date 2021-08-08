@@ -377,11 +377,11 @@ pub enum RuleExpressionKind {
 }
 
 impl RuleExpressionKind {
-    pub fn to_token_string(&self, value: String) -> String {
+    pub fn to_token_string(&self, value: &str) -> String {
         return match self {
             RuleExpressionKind::CharClass => value.to_string(),
             RuleExpressionKind::ID => value.to_string(),
-            RuleExpressionKind::String => value.to_string(),
+            RuleExpressionKind::String => format!("\"{}\"", value),
             RuleExpressionKind::Wildcard => ".".to_string(),
         }
     }
@@ -411,6 +411,6 @@ impl RuleExpression {
 impl std::fmt::Display for RuleExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
-        return write!(f, "{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(self.value.to_string()), loop_text);
+        return write!(f, "{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text);
     }
 }

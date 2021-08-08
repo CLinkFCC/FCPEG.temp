@@ -1614,13 +1614,42 @@ impl BlockParser {
         let first_token = tokens.get(0).unwrap();
 
         let new_expr = match first_token.kind {
+            data::TokenKind::ID => {
+                if tokens.len() >= 2 {
+                    let unexpected_token = tokens.get(1).unwrap();
+                    return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
+                }
+
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::ID, lookahead_kind, loop_count, first_token.value.to_string())
+            },
             data::TokenKind::String => {
                 if tokens.len() >= 2 {
                     let unexpected_token = tokens.get(1).unwrap();
-                    return Err(BlockParseError::UnexpectedToken(unexpected_token.line, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
+                    return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, first_token.value.to_string())
+                let value = first_token.value[1..first_token.value.len() - 1].to_string();
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, value)
+            },
+            data::TokenKind::StringInBracket => {
+                if tokens.len() >= 2 {
+                    let unexpected_token = tokens.get(1).unwrap();
+                    return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
+                }
+
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::CharClass, lookahead_kind, loop_count, first_token.value.to_string())
+            },
+            data::TokenKind::Symbol => {
+                if tokens.len() >= 2 {
+                    let unexpected_token = tokens.get(1).unwrap();
+                    return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
+                }
+
+                if first_token.value != "." {
+                    return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "'.'".to_string()));
+                }
+
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::Wildcard, lookahead_kind, loop_count, ".".to_string())
             },
             _ => return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "expression".to_string())),
         };
