@@ -105,7 +105,7 @@ impl RuleMap {
         return Ok(rule_map);
     }
 
-    pub fn add_rules_from_fcpeg_file_man(&mut self, fcpeg_file_man: &blockparser::FCPEGFileMan) -> std::result::Result<(), blockparser::BlockParseError> {
+    pub fn add_rules_from_fcpeg_file_man(&mut self, _fcpeg_file_man: &blockparser::FCPEGFileMan) -> std::result::Result<(), blockparser::BlockParseError> {
         // todo: コメントアウト外し
         /*
         for each_block in fcpeg_file_man.block_map.values() {
@@ -313,7 +313,7 @@ pub struct RuleChoice {
 impl std::fmt::Display for RuleChoice {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut seq_text = Vec::<String>::new();
-        let mut has_exprs = false;
+        let mut has_expr = false;
 
         for each_container in &self.elem_containers {
             match each_container {
@@ -325,12 +325,12 @@ impl std::fmt::Display for RuleChoice {
                 },
                 RuleElementContainer::RuleExpression(each_expr) => {
                     seq_text.push(format!("{}", each_expr));
-                    has_exprs = true;
+                    has_expr = true;
                 },
             }
         }
 
-        let separator = if has_exprs { " : " } else { " " };
+        let separator = if has_expr { " : " } else { " " };
         return write!(f, "{}", seq_text.join(separator));
     }
 }
