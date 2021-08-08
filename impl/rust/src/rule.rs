@@ -236,31 +236,34 @@ impl RuleLookaheadKind {
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
-pub enum RuleLoopKind {
-    One,
-    OneOrMore,
-    ZeroOrOne,
-    ZeroOrMore,
-}
+pub struct RuleCountConverter {}
 
-impl RuleLoopKind {
-    // ret: 文字がマッチすれば Some() 、マッチしなければ None
-    pub fn to_loop_kind(value: &str) -> std::option::Option<RuleLoopKind> {
-        return match value {
-            "+" => Some(RuleLoopKind::OneOrMore),
-            "?" => Some(RuleLoopKind::ZeroOrOne),
-            "*" => Some(RuleLoopKind::ZeroOrMore),
-            _ => None,
+impl RuleCountConverter {
+    pub fn count_to_string(count: &(i32, i32), is_loop_count: bool, prefix: &str, separator: &str, suffix: &str) -> String {
+        if *count == (1, 1) {
+            return "".to_string();
         }
+
+        if is_loop_count {
+            match *count {
+                (0, -1) => return "*".to_string(),
+                (1, -1) => return "+".to_string(),
+                (0, 1) => return "?".to_string(),
+                _ => (),
+            }
+        }
+
+        let min_count = if count.0 == 0 { "".to_string() } else { count.0.to_string() };
+        let max_count = if count.1 == -1 { "".to_string() } else { count.1.to_string() };
+        return format!("{}{}{}{}{}", prefix, min_count, separator, max_count, suffix);
     }
 
-    pub fn to_symbol_string(&self) -> String {
-        return match self {
-            RuleLoopKind::One => "".to_string(),
-            RuleLoopKind::OneOrMore => "+".to_string(),
-            RuleLoopKind::ZeroOrOne => "?".to_string(),
-            RuleLoopKind::ZeroOrMore => "*".to_string(),
+    pub fn loop_symbol_to_count(value: &str) -> (i32, i32) {
+        return match value {
+            "*" => (0, -1),
+            "+" => (1, -1),
+            "?" => (0, 1),
+            _ => (1, 1),
         }
     }
 }
@@ -304,8 +307,9 @@ pub struct RuleChoice {
     choices: Vec<RuleChoice>,
     seq_exprs: Vec<RuleExpression>,
     pub lookahead_kind: RuleLookaheadKind,
-    pub loop_kind: RuleLoopKind,
+    pub loop_count: (i32, i32),
     pub is_random_order: bool,
+    pub occurrence_count: (i32, i32),
 }
 
 impl std::fmt::Display for RuleChoice {
@@ -319,7 +323,12 @@ impl std::fmt::Display for RuleChoice {
             match *each_container_kind {
                 RuleElementContainerKind::RuleChoice => {
                     let each_choice = self.choices.get(choice_i).unwrap();
-                    seq_text.push(format!("{}({}){}{}", each_choice.lookahead_kind.to_symbol_string(), each_choice, each_choice.loop_kind.to_symbol_string(), if each_choice.is_random_order { "^" } else { "" }));
+
+                    let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
+                    let random_order_symbol = if each_choice.is_random_order { "^" } else { "" };
+                    let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
+                    seq_text.push(format!("{}({}){}{}{}", each_choice.lookahead_kind.to_symbol_string(), each_choice, loop_text, random_order_symbol, random_order_count));
+
                     choice_i += 1;
                 },
                 RuleElementContainerKind::RuleExpression => {
@@ -332,19 +341,19 @@ impl std::fmt::Display for RuleChoice {
 
         let separator = if self.seq_exprs.len() == 0 { " : " } else { " " };
         return write!(f, "{}", seq_text.join(separator));
-
     }
 }
 
 impl RuleChoice {
-    pub fn new(lookahead_kind: RuleLookaheadKind, loop_kind: RuleLoopKind, is_random_order: bool) -> Self {
+    pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), is_random_order: bool, occurrence_count: (i32, i32)) -> Self {
         return RuleChoice {
             elem_container_kinds: vec![],
             choices: vec![],
             seq_exprs: vec![],
             lookahead_kind: lookahead_kind,
-            loop_kind: loop_kind,
+            loop_count: loop_count,
             is_random_order: is_random_order,
+            occurrence_count: occurrence_count,
         };
     }
 
@@ -383,17 +392,17 @@ pub struct RuleExpression {
     pub line: usize,
     pub kind: RuleExpressionKind,
     pub lookahead_kind: RuleLookaheadKind,
-    pub loop_kind: RuleLoopKind,
+    pub loop_count: (i32, i32),
     pub value: String,
 }
 
 impl RuleExpression {
-    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_kind: RuleLoopKind, value: String,) -> Self {
+    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), value: String,) -> Self {
         return RuleExpression {
             line: line,
             kind: kind,
             lookahead_kind: lookahead_kind,
-            loop_kind: loop_kind,
+            loop_count: loop_count,
             value: value,
         }
     }
@@ -401,6 +410,7 @@ impl RuleExpression {
 
 impl std::fmt::Display for RuleExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(self.value.to_string()), self.loop_kind.to_symbol_string())
+        let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
+        return write!(f, "{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(self.value.to_string()), loop_text);
     }
 }
