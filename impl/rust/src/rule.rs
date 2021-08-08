@@ -295,17 +295,15 @@ impl Rule {
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
-pub enum RuleElementContainerKind {
-    RuleChoice,
-    RuleExpression,
+#[derive(Clone)]
+pub enum RuleElementContainer {
+    RuleChoice(RuleChoice),
+    RuleExpression(RuleExpression),
 }
 
 #[derive(Clone)]
 pub struct RuleChoice {
-    elem_container_kinds: Vec<RuleElementContainerKind>,
-    choices: Vec<RuleChoice>,
-    seq_exprs: Vec<RuleExpression>,
+    pub elem_containers: Vec<RuleElementContainer>,
     pub lookahead_kind: RuleLookaheadKind,
     pub loop_count: (i32, i32),
     pub is_random_order: bool,
@@ -315,31 +313,24 @@ pub struct RuleChoice {
 impl std::fmt::Display for RuleChoice {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut seq_text = Vec::<String>::new();
+        let mut has_exprs = false;
 
-        let mut choice_i = 0usize;
-        let mut expr_i = 0usize;
-
-        for each_container_kind in &self.elem_container_kinds {
-            match *each_container_kind {
-                RuleElementContainerKind::RuleChoice => {
-                    let each_choice = self.choices.get(choice_i).unwrap();
-
+        for each_container in &self.elem_containers {
+            match each_container {
+                RuleElementContainer::RuleChoice(each_choice) => {
                     let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
                     let random_order_symbol = if each_choice.is_random_order { "^" } else { "" };
                     let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
                     seq_text.push(format!("{}({}){}{}{}", each_choice.lookahead_kind.to_symbol_string(), each_choice, loop_text, random_order_symbol, random_order_count));
-
-                    choice_i += 1;
                 },
-                RuleElementContainerKind::RuleExpression => {
-                    let each_expr = self.seq_exprs.get(expr_i).unwrap();
+                RuleElementContainer::RuleExpression(each_expr) => {
                     seq_text.push(format!("{}", each_expr));
-                    expr_i += 1;
+                    has_exprs = true;
                 },
             }
         }
 
-        let separator = if self.seq_exprs.len() == 0 { " : " } else { " " };
+        let separator = if has_exprs { " : " } else { " " };
         return write!(f, "{}", seq_text.join(separator));
     }
 }
@@ -347,24 +338,12 @@ impl std::fmt::Display for RuleChoice {
 impl RuleChoice {
     pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), is_random_order: bool, occurrence_count: (i32, i32)) -> Self {
         return RuleChoice {
-            elem_container_kinds: vec![],
-            choices: vec![],
-            seq_exprs: vec![],
+            elem_containers: vec![],
             lookahead_kind: lookahead_kind,
             loop_count: loop_count,
             is_random_order: is_random_order,
             occurrence_count: occurrence_count,
         };
-    }
-
-    pub fn add_choice(&mut self, new_choice: RuleChoice) {
-        self.elem_container_kinds.push(RuleElementContainerKind::RuleChoice);
-        self.choices.push(new_choice);
-    }
-
-    pub fn add_seq_expr(&mut self, new_seq_expr: RuleExpression) {
-        self.elem_container_kinds.push(RuleElementContainerKind::RuleExpression);
-        self.seq_exprs.push(new_seq_expr);
     }
 }
 

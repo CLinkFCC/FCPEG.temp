@@ -1283,10 +1283,10 @@ impl BlockParser {
                     let sub_choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), choice_tokens)?;
 
                     for each_choice in sub_choices {
-                        new_choice.add_choice(each_choice);
+                        new_choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(each_choice));
                     }
 
-                    choice.add_choice(new_choice);
+                    choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(new_choice));
                 } else {
                     if is_random_order {
                         return Err(BlockParseError::UnexpectedToken(line_num, "^".to_string(), "nothing".to_string()));
@@ -1301,7 +1301,7 @@ impl BlockParser {
                     println!(" ({}:{}~{})", expr_tokens.get(0).unwrap().kind, content_start_i, content_end_i);
 
                     let new_expr = BlockParser::get_expr(line_num, lookahead_kind, loop_count, expr_tokens)?;
-                    choice.add_seq_expr(new_expr);
+                    choice.elem_containers.push(rule::RuleElementContainer::RuleExpression(new_expr));
                 }
             }
         }
