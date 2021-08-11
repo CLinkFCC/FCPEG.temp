@@ -105,9 +105,7 @@ impl RuleMap {
         return Ok(rule_map);
     }
 
-    pub fn add_rules_from_fcpeg_file_man(&mut self, _fcpeg_file_man: &blockparser::FCPEGFileMan) -> std::result::Result<(), blockparser::BlockParseError> {
-        // todo: コメントアウト外し
-        /*
+    pub fn add_rules_from_fcpeg_file_man(&mut self, fcpeg_file_man: &blockparser::FCPEGFileMan) -> std::result::Result<(), blockparser::BlockParseError> {
         for each_block in fcpeg_file_man.block_map.values() {
             if each_block.name == "Main" {
                 continue;
@@ -139,59 +137,7 @@ impl RuleMap {
                         each_rule.name = format!("{}.{}.{}", fcpeg_file_man.file_alias_name, each_block.name, each_rule.name);
 
                         for each_choice in each_rule.choices.iter_mut() {
-                            for each_seq_group in each_choice.seq_groups.iter_mut() {
-                                for each_seq in each_seq_group.seqs.iter_mut() {
-                                    for each_expr in each_seq.exprs.iter_mut() {
-                                        if each_expr.kind == RuleExpressionKind::ID {
-                                            let id_tokens: Vec<&str> = each_expr.value.split(".").collect();
-
-                                            if id_tokens.len() == 1 {
-                                                each_expr.value = format!("{}.{}.{}", fcpeg_file_man.file_alias_name, each_block.name, each_expr.value);
-                                                continue;
-                                            }
-
-                                            if id_tokens.len() == 2 {
-                                                let block_name = id_tokens.get(0).unwrap();
-                                                let rule_name = id_tokens.get(1).unwrap();
-
-                                                if block_alias_map.contains_key(&block_name.to_string()) {
-                                                    // ブロック名がエイリアスである場合
-                                                    each_expr.value = format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name);
-                                                } else {
-                                                    // ブロック名がエイリアスでない場合
-                                                    return Err(blockparser::BlockParseError::BlockAliasNotFound(each_expr.line, block_name.to_string()));
-                                                }
-
-                                                continue;
-                                            }
-
-                                            if id_tokens.len() == 3 {
-                                                let file_alias_name = id_tokens.get(0).unwrap();
-                                                let block_name = id_tokens.get(1).unwrap();
-                                                let rule_name = id_tokens.get(2).unwrap();
-
-                                                each_expr.value = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
-                                                continue;
-                                            }
-
-                                            return Err(blockparser::BlockParseError::InternalErr(format!("invalid id expression '{}'", each_expr.value)));
-                                        }
-
-                                        if each_expr.kind == RuleExpressionKind::CharClass {
-                                            if self.regex_map.contains_key(&each_expr.value) {
-                                                continue;
-                                            }
-
-                                            let pattern = match regex::Regex::new(&each_expr.to_string()) {
-                                                Err(_e) => return Err(blockparser::BlockParseError::InvalidCharClassFormat(each_expr.line, each_expr.to_string())),
-                                                Ok(v) => v,
-                                            };
-
-                                            self.regex_map.insert(each_expr.value.to_string(), pattern);
-                                        }
-                                    }
-                                }
-                            }
+                            self.proc_define_cmd(each_choice, &each_block.name, fcpeg_file_man, &block_alias_map)?;
                         }
 
                         self.add_rule(fcpeg_file_man.file_alias_name.to_string(), each_block.name.to_string(), rule.name.to_string(), each_rule);
@@ -204,7 +150,67 @@ impl RuleMap {
         for each_file_man in fcpeg_file_man.sub_file_aliase_map.values() {
             self.add_rules_from_fcpeg_file_man(each_file_man)?;
         }
-        */
+
+        return Ok(());
+    }
+
+    pub fn proc_define_cmd(&mut self, choice: &mut RuleChoice, block_name: &String, fcpeg_file_man: &blockparser::FCPEGFileMan, block_alias_map: &std::collections::HashMap<String, String>) -> std::result::Result<(), blockparser::BlockParseError> {
+        for each_elem in choice.elem_containers.iter_mut() {
+            match each_elem {
+                RuleElementContainer::RuleChoice(each_choice) => {
+                    self.proc_define_cmd(each_choice, block_name, fcpeg_file_man, block_alias_map)?;
+                },
+                RuleElementContainer::RuleExpression(each_expr) => {
+                    if each_expr.kind == RuleExpressionKind::ID {
+                        let id_tokens: Vec<&str> = each_expr.value.split(".").collect();
+
+                        if id_tokens.len() == 1 {
+                            each_expr.value = format!("{}.{}.{}", fcpeg_file_man.file_alias_name, block_name, each_expr.value);
+                            continue;
+                        }
+
+                        if id_tokens.len() == 2 {
+                            let block_name = id_tokens.get(0).unwrap();
+                            let rule_name = id_tokens.get(1).unwrap();
+
+                            if block_alias_map.contains_key(&block_name.to_string()) {
+                                // ブロック名がエイリアスである場合
+                                each_expr.value = format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name);
+                            } else {
+                                // ブロック名がエイリアスでない場合
+                                return Err(blockparser::BlockParseError::BlockAliasNotFound(each_expr.line, block_name.to_string()));
+                            }
+
+                            continue;
+                        }
+
+                        if id_tokens.len() == 3 {
+                            let file_alias_name = id_tokens.get(0).unwrap();
+                            let block_name = id_tokens.get(1).unwrap();
+                            let rule_name = id_tokens.get(2).unwrap();
+
+                            each_expr.value = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
+                            continue;
+                        }
+
+                        return Err(blockparser::BlockParseError::InternalErr(format!("invalid id expression '{}'", each_expr.value)));
+                    }
+
+                    if each_expr.kind == RuleExpressionKind::CharClass {
+                        if self.regex_map.contains_key(&each_expr.value) {
+                            continue;
+                        }
+
+                        let pattern = match regex::Regex::new(&each_expr.to_string()) {
+                            Err(_e) => return Err(blockparser::BlockParseError::InvalidCharClassFormat(each_expr.line, each_expr.to_string())),
+                            Ok(v) => v,
+                        };
+
+                        self.regex_map.insert(each_expr.value.to_string(), pattern);
+                    }
+                },
+            }
+        }
 
         return Ok(());
     }

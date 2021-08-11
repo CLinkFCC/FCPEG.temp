@@ -41,26 +41,49 @@ impl Token {
 }
 
 #[derive(Clone)]
-pub struct SyntaxNode {
-    pub name: String,
-    pub nodes: Vec<SyntaxNode>,
-    pub leaves: Vec<String>,
+pub enum SyntaxNodeElement {
+    NodeList(String, Vec<SyntaxNodeElement>),
+    Leaf(String),
 }
 
-impl SyntaxNode {
+impl SyntaxNodeElement {
+    pub fn print(&self, nest: usize) {
+        match self {
+            SyntaxNodeElement::NodeList(name, sub_elems) => {
+                if nest == 0 {
+                    println!("[nodes]");
+                }
+
+                println!("{}{}", "    ".repeat(nest), name);
+
+                for each_elem in sub_elems {
+                    each_elem.print(nest + 1);
+                }
+            },
+            SyntaxNodeElement::Leaf(leaf) => {
+                println!("{}[leaf] {:?}", "    ".repeat(nest), leaf.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t"));
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SyntaxTree {
+    pub name: String,
+    pub children: Vec<SyntaxNodeElement>,
+}
+
+impl SyntaxTree {
     pub fn new(name: String) -> Self {
-        return SyntaxNode {
+        return SyntaxTree {
             name: name,
-            nodes: vec![],
-            leaves: vec![],
+            children: vec![],
         };
     }
 
-    pub fn print(&self, nest: usize) {
-        println!("{}{}: {}", "    ".repeat(nest), self.name, self.leaves.join(",").replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t"));
-
-        for each_node in &self.nodes {
-            each_node.print(nest + 1);
+    pub fn print(&self) {
+        for each_elem in &self.children {
+            each_elem.print(0);
         }
     }
 }
