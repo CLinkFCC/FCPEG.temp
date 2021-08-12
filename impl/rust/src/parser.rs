@@ -45,25 +45,29 @@ impl SyntaxParser {
         // フィールドを初期化
         self.src_i = 0;
         self.src_content = src_content;
-        self.recursion_count = 1;
+        // self.recursion_count = 1;
 
         let start_rule_id = self.rule_map.start_rule_id.to_string();
         let mut tree = data::SyntaxTree::new(start_rule_id.to_string());
 
-        self.recursion_count += 1;
+        if self.src_content.len() == 0 {
+            return Ok(tree);
+        }
 
-            let child = match self.is_rule_successful(&start_rule_id)? {
-                Some(v) => v,
-                None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.to_string(), self.src_i)),
-            };
+        // self.recursion_count += 1;
 
-            tree.children.push(child);
+        let child = match self.is_rule_successful(&start_rule_id)? {
+            Some(v) => v,
+            None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.to_string(), self.src_i)),
+        };
+
+        tree.children.push(child);
 
         if self.src_i < self.src_content.len() {
             return Err(SyntaxParseError::NoSucceededRule(start_rule_id.to_string(), self.src_i));
         }
 
-        self.recursion_count -= 1;
+        // self.recursion_count -= 1;
         return Ok(tree);
     }
 
@@ -103,8 +107,13 @@ impl SyntaxParser {
                 rule::RuleElementContainer::RuleChoice(each_choice) => {
                     match self.is_choice_successful(each_choice)? {
                         Some(v) => {
-                            let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
-                            children.push(new_child);
+                            if choice.elem_containers.len() != 1 {
+                                let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
+                                children.push(new_child);
+                            } else {
+                                children = v;
+                            }
+ 
                             continue;
                         },
                         None => {
@@ -115,8 +124,11 @@ impl SyntaxParser {
                 },
                 rule::RuleElementContainer::RuleExpression(each_expr) => {
                     match self.is_expr_successful(each_expr)? {
-                        Some(node_elem) => {
-                            children.push(node_elem);
+                        Some(node_elems) => {
+                            for each_elem in node_elems {
+                                children.push(each_elem);
+                            }
+
                             continue;
                         },
                         None => {
@@ -213,7 +225,40 @@ impl SyntaxParser {
     */
 
     #[inline(always)]
-    fn is_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<data::SyntaxNodeElement>, SyntaxParseError> {
+    fn is_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        let min_count = expr.loop_count.0;
+        let max_count = expr.loop_count.1;
+
+        if min_count == -1 || (max_count != -1 && min_count > max_count) {
+            return Err(SyntaxParseError::InternalErr(format!("invalid loop count {{{},{}}}", min_count, max_count)));
+        }
+
+        let mut children = Vec::<data::SyntaxNodeElement>::new();
+        let mut loop_count = 0;
+
+        loop {
+            match self.is_each_expr_matched(expr)? {
+                Some(node_elem) => {
+                    children.push(node_elem);
+                    loop_count += 1;
+
+                    if max_count != -1 && loop_count == max_count {
+                        return Ok(Some(children));
+                    }
+                },
+                None => {
+                    if loop_count >= min_count && (max_count == -1 || loop_count <= max_count) {
+                        return Ok(Some(children));
+                    } else {
+                        return Ok(None);
+                    }
+                },
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn is_each_expr_matched(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<data::SyntaxNodeElement>, SyntaxParseError> {
         match expr.kind {
             rule::RuleExpressionKind::CharClass => {
                 if self.src_content.len() < self.src_i + 1 {

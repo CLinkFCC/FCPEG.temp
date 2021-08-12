@@ -50,18 +50,15 @@ impl SyntaxNodeElement {
     pub fn print(&self, nest: usize) {
         match self {
             SyntaxNodeElement::NodeList(name, sub_elems) => {
-                if nest == 0 {
-                    println!("[nodes]");
-                }
-
-                println!("{}{}", "    ".repeat(nest), name);
+                let display_name = if name == "" { "*choice".to_string() } else { name.to_string() };
+                println!("|{} {}", "   |".repeat(nest), display_name);
 
                 for each_elem in sub_elems {
                     each_elem.print(nest + 1);
                 }
             },
             SyntaxNodeElement::Leaf(leaf) => {
-                println!("{}[leaf] {:?}", "    ".repeat(nest), leaf.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t"));
+                println!("|{}- \"{}\"", "   |".repeat(nest), leaf.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t"));
             }
         }
     }
