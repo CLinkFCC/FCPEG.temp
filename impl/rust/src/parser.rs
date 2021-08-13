@@ -85,7 +85,7 @@ impl SyntaxParser {
                 Some(v) => {
                     let new_node = data::SyntaxNodeElement::NodeList(rule_id.to_string(), v);
                     return Ok(Some(new_node));
-                }
+                },
                 None => {
                     self.src_i = start_src_i;
                     continue;
@@ -98,6 +98,69 @@ impl SyntaxParser {
 
     #[inline(always)]
     fn is_choice_successful(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        return self.is_lookahead_choice_successful(choice);
+    }
+
+    #[inline(always)]
+    fn is_lookahead_choice_successful(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        match choice.lookahead_kind {
+            rule::RuleLookaheadKind::None => {
+                return self.is_loop_choice_successful(choice);
+            },
+            rule::RuleLookaheadKind::Positive | rule::RuleLookaheadKind::Negative => {
+                let start_src_i = self.src_i;
+                let is_lookahead_positive = choice.lookahead_kind == rule::RuleLookaheadKind::Positive;
+
+                let is_choice_successful = self.is_loop_choice_successful(choice)?;
+                self.src_i = start_src_i;
+
+                if is_choice_successful.is_some() == is_lookahead_positive {
+                    return Ok(Some(vec![]));
+                } else {
+                    return Ok(None);
+                }
+            },
+        }
+    }
+
+    #[inline(always)]
+    fn is_loop_choice_successful(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        let min_count = choice.loop_count.0;
+        let max_count = choice.loop_count.1;
+
+        if min_count == -1 || (max_count != -1 && min_count > max_count) {
+            return Err(SyntaxParseError::InternalErr(format!("invalid loop count {{{},{}}}", min_count, max_count)));
+        }
+
+        let mut children = Vec::<data::SyntaxNodeElement>::new();
+        let mut loop_count = 0;
+
+        loop {
+            match self.is_each_choice_matched(choice)? {
+                Some(node_elems) => {
+                    for each_elem in node_elems {
+                        children.push(each_elem);
+                    }
+
+                    loop_count += 1;
+
+                    if max_count != -1 && loop_count == max_count {
+                        return Ok(Some(children));
+                    }
+                },
+                None => {
+                    if loop_count >= min_count && (max_count == -1 || loop_count <= max_count) {
+                        return Ok(Some(children));
+                    } else {
+                        return Ok(None);
+                    }
+                },
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn is_each_choice_matched(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
         let mut children = Vec::<data::SyntaxNodeElement>::new();
 
         for each_elem in &choice.elem_containers {
@@ -105,21 +168,53 @@ impl SyntaxParser {
 
             match each_elem {
                 rule::RuleElementContainer::RuleChoice(each_choice) => {
-                    match self.is_choice_successful(each_choice)? {
-                        Some(v) => {
-                            if choice.elem_containers.len() != 1 {
-                                let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
-                                children.push(new_child);
-                            } else {
-                                children = v;
+                    let mut is_successful = false;
+
+                    if each_choice.has_choices {
+                        for each_sub_elem in &each_choice.elem_containers {
+                            match each_sub_elem {
+                                rule::RuleElementContainer::RuleChoice(each_sub_choice) => {
+                                    match self.is_choice_successful(each_sub_choice)? {
+                                        Some(v) => {
+                                            if choice.elem_containers.len() != 1 {
+                                                let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
+                                                children.push(new_child);
+                                            } else {
+                                                children = v;
+                                            }
+
+                                            is_successful = true;
+                                            break;
+                                        },
+                                        None => {
+                                            self.src_i = start_src_i;
+                                        },
+                                    }
+                                },
+                                _ => (),
                             }
- 
-                            continue;
-                        },
-                        None => {
-                            self.src_i = start_src_i;
+                        }
+
+                        if !is_successful {
                             return Ok(None);
-                        },
+                        }
+                    } else {
+                        match self.is_choice_successful(each_choice)? {
+                            Some(v) => {
+                                if choice.elem_containers.len() != 1 {
+                                    let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
+                                    children.push(new_child);
+                                } else {
+                                    children = v;
+                                }
+
+                                continue;
+                            },
+                            None => {
+                                self.src_i = start_src_i;
+                                return Ok(None);
+                            },
+                        }
                     }
                 },
                 rule::RuleElementContainer::RuleExpression(each_expr) => {
