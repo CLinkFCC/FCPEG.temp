@@ -201,7 +201,7 @@ impl RuleMap {
                             continue;
                         }
 
-                        let pattern = match regex::Regex::new(&each_expr.to_string()) {
+                        let pattern = match regex::Regex::new(&each_expr.value.to_string()) {
                             Err(_e) => return Err(blockparser::BlockParseError::InvalidCharClassFormat(each_expr.line, each_expr.to_string())),
                             Ok(v) => v,
                         };
@@ -381,6 +381,13 @@ pub struct RuleExpression {
     pub value: String,
 }
 
+impl std::fmt::Display for RuleExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
+        return write!(f, "{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text);
+    }
+}
+
 impl RuleExpression {
     pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), value: String,) -> Self {
         return RuleExpression {
@@ -390,12 +397,5 @@ impl RuleExpression {
             loop_count: loop_count,
             value: value,
         }
-    }
-}
-
-impl std::fmt::Display for RuleExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
-        return write!(f, "{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text);
     }
 }

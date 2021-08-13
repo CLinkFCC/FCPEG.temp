@@ -286,6 +286,10 @@ impl SyntaxParser {
 
     #[inline(always)]
     fn is_each_expr_matched(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<data::SyntaxNodeElement>, SyntaxParseError> {
+        if self.src_i >= self.src_content.len() {
+            return Ok(None);
+        }
+
         match expr.kind {
             rule::RuleExpressionKind::CharClass => {
                 if self.src_content.len() < self.src_i + 1 {
