@@ -226,6 +226,33 @@ impl SyntaxParser {
 
     #[inline(always)]
     fn is_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        return self.is_lookahead_expr_successful(expr);
+    }
+
+    #[inline(always)]
+    fn is_lookahead_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        match expr.lookahead_kind {
+            rule::RuleLookaheadKind::None => {
+                return self.is_loop_expr_successful(expr);
+            },
+            rule::RuleLookaheadKind::Positive | rule::RuleLookaheadKind::Negative => {
+                let start_src_i = self.src_i;
+                let is_lookahead_positive = expr.lookahead_kind == rule::RuleLookaheadKind::Positive;
+
+                let is_expr_successful = self.is_loop_expr_successful(expr)?;
+                self.src_i = start_src_i;
+
+                if is_expr_successful.is_some() == is_lookahead_positive {
+                    return Ok(Some(vec![]));
+                } else {
+                    return Ok(None);
+                }
+            },
+        }
+    }
+
+    #[inline(always)]
+    fn is_loop_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
         let min_count = expr.loop_count.0;
         let max_count = expr.loop_count.1;
 
