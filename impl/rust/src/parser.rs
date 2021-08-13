@@ -37,7 +37,7 @@ impl SyntaxParser {
             src_i: 0,
             src_content: "".to_string(),
             recursion_count: 1,
-            max_recursion_count: 128,
+            max_recursion_count: 32,
         });
     }
 
@@ -45,7 +45,7 @@ impl SyntaxParser {
         // フィールドを初期化
         self.src_i = 0;
         self.src_content = src_content;
-        // self.recursion_count = 1;
+        self.recursion_count = 1;
 
         let start_rule_id = self.rule_map.start_rule_id.to_string();
         let mut tree = data::SyntaxTree::new(start_rule_id.to_string());
@@ -54,7 +54,7 @@ impl SyntaxParser {
             return Ok(tree);
         }
 
-        // self.recursion_count += 1;
+        self.recursion_count += 1;
 
         let child = match self.is_rule_successful(&start_rule_id)? {
             Some(v) => v,
@@ -67,7 +67,7 @@ impl SyntaxParser {
             return Err(SyntaxParseError::NoSucceededRule(start_rule_id.to_string(), self.src_i));
         }
 
-        // self.recursion_count -= 1;
+        self.recursion_count -= 1;
         return Ok(tree);
     }
 
