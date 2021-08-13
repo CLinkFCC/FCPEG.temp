@@ -314,12 +314,12 @@ pub struct RuleChoice {
     pub loop_count: (i32, i32),
     pub is_random_order: bool,
     pub occurrence_count: (i32, i32),
+    pub has_choices: bool,
 }
 
 impl std::fmt::Display for RuleChoice {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut seq_text = Vec::<String>::new();
-        let mut has_expr = false;
 
         for each_container in &self.elem_containers {
             match each_container {
@@ -331,24 +331,24 @@ impl std::fmt::Display for RuleChoice {
                 },
                 RuleElementContainer::RuleExpression(each_expr) => {
                     seq_text.push(format!("{}", each_expr));
-                    has_expr = true;
                 },
             }
         }
 
-        let separator = if has_expr { " : " } else { " " };
+        let separator = if self.has_choices { " : " } else { " " };
         return write!(f, "{}", seq_text.join(separator));
     }
 }
 
 impl RuleChoice {
-    pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), is_random_order: bool, occurrence_count: (i32, i32)) -> Self {
+    pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), is_random_order: bool, occurrence_count: (i32, i32), has_choices: bool) -> Self {
         return RuleChoice {
             elem_containers: vec![],
             lookahead_kind: lookahead_kind,
             loop_count: loop_count,
             is_random_order: is_random_order,
             occurrence_count: occurrence_count,
+            has_choices: has_choices,
         };
     }
 }

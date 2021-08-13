@@ -855,7 +855,7 @@ impl BlockParser {
         }
 
         let mut choices = Vec::<rule::RuleChoice>::new();
-        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), false, (1, 1));
+        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), false, (1, 1), false);
 
         let mut token_i = 0;
         let mut choice_start_i = 0;
@@ -939,7 +939,7 @@ impl BlockParser {
         }
 
         let mut choice_tokens = tokens[choice_start_i..tokens.len()].to_vec();
-        let mut new_choice = primitive_choice.clone();
+        let mut new_choice = primitive_choice;
         BlockParser::get_choice(line_num, rule_name.to_string(), &mut new_choice, &mut choice_tokens)?;
         choices.push(new_choice);
         return Ok(choices);
@@ -1072,6 +1072,7 @@ impl BlockParser {
                 let mut loop_count = (1i32, 1i32);
 
                 let mut is_choice = false;
+                let mut has_choices = false;
                 let mut paren_nest = 0;
 
                 let mut tmp_token_i = token_i;
@@ -1097,6 +1098,9 @@ impl BlockParser {
                             },
                             ")" => {
                                 paren_nest -= 1;
+                            },
+                            ":" => {
+                                has_choices = true;
                             },
                             _ => (),
                         }
@@ -1269,7 +1273,7 @@ impl BlockParser {
                     choice.loop_count = loop_count;
                     choice.occurrence_count = occurrence_count;
 
-                    let mut new_choice = rule::RuleChoice::new(lookahead_kind, (1, 1), is_random_order, (1, 1));
+                    let mut new_choice = rule::RuleChoice::new(lookahead_kind, (1, 1), is_random_order, (1, 1), has_choices);
                     // 選択の括弧などを取り除いてから渡す
                     let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
 
