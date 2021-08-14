@@ -307,6 +307,15 @@ pub enum RuleElementContainer {
     RuleExpression(RuleExpression),
 }
 
+impl std::fmt::Display for RuleElementContainer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        return match self {
+            RuleElementContainer::RuleChoice(choice) => write!(f, "{}", choice),
+            RuleElementContainer::RuleExpression(expr) => write!(f, "{}", expr),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RuleChoice {
     pub elem_containers: Vec<RuleElementContainer>,
@@ -335,7 +344,7 @@ impl std::fmt::Display for RuleChoice {
             }
         }
 
-        let separator = if self.has_choices { " : " } else { " " };
+        let separator = if self.is_random_order { ", " } else if self.has_choices { " : " } else { " " };
         return write!(f, "{}", seq_text.join(separator));
     }
 }

@@ -168,9 +168,46 @@ impl SyntaxParser {
 
             match each_elem {
                 rule::RuleElementContainer::RuleChoice(each_choice) => {
-                    let mut is_successful = false;
+                    if each_choice.is_random_order {
+                        let mut new_sub_children = Vec::<data::SyntaxNodeElement>::new();
+                        let mut matched_choices = [false].repeat(each_choice.elem_containers.len());
 
-                    if each_choice.has_choices {
+                        for _i in 0..each_choice.elem_containers.len() {
+                            for (sub_elem_i, each_sub_elem) in each_choice.elem_containers.iter().enumerate() {
+                                let is_check_done = *matched_choices.get(sub_elem_i).unwrap();
+                                let elem_start_src_i = self.src_i;
+
+                                match each_sub_elem {
+                                    rule::RuleElementContainer::RuleChoice(each_sub_choice) if !is_check_done => {
+                                        match self.is_choice_successful(each_sub_choice)? {
+                                            Some(v) => {
+                                                for each_result_sub_elem in v {
+                                                    new_sub_children.push(each_result_sub_elem);
+                                                }
+
+                                                matched_choices[sub_elem_i] = true;
+                                                break;
+                                            },
+                                            None => {
+                                                self.src_i = elem_start_src_i;
+                                                continue;
+                                            },
+                                        }
+                                    },
+                                    _ => (),
+                                }
+                            }
+                        }
+
+                        if matched_choices.contains(&false) {
+                            return Ok(None);
+                        }
+
+                        let new_child = data::SyntaxNodeElement::NodeList("".to_string(), new_sub_children);
+                        children.push(new_child);
+                    } else if each_choice.has_choices {
+                        let mut is_successful = false;
+
                         for each_sub_elem in &each_choice.elem_containers {
                             match each_sub_elem {
                                 rule::RuleElementContainer::RuleChoice(each_sub_choice) => {
@@ -237,87 +274,6 @@ impl SyntaxParser {
 
         return Ok(Some(children));
     }
-
-    /*
-    #[inline(always)]
-    fn is_seq_group_successful(&mut self, seq_group: &data::RuleSequenceGroup) -> std::result::Result<std::option::Option<(Vec<data::SyntaxNode>, Vec<String>)>, SyntaxParseError> {
-        let mut result_nodes = Vec::<data::SyntaxNode>::new();
-        let mut result_leaves = Vec::<String>::new();
-
-        for each_seq in &seq_group.seqs {
-            let start_src_i = self.src_i;
-
-            match self.is_seq_successful(each_seq)? {
-                Some((nodes, leaves)) => {
-                    let mut mut_result = (nodes, leaves);
-                    result_nodes.append(&mut mut_result.0);
-                    result_leaves.append(&mut mut_result.1);
-                },
-                None => {
-                    self.src_i = start_src_i;
-                    return Ok(None);
-                },
-            }
-        }
-
-        return Ok(Some((result_nodes, result_leaves)));
-    }
-    */
-
-    /*
-    #[inline(always)]
-    fn is_seq_successful(&mut self, seq: &data::RuleSequence) -> std::result::Result<std::option::Option<(Vec<data::SyntaxNode>, Vec<String>)>, SyntaxParseError> {
-        let mut nodes = Vec::<data::SyntaxNode>::new();
-        let mut leaves = Vec::<String>::new();
-
-        for each_expr in &seq.exprs {
-            match each_expr.loop_type {
-                data::RuleExpressionLoopKind::One => {
-                    match self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)? {
-                        Some(()) => continue,
-                        None => return Ok(None),
-                    }
-                },
-                data::RuleExpressionLoopKind::OneOrMore => {
-                    match self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)? {
-                        Some(()) => (),
-                        None => return Ok(None),
-                    }
-
-                    while self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?.is_some() {}
-
-                    continue;
-                },
-                data::RuleExpressionLoopKind::ZeroOrMore => {
-                    while self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?.is_some() {}
-
-                    continue;
-                },
-                data::RuleExpressionLoopKind::ZeroOrOne => {
-                    self.is_expr_vec_successful(each_expr, &mut nodes, &mut leaves)?;
-                    continue;
-                },
-            }
-        }
-
-        return Ok(Some((nodes, leaves)));
-    }
-    */
-
-    /*
-    #[inline(always)]
-    fn is_expr_vec_successful(&mut self, expr: &data::RuleExpression, nodes: &mut Vec<data::SyntaxNode>, leaves: &mut Vec<String>) -> std::result::Result<std::option::Option<()>, SyntaxParseError> {
-        let start_src_i = self.src_i;
-
-        return match self.is_expr_successful(expr, nodes, leaves)? {
-            Some(()) => Ok(Some(())),
-            None => {
-                self.src_i = start_src_i;
-                Ok(None)
-            },
-        };
-    }
-    */
 
     #[inline(always)]
     fn is_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
