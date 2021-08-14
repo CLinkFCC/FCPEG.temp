@@ -333,10 +333,7 @@ impl std::fmt::Display for RuleChoice {
         for each_container in &self.elem_containers {
             match each_container {
                 RuleElementContainer::RuleChoice(each_choice) => {
-                    let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
-                    let random_order_symbol = if each_choice.is_random_order { "^" } else { "" };
-                    let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
-                    seq_text.push(format!("{}({}){}{}{}", each_choice.lookahead_kind.to_symbol_string(), each_choice, loop_text, random_order_symbol, random_order_count));
+                    seq_text.push(each_choice.to_string());
                 },
                 RuleElementContainer::RuleExpression(each_expr) => {
                     seq_text.push(format!("{}", each_expr));
@@ -344,8 +341,11 @@ impl std::fmt::Display for RuleChoice {
             }
         }
 
-        let separator = if self.is_random_order { ", " } else if self.has_choices { " : " } else { " " };
-        return write!(f, "{}", seq_text.join(separator));
+        let separator = if self.has_choices { if self.is_random_order { ", " } else { " : " } } else { " " };
+        let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
+        let random_order_symbol = if self.is_random_order { "^" } else { "" };
+        let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
+        return write!(f, "{}", format!("{}({}){}{}{}", self.lookahead_kind.to_symbol_string(), seq_text.join(separator), loop_text, random_order_symbol, random_order_count));
     }
 }
 
@@ -359,6 +359,13 @@ impl RuleChoice {
             occurrence_count: occurrence_count,
             has_choices: has_choices,
         };
+    }
+
+    pub fn is_default(&self) -> bool {
+        return self.lookahead_kind == RuleLookaheadKind::None
+            && self.loop_count == (1, 1)
+            && self.is_random_order == false
+            && self.occurrence_count == (1, 1);
     }
 }
 

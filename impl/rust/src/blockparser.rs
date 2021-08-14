@@ -1099,7 +1099,7 @@ impl BlockParser {
                             ")" => {
                                 paren_nest -= 1;
                             },
-                            ":" => {
+                            ":" | "," => {
                                 has_choices = true;
                             },
                             _ => (),
@@ -1270,10 +1270,15 @@ impl BlockParser {
                 println!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
 
                 if is_choice {
-                    choice.loop_count = loop_count;
-                    choice.occurrence_count = occurrence_count;
+                    // choice.loop_count = loop_count;
+                    // choice.is_random_order = is_random_order;
+                    // choice.occurrence_count = occurrence_count;
 
-                    let mut new_choice = rule::RuleChoice::new(lookahead_kind, (1, 1), is_random_order, (1, 1), has_choices);
+                    // let mut new_choice = rule::RuleChoice::new(lookahead_kind, (1, 1), false, (1, 1), has_choices);
+                    // // 選択の括弧などを取り除いてから渡す
+                    // let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
+
+                    let mut new_choice = rule::RuleChoice::new(lookahead_kind, loop_count, is_random_order, occurrence_count, has_choices);
                     // 選択の括弧などを取り除いてから渡す
                     let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
 
@@ -1285,8 +1290,11 @@ impl BlockParser {
 
                     let sub_choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), choice_tokens)?;
 
-                    for each_choice in sub_choices {
-                        new_choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(each_choice));
+                    match sub_choices.get(0) {
+                        Some(v) if sub_choices.len() == 1 && v.is_default() => new_choice.elem_containers = v.elem_containers.clone(),
+                        _ => for each_choice in sub_choices {
+                            new_choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(each_choice));
+                        },
                     }
 
                     choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(new_choice));

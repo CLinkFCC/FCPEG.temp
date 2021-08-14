@@ -80,8 +80,16 @@ impl SyntaxParser {
 
         for each_choice in &rule.choices {
             let start_src_i = self.src_i;
-
-            match self.is_choice_successful(each_choice)? {
+            let occurrence_count = if each_choice.is_random_order {
+                Some(each_choice.occurrence_count)
+            } else {
+                None
+            };
+            println!("rsucc\t{}\t{} {}", match Some(each_choice.occurrence_count) {
+                Some(v) => format!("{}-{}", v.0, v.1),
+                None => format!("none"),
+            }, each_choice, each_choice.is_random_order);
+            match self.is_choice_successful(&occurrence_count, each_choice)? {
                 Some(v) => {
                     let new_node = data::SyntaxNodeElement::NodeList(rule_id.to_string(), v);
                     return Ok(Some(new_node));
@@ -97,21 +105,26 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_choice_successful(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
-        return self.is_lookahead_choice_successful(choice);
+    fn is_choice_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        println!("csucc\t{}\t{}", match parent_occurrence_count{
+            Some(v) => format!("{}-{}", v.0, v.1),
+            None => format!("none"),
+        }, choice);
+
+        return self.is_lookahead_choice_successful(parent_occurrence_count, choice);
     }
 
     #[inline(always)]
-    fn is_lookahead_choice_successful(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_lookahead_choice_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
         match choice.lookahead_kind {
             rule::RuleLookaheadKind::None => {
-                return self.is_loop_choice_successful(choice);
+                return self.is_loop_choice_successful(parent_occurrence_count, choice);
             },
             rule::RuleLookaheadKind::Positive | rule::RuleLookaheadKind::Negative => {
                 let start_src_i = self.src_i;
                 let is_lookahead_positive = choice.lookahead_kind == rule::RuleLookaheadKind::Positive;
 
-                let is_choice_successful = self.is_loop_choice_successful(choice)?;
+                let is_choice_successful = self.is_loop_choice_successful(parent_occurrence_count, choice)?;
                 self.src_i = start_src_i;
 
                 if is_choice_successful.is_some() == is_lookahead_positive {
@@ -124,9 +137,21 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_loop_choice_successful(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
-        let min_count = choice.loop_count.0;
-        let max_count = choice.loop_count.1;
+    fn is_loop_choice_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        let (min_count, max_count) = match parent_occurrence_count {
+            Some(tmp_occr_count) => {
+                let (mut tmp_min_count, mut tmp_max_count) = *tmp_occr_count;
+
+                tmp_min_count += choice.loop_count.0 - 1;
+
+                if tmp_max_count != -1 {
+                    tmp_max_count += choice.loop_count.1 - 1;
+                }
+
+                (tmp_min_count, tmp_max_count)
+            },
+            None => choice.loop_count,
+        };
 
         if min_count == -1 || (max_count != -1 && min_count > max_count) {
             return Err(SyntaxParseError::InternalErr(format!("invalid loop count {{{},{}}}", min_count, max_count)));
@@ -136,7 +161,7 @@ impl SyntaxParser {
         let mut loop_count = 0;
 
         loop {
-            match self.is_each_choice_matched(choice)? {
+            match self.is_each_choice_matched(parent_occurrence_count, choice)? {
                 Some(node_elems) => {
                     for each_elem in node_elems {
                         children.push(each_elem);
@@ -160,9 +185,12 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_each_choice_matched(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_each_choice_matched(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
         let mut children = Vec::<data::SyntaxNodeElement>::new();
-
+println!("cmatch\t{}\t{}", match parent_occurrence_count{
+    Some(v) => format!("{}-{}", v.0, v.1),
+    None => format!("none"),
+}, choice);
         for each_elem in &choice.elem_containers {
             let start_src_i = self.src_i;
 
@@ -179,7 +207,7 @@ impl SyntaxParser {
 
                                 match each_sub_elem {
                                     rule::RuleElementContainer::RuleChoice(each_sub_choice) if !is_check_done => {
-                                        match self.is_choice_successful(each_sub_choice)? {
+                                        match self.is_choice_successful(&Some(each_choice.occurrence_count), each_sub_choice)? {
                                             Some(v) => {
                                                 for each_result_sub_elem in v {
                                                     new_sub_children.push(each_result_sub_elem);
@@ -211,7 +239,7 @@ impl SyntaxParser {
                         for each_sub_elem in &each_choice.elem_containers {
                             match each_sub_elem {
                                 rule::RuleElementContainer::RuleChoice(each_sub_choice) => {
-                                    match self.is_choice_successful(each_sub_choice)? {
+                                    match self.is_choice_successful(&Some(each_choice.occurrence_count), each_sub_choice)? {
                                         Some(v) => {
                                             if choice.elem_containers.len() != 1 {
                                                 let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
@@ -236,7 +264,7 @@ impl SyntaxParser {
                             return Ok(None);
                         }
                     } else {
-                        match self.is_choice_successful(each_choice)? {
+                        match self.is_choice_successful(&Some(each_choice.occurrence_count), each_choice)? {
                             Some(v) => {
                                 if choice.elem_containers.len() != 1 {
                                     let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
@@ -255,7 +283,7 @@ impl SyntaxParser {
                     }
                 },
                 rule::RuleElementContainer::RuleExpression(each_expr) => {
-                    match self.is_expr_successful(each_expr)? {
+                    match self.is_expr_successful(&None, each_expr)? {
                         Some(node_elems) => {
                             for each_elem in node_elems {
                                 children.push(each_elem);
@@ -276,21 +304,21 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
-        return self.is_lookahead_expr_successful(expr);
+    fn is_expr_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        return self.is_lookahead_expr_successful(parent_occurrence_count, expr);
     }
 
     #[inline(always)]
-    fn is_lookahead_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_lookahead_expr_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
         match expr.lookahead_kind {
             rule::RuleLookaheadKind::None => {
-                return self.is_loop_expr_successful(expr);
+                return self.is_loop_expr_successful(parent_occurrence_count, expr);
             },
             rule::RuleLookaheadKind::Positive | rule::RuleLookaheadKind::Negative => {
                 let start_src_i = self.src_i;
                 let is_lookahead_positive = expr.lookahead_kind == rule::RuleLookaheadKind::Positive;
 
-                let is_expr_successful = self.is_loop_expr_successful(expr)?;
+                let is_expr_successful = self.is_loop_expr_successful(parent_occurrence_count, expr)?;
                 self.src_i = start_src_i;
 
                 if is_expr_successful.is_some() == is_lookahead_positive {
@@ -303,9 +331,13 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_loop_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
-        let min_count = expr.loop_count.0;
-        let max_count = expr.loop_count.1;
+    fn is_loop_expr_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        let (min_count, max_count) = expr.loop_count;
+
+        println!("{} {{{},{}}} [{}]", expr, min_count, max_count, match parent_occurrence_count{
+            Some(v) => format!("{}-{}", v.0, v.1),
+            None => format!("none"),
+        });
 
         if min_count == -1 || (max_count != -1 && min_count > max_count) {
             return Err(SyntaxParseError::InternalErr(format!("invalid loop count {{{},{}}}", min_count, max_count)));
