@@ -1067,6 +1067,7 @@ impl BlockParser {
 
                 let mut is_choice = false;
                 let mut has_choices = false;
+                let mut is_random_order_syntax = false;
                 let mut paren_nest = 0;
 
                 let mut tmp_token_i = token_i;
@@ -1093,8 +1094,17 @@ impl BlockParser {
                             ")" => {
                                 paren_nest -= 1;
                             },
-                            ":" | "," => {
-                                has_choices = true;
+                            ":" => {
+                                if paren_nest == 1 {
+                                    is_random_order_syntax = false;
+                                    has_choices = true;
+                                }
+                            },
+                            "," => {
+                                if paren_nest == 1 {
+                                    is_random_order_syntax = true;
+                                    has_choices = true;
+                                }
                             },
                             _ => (),
                         }
@@ -1280,6 +1290,16 @@ impl BlockParser {
                 println!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
 
                 if is_choice {
+                    if has_choices && is_random_order != is_random_order_syntax {
+                        let (unexpected_token, expected_token) = if is_random_order_syntax {
+                            (",", "':'")
+                        } else {
+                            (":", "','")
+                        };
+
+                        return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.to_string(), expected_token.to_string()));
+                    }
+
                     let mut new_choice = rule::RuleChoice::new(lookahead_kind, loop_count, is_random_order, occurrence_count, has_choices);
                     // 選択の括弧などを取り除いてから渡す
                     let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
@@ -1292,14 +1312,16 @@ impl BlockParser {
 
                     let sub_choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), choice_tokens)?;
 
-                    match sub_choices.get(0) {
-                        Some(v) if sub_choices.len() == 1 && v.is_default() => {
-                            new_choice.elem_containers = v.elem_containers.clone();
+                    match rule::RuleChoice::is_hierarchy_omission_needed(&sub_choices, is_random_order) {
+                        Some(v) => {
+                            new_choice.elem_containers = v.elem_containers;
                             new_choice.has_choices = v.has_choices;
                         },
-                        _ => for each_choice in sub_choices {
-                            new_choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(each_choice));
-                        },
+                        None => {
+                            for each_choice in sub_choices {
+                                new_choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(each_choice));
+                            }
+                        }
                     }
 
                     choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(new_choice));

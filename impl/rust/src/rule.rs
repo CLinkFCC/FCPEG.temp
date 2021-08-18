@@ -361,11 +361,44 @@ impl RuleChoice {
         };
     }
 
-    pub fn is_default(&self) -> bool {
-        return self.lookahead_kind == RuleLookaheadKind::None
-            && self.loop_count == (1, 1)
-            && self.is_random_order == false
-            && self.occurrence_count == (1, 1);
+    pub fn has_choices(&self) -> bool {
+        for each_elem in &self.elem_containers {
+            match each_elem {
+                RuleElementContainer::RuleChoice(_v) => return true,
+                _ => (),
+            }
+        }
+
+        return false;
+    }
+
+    pub fn is_hierarchy_omission_needed(choices: &Vec<RuleChoice>, is_random_order: bool) -> std::option::Option<RuleChoice> {
+        match choices.get(0) {
+            Some(v) => {
+                if choices.len() == 1 && v.lookahead_kind == RuleLookaheadKind::None && v.loop_count == (1, 1) && v.occurrence_count == (1, 1) {
+                    if is_random_order {
+                        match v.elem_containers.get(0) {
+                            Some(v2) => {
+                                match v2 {
+                                    RuleElementContainer::RuleChoice(v3) => {
+                                        if v3.has_choices() {
+                                            return Some(v.clone());
+                                        }
+                                    },
+                                    _ => (),
+                                }
+                            },
+                            None => (),
+                        }
+                    } else {
+                        return Some(v.clone());
+                    }
+                }
+            },
+            None => (),
+        };
+
+        return None;
     }
 }
 
