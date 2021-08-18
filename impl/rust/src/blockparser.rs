@@ -1293,7 +1293,10 @@ impl BlockParser {
                     let sub_choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), choice_tokens)?;
 
                     match sub_choices.get(0) {
-                        Some(v) if sub_choices.len() == 1 && v.is_default() => new_choice.elem_containers = v.elem_containers.clone(),
+                        Some(v) if sub_choices.len() == 1 && v.is_default() => {
+                            new_choice.elem_containers = v.elem_containers.clone();
+                            new_choice.has_choices = v.has_choices;
+                        },
                         _ => for each_choice in sub_choices {
                             new_choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(each_choice));
                         },
