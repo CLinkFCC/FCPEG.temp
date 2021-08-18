@@ -1038,12 +1038,6 @@ impl BlockParser {
             None => return Err(BlockParseError::NoChoiceOrExpressionContent(line_num)),
         }
 
-        // let mut choice = rule::RuleChoice::new(choice_lookahead_kind, choice_loop_kind, is_choice_random_order);
-
-        // let mut previous_lookahead_kind = rule::RuleLookaheadKind::None;
-        // 括弧内でのキャッシュ
-        // let mut previous_group_seq_lookahead_kind = rule::RuleLookaheadKind::None;
-
         // トークン列を要素ごとに分割する
         let elem_tokens = BlockParser::get_elem_tokens(tokens);
 
@@ -1114,11 +1108,18 @@ impl BlockParser {
                 let mut is_random_order = false;
                 let mut occurrence_count = (1i32, 1i32);
 
+                paren_nest = 0;
+
                 while token_i < each_tokens.len() {
                     match each_tokens.get(token_i) {
                         Some(v) => {
                             match v.value.as_str() {
                                 "^" => {
+                                    if paren_nest != 0 {
+                                        token_i += 1;
+                                        continue;
+                                    }
+
                                     is_random_order = true;
                                     content_end_i -= 1;
                                     token_i += 1;
@@ -1165,6 +1166,11 @@ impl BlockParser {
                                     break;
                                 },
                                 "{" => {
+                                    if paren_nest != 0 {
+                                        token_i += 1;
+                                        continue;
+                                    }
+
                                     if loop_count != (1, 1) {
                                         return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "nothing".to_string()));
                                     }
@@ -1237,11 +1243,15 @@ impl BlockParser {
                                     token_i += 1;
                                     break;
                                 },
+                                "(" => {
+                                    paren_nest += 1;
+                                    token_i += 1;
+                                },
+                                ")" => {
+                                    paren_nest -= 1;
+                                    token_i += 1;
+                                },
                                 _ => {
-                                    if loop_count != (1, 1) {
-                                        return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'^' and '{'".to_string()));
-                                    }
-
                                     token_i += 1;
                                 }
                             }
@@ -1270,14 +1280,6 @@ impl BlockParser {
                 println!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
 
                 if is_choice {
-                    // choice.loop_count = loop_count;
-                    // choice.is_random_order = is_random_order;
-                    // choice.occurrence_count = occurrence_count;
-
-                    // let mut new_choice = rule::RuleChoice::new(lookahead_kind, (1, 1), false, (1, 1), has_choices);
-                    // // 選択の括弧などを取り除いてから渡す
-                    // let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
-
                     let mut new_choice = rule::RuleChoice::new(lookahead_kind, loop_count, is_random_order, occurrence_count, has_choices);
                     // 選択の括弧などを取り除いてから渡す
                     let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
