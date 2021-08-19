@@ -14,6 +14,11 @@ fn run_command() {
 }
 
 fn cmd_parse(_cmd_name: String, cmd_args: std::collections::HashMap::<String, Vec<String>>, cons: &mut console::Console) {
+    if cmd_args.get("-h").is_some() {
+        show_parse_cmd_help(cons);
+        return;
+    }
+
     let fcpeg_file_path = match cmd_args.get("-f") {
         Some(v) => {
             if v.len() != 1 {
@@ -42,6 +47,16 @@ fn cmd_parse(_cmd_name: String, cmd_args: std::collections::HashMap::<String, Ve
     } else {
         parse(fcpeg_file_path, fcpeg_src_paths, cons);
     }
+}
+
+fn show_parse_cmd_help(cons: &mut console::Console) {
+    cons.log(console::ConsoleLogData::new(console::ConsoleLogKind::Notice, "command help", vec![
+        "parse:\tparse specified files".to_string(),
+        "\t-f:\tspecify .fcpeg file".to_string(),
+        "\t-h:\tshow help".to_string(),
+        "\t-i:\tspecify input files".to_string(),
+        "\t-mon:\tmonitor source files".to_string()
+    ], vec![]), false);
 }
 
 fn parse(fcpeg_file_path: String, fcpeg_src_paths: Vec<String>, cons: &mut console::Console) {
