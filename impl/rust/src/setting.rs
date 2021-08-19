@@ -54,6 +54,7 @@ impl std::fmt::Display for RegexMode {
 impl RegexMode {
     fn get_regex_mode(regex_mode_value: &str) -> std::option::Option<RegexMode> {
         return match regex_mode_value.to_lowercase().as_str() {
+            "default" => Some(RegexMode::Default),
             "onise" => Some(RegexMode::Onise),
             "posix" => Some(RegexMode::Posix),
             _ => None,
