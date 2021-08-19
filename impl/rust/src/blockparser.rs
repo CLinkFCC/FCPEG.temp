@@ -799,8 +799,32 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, block_name_token.value.to_string(), "ID".to_string()));
                 }
 
+                let mut file_alias_name = self.file_alias_name.to_string();
+                let mut block_name = block_name_token.value.to_string();
+
                 arg_i += 1;
-                let block_name = block_name_token.value.to_string();
+
+                match pragma_args.get(arg_i) {
+                    Some(period_token) => {
+                        if period_token.kind == data::TokenKind::Symbol && period_token.value == "." {
+                            arg_i += 1;
+
+                            match pragma_args.get(arg_i) {
+                                Some(id_token) => {
+                                    if id_token.kind != data::TokenKind::ID {
+                                        return Err(BlockParseError::UnexpectedToken(line_num, id_token.value.clone(), "ID".to_string()));
+                                    }
+
+                                    file_alias_name = block_name;
+                                    block_name = id_token.value.to_string();
+                                    arg_i += 1;
+                                },
+                                None => (),
+                            }
+                        }
+                    },
+                    None => (),
+                }
 
                 // ブロックエイリアス名を取得
 
@@ -828,12 +852,7 @@ impl BlockParser {
                     None => (),
                 }
 
-                // let unexpected_token_value = match pragma_args.get(2).unwrap().get(0) {
-                //     Some(v) => v.value,
-                //     None => "".to_string(),
-                // };
-
-                data::Command::Use(line_num, self.file_alias_name.to_string(), block_name, block_alias_name)
+                data::Command::Use(line_num, file_alias_name, block_name, block_alias_name)
             },
             _ => return Err(BlockParseError::UnknownPragmaName(line_num, pragma_name.to_string())),
         };
