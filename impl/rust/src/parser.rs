@@ -152,7 +152,7 @@ impl SyntaxParser {
         let mut loop_count = 0;
 
         loop {
-            match self.is_each_choice_matched(parent_occurrence_count, choice)? {
+            match self.is_each_choice_matched(choice)? {
                 Some(node_elems) => {
                     for each_elem in node_elems {
                         children.push(each_elem);
@@ -176,7 +176,7 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_each_choice_matched(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_each_choice_matched(&mut self, choice: &rule::RuleChoice) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
         let mut children = Vec::<data::SyntaxNodeElement>::new();
 
         for each_elem in &choice.elem_containers {
@@ -271,7 +271,7 @@ impl SyntaxParser {
                     }
                 },
                 rule::RuleElementContainer::RuleExpression(each_expr) => {
-                    match self.is_expr_successful(&None, each_expr)? {
+                    match self.is_expr_successful(each_expr)? {
                         Some(node_elems) => {
                             for each_elem in node_elems {
                                 children.push(each_elem);
@@ -292,21 +292,21 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_expr_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
-        return self.is_lookahead_expr_successful(parent_occurrence_count, expr);
+    fn is_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+        return self.is_lookahead_expr_successful(expr);
     }
 
     #[inline(always)]
-    fn is_lookahead_expr_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_lookahead_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
         match expr.lookahead_kind {
             rule::RuleLookaheadKind::None => {
-                return self.is_loop_expr_successful(parent_occurrence_count, expr);
+                return self.is_loop_expr_successful(expr);
             },
             rule::RuleLookaheadKind::Positive | rule::RuleLookaheadKind::Negative => {
                 let start_src_i = self.src_i;
                 let is_lookahead_positive = expr.lookahead_kind == rule::RuleLookaheadKind::Positive;
 
-                let is_expr_successful = self.is_loop_expr_successful(parent_occurrence_count, expr)?;
+                let is_expr_successful = self.is_loop_expr_successful(expr)?;
                 self.src_i = start_src_i;
 
                 if is_expr_successful.is_some() == is_lookahead_positive {
@@ -319,7 +319,7 @@ impl SyntaxParser {
     }
 
     #[inline(always)]
-    fn is_loop_expr_successful(&mut self, parent_occurrence_count: &std::option::Option<(i32, i32)>, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_loop_expr_successful(&mut self, expr: &rule::RuleExpression) -> std::result::Result<std::option::Option<Vec<data::SyntaxNodeElement>>, SyntaxParseError> {
         let (min_count, max_count) = expr.loop_count;
 
         if min_count == -1 || (max_count != -1 && min_count > max_count) {
