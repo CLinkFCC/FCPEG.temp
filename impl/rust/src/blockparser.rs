@@ -789,6 +789,8 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, ",".to_string(), "pragma argument".to_string()));
                 }
 
+                let mut arg_i = 0usize;
+
                 // ブロック名を取得
 
                 let block_name_token = pragma_args.get(0).unwrap();
@@ -797,49 +799,39 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, block_name_token.value.to_string(), "ID".to_string()));
                 }
 
+                arg_i += 1;
                 let block_name = block_name_token.value.to_string();
 
                 // ブロックエイリアス名を取得
 
-                let block_alias_name = block_name.to_string();
+                let mut block_alias_name = block_name.to_string();
 
-                /* todo: エイリアス機能を後で作る
-                if pragma_args.len() == 5 {
-                    match pragma_args.get(1) {
-                        Some(v) => {
-                            if v.kind != data::TokenKind::Space {
-                                return Err(BlockParseError::UnexpectedToken(line_num, v.value, "' '".to_string()));
-                            }
-                        },
-                        None => return Err(BlockParseError::ExpectedToken(line_num, "' '".to_string())),
-                    }
+                match pragma_args.get(arg_i) {
+                    Some(v) => {
+                        if v.kind != data::TokenKind::ID || v.value != "as" {
+                            return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "'as'".to_string()));
+                        }
 
-                    match pragma_args.get(2) {
-                        Some(v) => {
-                            if v.kind != data::TokenKind::Space {
-                                return Err(BlockParseError::UnexpectedToken(line_num, v.value, "ID".to_string()));
-                            }
-                        },
-                        None => return Err(BlockParseError::ExpectedToken(line_num, "'as'".to_string())),
-                    }
+                        arg_i += 1;
 
-                    match pragma_args.get(3) {
-                        Some(v) => {
-                            if v.kind != data::TokenKind::Space {
-                                return Err(BlockParseError::UnexpectedToken(line_num, v.value, "' '".to_string()));
-                            }
-                        },
-                        None => return Err(BlockParseError::ExpectedToken(line_num, "' '".to_string())),
-                    }
+                        match pragma_args.get(arg_i) {
+                            Some(v) => {
+                                if v.kind != data::TokenKind::ID {
+                                    return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "ID".to_string()));
+                                }
 
-                    let unexpected_token_value = match pragma_args.get(2).unwrap().get(0) {
-                        Some(v) => v.value,
-                        None => "".to_string(),
-                    };
-
-                    return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token_value, "','".to_string()));
+                                block_alias_name = v.value.to_string();
+                            },
+                            None => return Err(BlockParseError::ExpectedToken(line_num, "ID".to_string())),
+                        }
+                    },
+                    None => (),
                 }
-                */
+
+                // let unexpected_token_value = match pragma_args.get(2).unwrap().get(0) {
+                //     Some(v) => v.value,
+                //     None => "".to_string(),
+                // };
 
                 data::Command::Use(line_num, self.file_alias_name.to_string(), block_name, block_alias_name)
             },
