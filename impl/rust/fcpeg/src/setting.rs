@@ -25,12 +25,12 @@ impl SettingFileError {
     pub fn get_log_data(&self) -> console::ConsoleLogData {
         match self {
             SettingFileError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown", vec![], vec![]),
-            SettingFileError::DuplicatedPropName(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "duplicated property name", vec![], vec![format!("property name: {}", prop_name)]),
+            SettingFileError::DuplicatedPropName(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "duplicated property name", vec![], vec![format!("property name:\t{}", prop_name)]),
             SettingFileError::FileManError(err) => err.get_log_data(),
-            SettingFileError::InvalidPropValueLength(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name: {}", prop_name)]),
-            SettingFileError::InvalidSyntax(line, msg) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid syntax", vec![format!("{}", msg)], vec![format!("line: {}", line)]),
+            SettingFileError::InvalidPropValueLength(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name)]),
+            SettingFileError::InvalidSyntax(line, msg) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid syntax", vec![format!("{}", msg), format!("line:\t{}", line)], vec![]),
             SettingFileError::UnknownPropertyName(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown property name '{}'", prop_name), vec![], vec![]),
-            SettingFileError::UnknownRegexMode(input) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown regex mode", vec![], vec![format!("input: {}", input)]),
+            SettingFileError::UnknownRegexMode(input) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown regex mode '{}'", input), vec![], vec![]),
         }
     }
 }
