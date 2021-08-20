@@ -120,7 +120,10 @@ impl FCPEGFileMan {
         }
 
         self.is_loaded = true;
-        self.setting_file.print();
+
+        if cfg!(debug) {
+            self.setting_file.print();
+        }
 
         for (alias_name, alias_path) in self.setting_file.file_alias_map.clone() {
             match self.add_sub_file_alias(alias_name.to_string(), alias_path.to_string()) {
@@ -142,19 +145,21 @@ impl FCPEGFileMan {
         let tokens = BlockParser::get_tokens(&self.fcpeg_file_content)?;
         self.block_map = block_parser.parse(self.file_alias_name.to_string(), tokens)?;
 
-        println!();
-        println!("parsing: {}", self.fcpeg_file_path);
-        println!();
+        if cfg!(debug) {
+            println!();
+            println!("parsing: {}", self.fcpeg_file_path);
+            println!();
 
-        for (block_name, each_block) in &self.block_map {
-            println!("block {}", block_name);
+            for (block_name, each_block) in &self.block_map {
+                println!("block {}", block_name);
 
-            for cmd in &each_block.cmds {
-                println!("\t{}", cmd);
+                for cmd in &each_block.cmds {
+                    println!("\t{}", cmd);
+                }
             }
-        }
 
-        println!();
+            println!();
+        }
 
         for alias_item in self.sub_file_aliase_map.values_mut() {
             alias_item.parse_all()?;
@@ -393,7 +398,10 @@ impl BlockParser {
                 continue;
             }
 
-            println!("+ {} {}", *each_char as i32, *each_char);
+            if cfg!(debug) {
+                println!("+ {} {}", *each_char as i32, *each_char);
+            }
+
             return Err(BlockParseError::UnknownToken(line_i, each_char.to_string()));
         }
 
@@ -408,8 +416,10 @@ impl BlockParser {
             tokens.push(data::Token::new(line_i, token_kind, tmp_id_num.to_string()));
         }
 
-        for (token_i, each_token) in tokens.iter().enumerate() {
-            println!("[{};{}] {}\t\t{}", each_token.line, token_i, each_token.value, each_token.kind);
+        if cfg!(debug) {
+            for (token_i, each_token) in tokens.iter().enumerate() {
+                println!("[{};{}] {}\t\t{}", each_token.line, token_i, each_token.value, each_token.kind);
+            }
         }
 
         return Ok(tokens);
@@ -1318,7 +1328,10 @@ impl BlockParser {
                 }
 
                 if token_i != each_tokens.len() {
-                    println!("{} {}", token_i, each_tokens.len());
+                    if cfg!(debug) {
+                        println!("{} {}", token_i, each_tokens.len());
+                    }
+
                     let unexpected_token = each_tokens.get(token_i).unwrap();
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "'^', '{', etc".to_string()));
                 }
@@ -1329,13 +1342,15 @@ impl BlockParser {
                     return Err(BlockParseError::NoChoiceOrExpressionContent(line_num));
                 }
 
-                print!("-- {} ", lookahead_kind.to_symbol_string());
-                for tk in &content_tokens {
-                    print!("{},", tk.value);
+                if cfg!(debug) {
+                    print!("-- {} ", lookahead_kind.to_symbol_string());
+                    for tk in &content_tokens {
+                        print!("{},", tk.value);
+                    }
+                    print!(" {}", rule::RuleCountConverter::count_to_string(&loop_count, true, "{", ",", "}"));
+                    print!(" {}", if is_random_order { "^" } else { "" });
+                    println!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
                 }
-                print!(" {}", rule::RuleCountConverter::count_to_string(&loop_count, true, "{", ",", "}"));
-                print!(" {}", if is_random_order { "^" } else { "" });
-                println!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
 
                 if is_choice {
                     if has_choices && is_random_order != is_random_order_syntax {
@@ -1352,11 +1367,13 @@ impl BlockParser {
                     // 選択の括弧などを取り除いてから渡す
                     let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
 
-                    print!("*choice: ");
-                    for each_token in choice_tokens {
-                        print!("{},", each_token.value);
+                    if cfg!(debug) {
+                        print!("*choice: ");
+                        for each_token in choice_tokens {
+                            print!("{},", each_token.value);
+                        }
+                        println!();
                     }
-                    println!();
 
                     let sub_choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), choice_tokens)?;
 
@@ -1380,11 +1397,13 @@ impl BlockParser {
 
                     let expr_tokens = each_tokens[content_start_i..content_end_i].to_vec();
 
-                    print!("*expr: ");
-                    for each_token in &expr_tokens {
-                        print!("{},", each_token.value);
+                    if cfg!(debug) {
+                        print!("*expr: ");
+                        for each_token in &expr_tokens {
+                            print!("{},", each_token.value);
+                        }
+                        println!(" ({}:{}~{})", expr_tokens.get(0).unwrap().kind, content_start_i, content_end_i);
                     }
-                    println!(" ({}:{}~{})", expr_tokens.get(0).unwrap().kind, content_start_i, content_end_i);
 
                     let new_expr = BlockParser::get_expr(line_num, lookahead_kind, loop_count, expr_tokens)?;
                     choice.elem_containers.push(rule::RuleElementContainer::RuleExpression(new_expr));

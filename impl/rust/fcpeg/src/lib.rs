@@ -25,11 +25,11 @@ impl FCPEGError {
 pub struct FCPEG {}
 
 impl FCPEG {
-    pub fn parse_from_paths(fcpeg_file_path: String, input_file_paths: Vec<String>) -> std::result::Result<Vec<data::SyntaxTree>, FCPEGError> {
+    pub fn parse_from_paths(fcpeg_file_path: &String, input_file_paths: &Vec<String>) -> std::result::Result<Vec<data::SyntaxTree>, FCPEGError> {
         let mut input_srcs = Vec::<String>::new();
 
         for each_path in input_file_paths {
-            let new_src = match fileman::FileMan::read_all(&each_path) {
+            let new_src = match fileman::FileMan::read_all(each_path) {
                 Err(e) => return Err(FCPEGError::FCPEGFileManErr(blockparser::FCPEGFileManError::FileManError(e))),
                 Ok(v) => v,
             };
@@ -37,7 +37,7 @@ impl FCPEG {
             input_srcs.push(new_src);
         }
 
-        return FCPEG::parse_from_srcs(fcpeg_file_path, input_srcs);
+        return FCPEG::parse_from_srcs(fcpeg_file_path.to_string(), input_srcs);
     }
 
     pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> std::result::Result<Vec<data::SyntaxTree>, FCPEGError> {
@@ -59,8 +59,10 @@ impl FCPEG {
             Ok(v) => v,
         };
 
-        println!("--- rule map ---");
-        println!("{}", rule_map);
+        if cfg!(debug) {
+            println!("--- rule map ---");
+            println!("{}", rule_map);
+        }
 
         let mut parser = match parser::SyntaxParser::new(rule_map) {
             Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
@@ -85,9 +87,6 @@ impl FCPEG {
                 Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
                 Ok(v) => v,
             };
-
-            println!("--- syntax tree ---");
-            new_tree.print();
 
             trees.push(new_tree);
         }

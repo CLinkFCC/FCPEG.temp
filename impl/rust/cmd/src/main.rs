@@ -41,11 +41,13 @@ fn cmd_parse(_cmd_name: String, cmd_args: std::collections::HashMap::<String, Ve
 
     // monitor オプション
     let is_monitored = cmd_args.contains_key("-mon");
+    // time オプション
+    let count_duration = cmd_args.contains_key("-t");
 
     if is_monitored {
-        parse_with_monitoring(fcpeg_file_path, fcpeg_src_paths, cons, 1, None);
+        parse_with_monitoring(&fcpeg_file_path, &fcpeg_src_paths, cons, 1, None, count_duration);
     } else {
-        parse(fcpeg_file_path, fcpeg_src_paths, cons);
+        parse(&fcpeg_file_path, &fcpeg_src_paths, cons, count_duration);
     }
 }
 
@@ -59,17 +61,49 @@ fn show_parse_cmd_help(cons: &mut console::Console) {
     ], vec![]), false);
 }
 
-fn parse(fcpeg_file_path: String, fcpeg_src_paths: Vec<String>, cons: &mut console::Console) {
-    let _trees = match FCPEG::parse_from_paths(fcpeg_file_path.to_string(), fcpeg_src_paths) {
+fn show_syntax_trees(input_file_paths: &Vec<String>, trees: &Vec<data::SyntaxTree>) {
+    println!("--- Syntax Tree ---");
+    println!();
+
+    if input_file_paths.len() != trees.len() {
+        println!("* internal error *");
+        return;
+    }
+
+    for i in 0..input_file_paths.len() {
+        println!("{}", input_file_paths[i]);
+        trees[i].print();
+        println!();
+    }
+}
+
+fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut console::Console, count_duration: bool) {
+    let start_count = std::time::Instant::now();
+
+    let trees = match FCPEG::parse_from_paths(fcpeg_file_path, fcpeg_src_paths) {
         Err(e) => {
             cons.log(e.get_console_data(), false);
+            println!("--- End ---");
+            println!();
             return;
         },
         Ok(v) => v,
     };
+
+    let duration = start_count.elapsed();
+
+    show_syntax_trees(fcpeg_src_paths, &trees);
+
+    if count_duration {
+        println!("{} msec | {} μsec", duration.as_millis(), duration.as_micros());
+        println!();
+    }
+
+    println!("--- End ---");
+    println!();
 }
 
-fn parse_with_monitoring(fcpeg_file_path: String, fcpeg_src_paths: Vec<String>, cons: &mut console::Console, interval_sec: usize, quit_limit_sec: std::option::Option<usize>) {
+fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut console::Console, interval_sec: usize, quit_limit_sec: std::option::Option<usize>, count_duration: bool) {
     cons.log(console::ConsoleLogData::new(console::ConsoleLogKind::Notice, "command help", vec!["You can quit parsing with '^C'.".to_string()], vec![]), false);
 
     match quit_limit_sec {
@@ -82,6 +116,8 @@ fn parse_with_monitoring(fcpeg_file_path: String, fcpeg_src_paths: Vec<String>, 
     let mut detector = FileChangeDetector::new(detector_target_file_paths);
     let mut loop_count = 0;
 
+    parse(fcpeg_file_path, fcpeg_src_paths, cons, count_duration);
+
     loop {
         match quit_limit_sec {
             Some(v) => {
@@ -93,7 +129,7 @@ fn parse_with_monitoring(fcpeg_file_path: String, fcpeg_src_paths: Vec<String>, 
         }
 
         if detector.detect_multiple_file_changes() {
-            parse(fcpeg_file_path.to_string(), fcpeg_src_paths.clone(), cons);
+            parse(fcpeg_file_path, fcpeg_src_paths, cons, count_duration);
         }
 
         loop_count += 1;
