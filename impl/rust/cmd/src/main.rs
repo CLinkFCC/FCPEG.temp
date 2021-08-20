@@ -39,15 +39,17 @@ fn cmd_parse(_cmd_name: String, cmd_args: std::collections::HashMap::<String, Ve
         None => vec![],
     };
 
+    // output オプション
+    let output_tree = cmd_args.contains_key("-o");
     // monitor オプション
     let is_monitored = cmd_args.contains_key("-mon");
     // time オプション
     let count_duration = cmd_args.contains_key("-t");
 
     if is_monitored {
-        parse_with_monitoring(&fcpeg_file_path, &fcpeg_src_paths, cons, 1, None, count_duration);
+        parse_with_monitoring(&fcpeg_file_path, &fcpeg_src_paths, cons, 1, None, output_tree, count_duration);
     } else {
-        parse(&fcpeg_file_path, &fcpeg_src_paths, cons, count_duration);
+        parse(&fcpeg_file_path, &fcpeg_src_paths, cons, output_tree, count_duration);
     }
 }
 
@@ -77,7 +79,7 @@ fn show_syntax_trees(input_file_paths: &Vec<String>, trees: &Vec<data::SyntaxTre
     }
 }
 
-fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut console::Console, count_duration: bool) {
+fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut console::Console, output_tree: bool, count_duration: bool) {
     let start_count = std::time::Instant::now();
 
     let trees = match FCPEG::parse_from_paths(fcpeg_file_path, fcpeg_src_paths) {
@@ -92,7 +94,9 @@ fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut con
 
     let duration = start_count.elapsed();
 
-    show_syntax_trees(fcpeg_src_paths, &trees);
+    if output_tree {
+        show_syntax_trees(fcpeg_src_paths, &trees);
+    }
 
     if count_duration {
         println!("{} msec | {} μsec", duration.as_millis(), duration.as_micros());
@@ -103,7 +107,7 @@ fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut con
     println!();
 }
 
-fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut console::Console, interval_sec: usize, quit_limit_sec: std::option::Option<usize>, count_duration: bool) {
+fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut console::Console, interval_sec: usize, quit_limit_sec: std::option::Option<usize>, output_tree: bool, count_duration: bool) {
     cons.log(console::ConsoleLogData::new(console::ConsoleLogKind::Notice, "command help", vec!["You can quit parsing with '^C'.".to_string()], vec![]), false);
 
     match quit_limit_sec {
@@ -116,7 +120,7 @@ fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>
     let mut detector = FileChangeDetector::new(detector_target_file_paths);
     let mut loop_count = 0;
 
-    parse(fcpeg_file_path, fcpeg_src_paths, cons, count_duration);
+    parse(fcpeg_file_path, fcpeg_src_paths, cons, output_tree, count_duration);
 
     loop {
         match quit_limit_sec {
@@ -129,7 +133,7 @@ fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>
         }
 
         if detector.detect_multiple_file_changes() {
-            parse(fcpeg_file_path, fcpeg_src_paths, cons, count_duration);
+            parse(fcpeg_file_path, fcpeg_src_paths, cons, output_tree, count_duration);
         }
 
         loop_count += 1;
