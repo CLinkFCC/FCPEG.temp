@@ -1,14 +1,12 @@
 pub use fcpeg::*;
 pub use rustnutlib::*;
 
-type CommandMap = std::collections::HashMap<String, fn(String, std::collections::HashMap::<String, Vec<String>>, &mut console::Console)>;
-
 fn main() {
     run_command();
 }
 
 fn run_command() {
-    let mut cmd_proc_map = CommandMap::new();
+    let mut cmd_proc_map = cmd::CommandMap::new();
     cmd_proc_map.insert("parse".to_string(), cmd_parse);
     cmd::run_command("parse", cmd_proc_map);
 }
