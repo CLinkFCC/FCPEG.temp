@@ -1382,11 +1382,11 @@ impl BlockParser {
                 let sub_choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), choice_tokens)?;
 
                 match rule::RuleChoice::is_hierarchy_omission_needed(&sub_choices, is_random_order) {
-                    Some(v) => {
+                    Some(v) if loop_count == (1, 1) => {
                         new_choice.elem_containers = v.elem_containers;
                         new_choice.has_choices = v.has_choices;
                     },
-                    None => {
+                    _ => {
                         for each_choice in sub_choices {
                             new_choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(each_choice));
                         }
