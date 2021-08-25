@@ -7,6 +7,7 @@ pub enum SyntaxParseError {
     InternalErr(String),
     NoSucceededRule(String, usize),
     TooDeepRecursion(usize),
+    TooLongRepeat(usize),
     UnknownRuleID(String),
 }
 
@@ -17,6 +18,7 @@ impl SyntaxParseError {
             SyntaxParseError::InternalErr(err_msg) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("internal error: {}", err_msg), vec![], vec![]),
             SyntaxParseError::NoSucceededRule(rule_id, src_i) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), vec![], vec![]),
             SyntaxParseError::TooDeepRecursion(max_recur_count) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("too deep recursion over {}", max_recur_count), vec![], vec![]),
+            SyntaxParseError::TooLongRepeat(max_loop_count) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("too long repeat over {}", max_loop_count), vec![], vec![]),
             SyntaxParseError::UnknownRuleID(rule_id) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown rule id '{}'", rule_id), vec![], vec![]),
         }
     }
@@ -28,6 +30,7 @@ pub struct SyntaxParser {
     src_content: String,
     recursion_count: usize,
     max_recursion_count: usize,
+    max_loop_count: usize,
 }
 
 impl SyntaxParser {
@@ -38,6 +41,7 @@ impl SyntaxParser {
             src_content: "".to_string(),
             recursion_count: 1,
             max_recursion_count: 32,
+            max_loop_count: 32,
         });
     }
 
@@ -149,9 +153,13 @@ impl SyntaxParser {
         }
 
         let mut children = Vec::<data::SyntaxNodeElement>::new();
-        let mut loop_count = 0;
+        let mut loop_count = 0i32;
 
-        loop {
+        while self.src_i < self.src_content.len() {
+            if loop_count > self.max_loop_count as i32 {
+                return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
+            }
+
             match self.is_each_choice_matched(choice)? {
                 Some(node_elems) => {
                     for each_elem in node_elems {
@@ -172,6 +180,12 @@ impl SyntaxParser {
                     }
                 },
             }
+        }
+
+        if loop_count >= min_count && (max_count == -1 || loop_count <= max_count) {
+            return Ok(Some(children));
+        } else {
+            return Ok(None);
         }
     }
 
@@ -329,7 +343,11 @@ impl SyntaxParser {
         let mut children = Vec::<data::SyntaxNodeElement>::new();
         let mut loop_count = 0;
 
-        loop {
+        while self.src_i < self.src_content.len() {
+            if loop_count > self.max_loop_count as i32 {
+                return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
+            }
+
             match self.is_each_expr_matched(expr)? {
                 Some(node_elem) => {
                     children.push(node_elem);
@@ -347,6 +365,12 @@ impl SyntaxParser {
                     }
                 },
             }
+        }
+
+        if loop_count >= min_count && (max_count == -1 || loop_count <= max_count) {
+            return Ok(Some(children));
+        } else {
+            return Ok(None);
         }
     }
 
