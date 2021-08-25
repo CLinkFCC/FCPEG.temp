@@ -276,6 +276,7 @@ impl BlockParser {
                             '\\' => '\\',
                             'n' => '\n',
                             't' => '\t',
+                            '"' => '"',
                             _ => return Err(BlockParseError::UnexpectedToken(line_i, esc_char.to_string(), "'\\', 'n' and 't'".to_string())),
                         };
 
