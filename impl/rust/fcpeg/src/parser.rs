@@ -41,7 +41,7 @@ impl SyntaxParser {
             src_content: "".to_string(),
             recursion_count: 1,
             max_recursion_count: 32,
-            max_loop_count: 32,
+            max_loop_count: 65536,
         });
     }
 

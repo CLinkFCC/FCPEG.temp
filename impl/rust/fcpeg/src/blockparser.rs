@@ -121,7 +121,7 @@ impl FCPEGFileMan {
 
         self.is_loaded = true;
 
-        if !cfg!(release) {
+        if cfg!(debug) {
             self.setting_file.print();
         }
 
@@ -145,7 +145,7 @@ impl FCPEGFileMan {
         let tokens = BlockParser::get_tokens(&self.fcpeg_file_content)?;
         self.block_map = block_parser.parse(self.file_alias_name.to_string(), tokens)?;
 
-        if !cfg!(release) {
+        if cfg!(debug) {
             println!();
             println!("parsing: {}", self.fcpeg_file_path);
             println!();
@@ -399,7 +399,7 @@ impl BlockParser {
                 continue;
             }
 
-            if !cfg!(release) {
+            if cfg!(debug) {
                 println!("+ {} {}", *each_char as i32, *each_char);
             }
 
@@ -417,7 +417,7 @@ impl BlockParser {
             tokens.push(data::Token::new(line_i, token_kind, tmp_id_num.to_string()));
         }
 
-        if !cfg!(release) {
+        if cfg!(debug) {
             for (token_i, each_token) in tokens.iter().enumerate() {
                 println!("[{};{}] {}\t\t{}", each_token.line, token_i, each_token.value, each_token.kind);
             }
@@ -1333,7 +1333,7 @@ impl BlockParser {
             }
 
             if token_i != each_tokens.len() {
-                if !cfg!(release) {
+                if cfg!(debug) {
                     println!("{} {}", token_i, each_tokens.len());
                 }
 
@@ -1347,7 +1347,7 @@ impl BlockParser {
                 return Err(BlockParseError::NoChoiceOrExpressionContent(line_num));
             }
 
-            if !cfg!(release) {
+            if cfg!(debug) {
                 print!("-- {} ", lookahead_kind.to_symbol_string());
                 for tk in &content_tokens {
                     print!("{},", tk.value);
@@ -1372,7 +1372,7 @@ impl BlockParser {
                 // 選択の括弧などを取り除いてから渡す
                 let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
 
-                if !cfg!(release) {
+                if cfg!(debug) {
                     print!("*choice: ");
                     for each_token in choice_tokens {
                         print!("{},", each_token.value);
@@ -1402,7 +1402,7 @@ impl BlockParser {
 
                 let expr_tokens = each_tokens[content_start_i..content_end_i].to_vec();
 
-                if !cfg!(release) {
+                if cfg!(debug) {
                     print!("*expr: ");
                     for each_token in &expr_tokens {
                         print!("{},", each_token.value);
