@@ -40,7 +40,7 @@ impl SyntaxParser {
             src_i: 0,
             src_content: "".to_string(),
             recursion_count: 1,
-            max_recursion_count: 32,
+            max_recursion_count: 128,
             max_loop_count: 65536,
         });
     }
@@ -159,7 +159,10 @@ impl SyntaxParser {
             match self.is_each_choice_matched(choice)? {
                 Some(node_elems) => {
                     for each_elem in node_elems {
-                        children.push(each_elem);
+                        match each_elem {
+                            data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                            _ => children.push(each_elem),
+                        }
                     }
 
                     loop_count += 1;
@@ -207,7 +210,10 @@ impl SyntaxParser {
                                         match self.is_choice_successful(&Some(each_choice.occurrence_count), each_sub_choice)? {
                                             Some(v) => {
                                                 for each_result_sub_elem in v {
-                                                    new_sub_children.push(each_result_sub_elem);
+                                                    match each_result_sub_elem {
+                                                        data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                                                        _ => new_sub_children.push(each_result_sub_elem),
+                                                    }
                                                 }
 
                                                 matched_choices[sub_elem_i] = true;
@@ -229,7 +235,11 @@ impl SyntaxParser {
                         }
 
                         let new_child = data::SyntaxNodeElement::NodeList("".to_string(), new_sub_children);
-                        children.push(new_child);
+
+                        match new_child {
+                            data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                            _ => children.push(new_child),
+                        }
                     } else if each_choice.has_choices {
                         let mut is_successful = false;
 
@@ -240,7 +250,11 @@ impl SyntaxParser {
                                         Some(v) => {
                                             if choice.elem_containers.len() != 1 {
                                                 let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
-                                                children.push(new_child);
+
+                                                match new_child {
+                                                    data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                                                    _ => children.push(new_child),
+                                                }
                                             } else {
                                                 children = v;
                                             }
@@ -265,7 +279,11 @@ impl SyntaxParser {
                             Some(v) => {
                                 if choice.elem_containers.len() != 1 {
                                     let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
-                                    children.push(new_child);
+
+                                    match new_child {
+                                        data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                                        _ => children.push(new_child),
+                                    }
                                 } else {
                                     children = v;
                                 }
@@ -283,7 +301,10 @@ impl SyntaxParser {
                     match self.is_expr_successful(each_expr)? {
                         Some(node_elems) => {
                             for each_elem in node_elems {
-                                children.push(each_elem);
+                                match each_elem {
+                                    data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                                    _ => children.push(each_elem),
+                                }
                             }
 
                             continue;
@@ -345,7 +366,11 @@ impl SyntaxParser {
 
             match self.is_each_expr_matched(expr)? {
                 Some(node_elem) => {
-                    children.push(node_elem);
+                    match node_elem {
+                        data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                        _ => children.push(node_elem),
+                    }
+
                     loop_count += 1;
 
                     if max_count != -1 && loop_count == max_count {
