@@ -871,12 +871,12 @@ impl BlockParser {
         return Ok(cmd);
     }
 
-    fn get_choice_vec(line_num: usize, rule_name: String, tokens: &Vec<data::Token>) -> std::result::Result<Vec<rule::RuleChoice>, BlockParseError> {
+    fn get_choice_vec(line_num: usize, rule_name: String, tokens: &Vec<data::Token>) -> std::result::Result<Vec<Box<rule::RuleChoice>>, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::RuleHasNoChoice(rule_name.to_string()));
         }
 
-        let mut choices = Vec::<rule::RuleChoice>::new();
+        let mut choices = Vec::<Box<rule::RuleChoice>>::new();
         let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), false, (1, 1), false);
 
         let mut token_i = 0;
@@ -906,7 +906,7 @@ impl BlockParser {
                             let mut choice_tokens = tokens[choice_start_i..token_i].to_vec();
                             let mut new_choice = primitive_choice.clone();
                             BlockParser::get_choice(line_num, rule_name.to_string(), &mut new_choice, &mut choice_tokens)?;
-                            choices.push(new_choice);
+                            choices.push(Box::new(new_choice));
                             choice_start_i = token_i + 1;
                         }
                     },
@@ -924,7 +924,7 @@ impl BlockParser {
                             let mut choice_tokens = tokens[choice_start_i..token_i].to_vec();
                             let mut new_choice = primitive_choice.clone();
                             BlockParser::get_choice(line_num, rule_name.to_string(), &mut new_choice, &mut choice_tokens)?;
-                            choices.push(new_choice);
+                            choices.push(Box::new(new_choice));
                             choice_start_i = token_i + 1;
                         }
                     }
@@ -963,7 +963,7 @@ impl BlockParser {
         let mut choice_tokens = tokens[choice_start_i..tokens.len()].to_vec();
         let mut new_choice = primitive_choice;
         BlockParser::get_choice(line_num, rule_name.to_string(), &mut new_choice, &mut choice_tokens)?;
-        choices.push(new_choice);
+        choices.push(Box::new(new_choice));
         return Ok(choices);
     }
 
@@ -1394,7 +1394,7 @@ impl BlockParser {
                     }
                 }
 
-                choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(new_choice));
+                choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(Box::new(new_choice)));
             } else {
                 if is_random_order {
                     return Err(BlockParseError::UnexpectedToken(line_num, "^".to_string(), "nothing".to_string()));
@@ -1411,7 +1411,7 @@ impl BlockParser {
                 }
 
                 let new_expr = BlockParser::get_expr(line_num, lookahead_kind, loop_count, expr_tokens)?;
-                choice.elem_containers.push(rule::RuleElementContainer::RuleExpression(new_expr));
+                choice.elem_containers.push(rule::RuleElementContainer::RuleExpression(Box::new(new_expr)));
             }
         }
 

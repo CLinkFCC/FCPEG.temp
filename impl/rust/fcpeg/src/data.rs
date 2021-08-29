@@ -1,3 +1,4 @@
+use std::io::*;
 use crate::rule;
 
 #[derive(PartialOrd, PartialEq, Debug, Clone)]
@@ -47,18 +48,18 @@ pub enum SyntaxNodeElement {
 }
 
 impl SyntaxNodeElement {
-    pub fn print(&self, nest: usize) {
+    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
         match self {
             SyntaxNodeElement::NodeList(name, sub_elems) => {
                 let display_name = if name == "" { "*choice".to_string() } else { name.to_string() };
-                println!("|{} {}", "   |".repeat(nest), display_name);
+                writeln!(writer, "|{} {}", "   |".repeat(nest), display_name);
 
                 for each_elem in sub_elems {
-                    each_elem.print(nest + 1);
+                    each_elem.print(nest + 1, writer);
                 }
             },
             SyntaxNodeElement::Leaf(leaf) => {
-                println!("|{}- \"{}\"", "   |".repeat(nest), leaf.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t"));
+                writeln!(writer, "|{}- \"{}\"", "   |".repeat(nest), leaf.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t"));
             }
         }
     }
@@ -80,7 +81,7 @@ impl SyntaxTree {
 
     pub fn print(&self) {
         for each_elem in &self.children {
-            each_elem.print(0);
+            each_elem.print(0, &mut BufWriter::new(stdout().lock()));
         }
     }
 }

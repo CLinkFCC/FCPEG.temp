@@ -277,7 +277,7 @@ impl RuleCountConverter {
 #[derive(Clone)]
 pub struct Rule {
     pub name: String,
-    pub choices: Vec<RuleChoice>,
+    pub choices: Vec<Box<RuleChoice>>,
 }
 
 impl std::fmt::Display for Rule {
@@ -293,7 +293,7 @@ impl std::fmt::Display for Rule {
 }
 
 impl Rule {
-    pub fn new(name: String, choices: Vec<RuleChoice>) -> Self {
+    pub fn new(name: String, choices: Vec<Box<RuleChoice>>) -> Self {
         return Rule {
             name: name,
             choices: choices,
@@ -303,8 +303,8 @@ impl Rule {
 
 #[derive(Clone)]
 pub enum RuleElementContainer {
-    RuleChoice(RuleChoice),
-    RuleExpression(RuleExpression),
+    RuleChoice(Box<RuleChoice>),
+    RuleExpression(Box<RuleExpression>),
 }
 
 impl std::fmt::Display for RuleElementContainer {
@@ -372,7 +372,7 @@ impl RuleChoice {
         return false;
     }
 
-    pub fn is_hierarchy_omission_needed(choices: &Vec<RuleChoice>, is_random_order: bool) -> std::option::Option<RuleChoice> {
+    pub fn is_hierarchy_omission_needed(choices: &Vec<Box<RuleChoice>>, is_random_order: bool) -> std::option::Option<Box<RuleChoice>> {
         match choices.get(0) {
             Some(v) => {
                 if choices.len() == 1 && v.lookahead_kind == RuleLookaheadKind::None && v.loop_count == (1, 1) && v.occurrence_count == (1, 1) {
