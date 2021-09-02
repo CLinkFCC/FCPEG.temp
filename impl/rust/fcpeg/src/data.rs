@@ -52,14 +52,14 @@ impl SyntaxNodeElement {
         match self {
             SyntaxNodeElement::NodeList(name, sub_elems) => {
                 let display_name = if name == "" { "*choice".to_string() } else { name.to_string() };
-                writeln!(writer, "|{} {}", "   |".repeat(nest), display_name);
+                writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
 
                 for each_elem in sub_elems {
                     each_elem.print(nest + 1, writer);
                 }
             },
             SyntaxNodeElement::Leaf(leaf) => {
-                writeln!(writer, "|{}- \"{}\"", "   |".repeat(nest), leaf.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t"));
+                writeln!(writer, "|{}- \"{}\"", "   |".repeat(nest), leaf.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t")).unwrap();
             }
         }
     }
