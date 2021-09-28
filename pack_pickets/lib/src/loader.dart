@@ -2,8 +2,10 @@ import "packge:pack_pickets/src/pickets.dart";
 import "packge:pack_pickets/src/errs.dart";
 
 class SpecLoader{
-  PPPkgsEnv _env;
-  PPSpecLoader(this.env);
+  PicketsEnv _env;
+  SpecLoader(PicketsEnv env){
+    this._env = env;
+  }
   PicketOrErr load(String picketName){
     if(this._env.pickets.containsKey(picketName)){
       String picketSpecPath = [this._env.pickets[picketName],"pegspec.cfg"].join("/");

@@ -74,6 +74,7 @@ class PicketsEnv{
     }
     List<MapEntry<String, String>> picketEntryList = ppCfg.readAsStringSync().split("\n").where((String line)=> !line.startWith("#")).map((String line)=>line.split("\t").toList()).where((List<String> ls)=>ls.length==2).map((List<String> ls)=>MapEntry<String, String>(ls[0],ls[1])).toList();
     this._pickets.addEntries(picketEntryList);
+    return this;
   }
   String userHomeDir(){
     String os = Platform.operatingSystem;
@@ -89,5 +90,17 @@ class PicketsEnv{
     return home;
   }
   Map<String,String> get pickets => this._pickets;
+PicketsEnv writeBack(){
+  String base = this.userHomeDir();
+  String filePPCfg = ".PackPickets/packages.cfg";
+  String pathPPCfg = [base,filePPCfg].join("/");
+  File ppCfg = File(pathPPCfg);
+  if(!ppCfg.existsSync()){
+    ppCfg.createSync();
+  }
+  List<String> lines = this._pickets.entries.map((MapEntry<String, String> entry)=>[entry.key,entry.value].join("\t")).toList();
+  ppCfg.writeAsStringSync(lines.join("\n"));
+  return this;
+}
 
 }

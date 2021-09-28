@@ -23,3 +23,15 @@ class PicketSpecNotFoundErr extends PicketErr{
   @override
   String toString() => this._message;
 }
+class PicketExistsAlreadyErr extends PicketErr{
+  String _message;
+  PicketExistsAlreadyErr([String picketName]){
+    if(picketName == null){
+      this._message = "Picket already exists: Unknown";
+    }else{
+      this._message = "Picket already exists: $picketName";
+    }
+  }
+  @override
+  String toString() => this._message;
+}
