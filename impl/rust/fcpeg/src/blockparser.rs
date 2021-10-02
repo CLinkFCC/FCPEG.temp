@@ -877,7 +877,7 @@ impl BlockParser {
         }
 
         let mut choices = Vec::<Box<rule::RuleChoice>>::new();
-        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), Some(String::new()), false, (1, 1), false);
+        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), None, false, (1, 1), false);
 
         let mut token_i = 0;
         let mut choice_start_i = 0;
@@ -1031,6 +1031,7 @@ impl BlockParser {
     }
 
     // arg: tokens: 両端のスペースは削除される
+    // note: 実際には choice と expr 両方の解析をする?
     fn get_choice(line_num: usize, rule_name: String, choice: &mut rule::RuleChoice, tokens: &mut Vec<data::Token>) -> std::result::Result<(), BlockParseError> {
         // 最初にスペースがあれば削除
         match tokens.get(0) {
@@ -1151,212 +1152,217 @@ impl BlockParser {
             while token_i < each_tokens.len() {
                 match each_tokens.get(token_i) {
                     Some(v) => {
-                        match v.value.as_str() {
-                            "^" => {
-                                if paren_nest != 0 {
-                                    token_i += 1;
-                                    continue;
-                                }
-
-                                is_random_order = true;
-                                content_end_i -= 1;
-                                token_i += 1;
-
-                                match each_tokens.get(token_i) {
-                                    Some(v) => {
-                                        if v.kind != data::TokenKind::StringInBracket {
-                                            return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "string in bracket".to_string()));
-                                        }
-
-                                        let nums = v.value[1..v.value.len() - 1].split("-").collect::<Vec<&str>>();
-
-                                        match nums.len() {
-                                            1 => {
-                                                let arg = nums.get(0).unwrap();
-
-                                                if arg.len() != 0 {
-                                                    occurrence_count = match arg.parse::<i32>() {
-                                                        Err(_e) => return Err(BlockParseError::InvalidToken(line_num, v.value.to_string())),
-                                                        Ok(v) => (v, v),
-                                                    };
-                                                }
-                                            },
-                                            2 => {
-                                                let mut occurrence_min_count = 0i32;
-                                                let mut occurrence_max_count = -1i32;
-
-                                                let left_arg = nums.get(0).unwrap();
-                                                let right_arg = nums.get(1).unwrap();
-
-                                                if left_arg.len() != 0 {
-                                                    occurrence_min_count = match left_arg.parse::<i32>() {
-                                                        Err(_e) => return Err(BlockParseError::InvalidToken(line_num, v.value.to_string())),
-                                                        Ok(v) => v,
-                                                    };
-                                                }
-
-                                                if right_arg.len() != 0 {
-                                                    occurrence_max_count = match right_arg.parse::<i32>() {
-                                                        Err(_e) => return Err(BlockParseError::InvalidToken(line_num, v.value.to_string())),
-                                                        Ok(v) => v,
-                                                    };
-                                                }
-
-                                                occurrence_count = (occurrence_min_count, occurrence_max_count);
-                                            },
-                                            _ => return Err(BlockParseError::InvalidToken(line_num, v.value.to_string())),
-                                        }
-
-                                        content_end_i -= 1;
+                        if v.kind == data::TokenKind::Symbol {
+                            match v.value.as_str() {
+                                "^" => {
+                                    if paren_nest != 0 {
                                         token_i += 1;
-                                    }, 
-                                    None => break,
-                                }
-
-                                break;
-                            },
-                            "{" => {
-                                if paren_nest != 0 {
-                                    token_i += 1;
-                                    continue;
-                                }
-
-                                if loop_count != (1, 1) {
-                                    return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "nothing".to_string()));
-                                }
-
-                                content_end_i -= 1;
-                                token_i += 1;
-
-                                let next_token = match each_tokens.get(token_i + 1) {
-                                    Some(v) => v,
-                                    None => return Err(BlockParseError::ExpectedToken(line_num, "number".to_string())),
-                                };
-
-                                // 先のトークンが '}' であれば単体の数値が指定されたものとして扱う
-                                if next_token.kind == data::TokenKind::Symbol && next_token.value == "}" {
-                                    match each_tokens.get(token_i) {
-                                        Some(num_token) => {
-                                            if num_token.kind != data::TokenKind::Number {
-                                                return Err(BlockParseError::UnexpectedToken(line_num, num_token.value.to_string(), "number".to_string()));
-                                            }
-    
-                                            let conved_num = num_token.value.parse::<i32>().unwrap();
-                                            loop_count = (conved_num, conved_num);
-    
-                                            content_end_i -= 2;
-                                            token_i += 2;
-                                        },
-                                        None => return Err(BlockParseError::ExpectedToken(line_num, "number".to_string())),
+                                        continue;
                                     }
-                                } else {
-                                    let loop_min_count;
-                                    let loop_max_count;
+
+                                    is_random_order = true;
+                                    content_end_i -= 1;
+                                    token_i += 1;
 
                                     match each_tokens.get(token_i) {
                                         Some(v) => {
-                                            if v.kind == data::TokenKind::Number {
-                                                loop_min_count = v.value.parse::<i32>().unwrap();
-                                                content_end_i -= 1;
+                                            if v.kind != data::TokenKind::StringInBracket {
+                                                return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "string in bracket".to_string()));
+                                            }
+
+                                            let nums = v.value[1..v.value.len() - 1].split("-").collect::<Vec<&str>>();
+
+                                            match nums.len() {
+                                                1 => {
+                                                    let arg = nums.get(0).unwrap();
+
+                                                    if arg.len() != 0 {
+                                                        occurrence_count = match arg.parse::<i32>() {
+                                                            Err(_e) => return Err(BlockParseError::InvalidToken(line_num, v.value.to_string())),
+                                                            Ok(v) => (v, v),
+                                                        };
+                                                    }
+                                                },
+                                                2 => {
+                                                    let mut occurrence_min_count = 0i32;
+                                                    let mut occurrence_max_count = -1i32;
+
+                                                    let left_arg = nums.get(0).unwrap();
+                                                    let right_arg = nums.get(1).unwrap();
+
+                                                    if left_arg.len() != 0 {
+                                                        occurrence_min_count = match left_arg.parse::<i32>() {
+                                                            Err(_e) => return Err(BlockParseError::InvalidToken(line_num, v.value.to_string())),
+                                                            Ok(v) => v,
+                                                        };
+                                                    }
+
+                                                    if right_arg.len() != 0 {
+                                                        occurrence_max_count = match right_arg.parse::<i32>() {
+                                                            Err(_e) => return Err(BlockParseError::InvalidToken(line_num, v.value.to_string())),
+                                                            Ok(v) => v,
+                                                        };
+                                                    }
+
+                                                    occurrence_count = (occurrence_min_count, occurrence_max_count);
+                                                },
+                                                _ => return Err(BlockParseError::InvalidToken(line_num, v.value.to_string())),
+                                            }
+
+                                            content_end_i -= 1;
+                                            token_i += 1;
+                                        },
+                                        None => break,
+                                    }
+
+                                    continue;
+                                },
+                                "#" => {
+                                    if paren_nest != 0 {
+                                        token_i += 1;
+                                        continue;
+                                    }
+
+                                    println!("!####");
+                                    token_i += 1;
+                                    content_end_i -= 1;
+
+                                    // ID が続いていればノード名として保持
+                                    ast_reflect = match each_tokens.get(token_i) {
+                                        Some(v) => {
+                                            if v.kind == data::TokenKind::ID {
+                                                println!("!#### ID");
                                                 token_i += 1;
-                                            } else {
+                                            }
+
+                                            content_end_i -= 1;
+                                            Some(v.value.clone())
+                                        },
+                                        None => Some(String::new()),
+                                    }
+                                }
+                                "{" => {
+                                    if paren_nest != 0 {
+                                        token_i += 1;
+                                        continue;
+                                    }
+
+                                    if loop_count != (1, 1) {
+                                        return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "nothing".to_string()));
+                                    }
+
+                                    content_end_i -= 1;
+                                    token_i += 1;
+
+                                    let next_token = match each_tokens.get(token_i + 1) {
+                                        Some(v) => v,
+                                        None => return Err(BlockParseError::ExpectedToken(line_num, "number".to_string())),
+                                    };
+
+                                    // 先のトークンが '}' であれば単体の数値が指定されたものとして扱う
+                                    if next_token.kind == data::TokenKind::Symbol && next_token.value == "}" {
+                                        match each_tokens.get(token_i) {
+                                            Some(num_token) => {
+                                                if num_token.kind != data::TokenKind::Number {
+                                                    return Err(BlockParseError::UnexpectedToken(line_num, num_token.value.to_string(), "number".to_string()));
+                                                }
+        
+                                                let conved_num = num_token.value.parse::<i32>().unwrap();
+                                                loop_count = (conved_num, conved_num);
+        
+                                                content_end_i -= 2;
+                                                token_i += 2;
+                                            },
+                                            None => return Err(BlockParseError::ExpectedToken(line_num, "number".to_string())),
+                                        }
+                                    } else {
+                                        let loop_min_count;
+                                        let loop_max_count;
+
+                                        match each_tokens.get(token_i) {
+                                            Some(v) => {
+                                                if v.kind == data::TokenKind::Number {
+                                                    loop_min_count = v.value.parse::<i32>().unwrap();
+                                                    content_end_i -= 1;
+                                                    token_i += 1;
+                                                } else {
+                                                    if v.kind != data::TokenKind::Symbol || v.value != "," {
+                                                        return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "','".to_string()));
+                                                    }
+
+                                                    loop_min_count = 0;
+                                                }
+                                            },
+                                            None => return Err(BlockParseError::ExpectedToken(line_num, "number".to_string())),
+                                        }
+
+                                        match each_tokens.get(token_i) {
+                                            Some(v) => {
                                                 if v.kind != data::TokenKind::Symbol || v.value != "," {
                                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "','".to_string()));
                                                 }
 
-                                                loop_min_count = 0;
-                                            }
-                                        },
-                                        None => return Err(BlockParseError::ExpectedToken(line_num, "number".to_string())),
-                                    }
-
-                                    match each_tokens.get(token_i) {
-                                        Some(v) => {
-                                            if v.kind != data::TokenKind::Symbol || v.value != "," {
-                                                return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "','".to_string()));
-                                            }
-
-                                            content_end_i -= 1;
-                                        },
-                                        None => return Err(BlockParseError::ExpectedToken(line_num, "','".to_string())),
-                                    }
-
-                                    token_i += 1;
-
-                                    match each_tokens.get(token_i) {
-                                        Some(v) => {
-                                            if v.kind == data::TokenKind::Number {
-                                                loop_max_count = v.value.parse::<i32>().unwrap();
                                                 content_end_i -= 1;
-                                                token_i += 1;
-                                            } else {
+                                            },
+                                            None => return Err(BlockParseError::ExpectedToken(line_num, "','".to_string())),
+                                        }
+
+                                        token_i += 1;
+
+                                        match each_tokens.get(token_i) {
+                                            Some(v) => {
+                                                if v.kind == data::TokenKind::Number {
+                                                    loop_max_count = v.value.parse::<i32>().unwrap();
+                                                    content_end_i -= 1;
+                                                    token_i += 1;
+                                                } else {
+                                                    if v.kind != data::TokenKind::Symbol || v.value != "}" {
+                                                        return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'}'".to_string()));
+                                                    }
+
+                                                    loop_max_count = -1;
+                                                }
+                                            },
+                                            None => return Err(BlockParseError::ExpectedToken(line_num, "number".to_string())),
+                                        }
+
+                                        match each_tokens.get(token_i) {
+                                            Some(v) => {
                                                 if v.kind != data::TokenKind::Symbol || v.value != "}" {
                                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'}'".to_string()));
                                                 }
 
-                                                loop_max_count = -1;
-                                            }
-                                        },
-                                        None => return Err(BlockParseError::ExpectedToken(line_num, "number".to_string())),
+                                                content_end_i -= 1;
+                                            },
+                                            None => return Err(BlockParseError::ExpectedToken(line_num, "'}'".to_string())),
+                                        }
+
+                                        loop_count = (loop_min_count, loop_max_count);
+                                        token_i += 1;
                                     }
 
-                                    match each_tokens.get(token_i) {
-                                        Some(v) => {
-                                            if v.kind != data::TokenKind::Symbol || v.value != "}" {
-                                                return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'}'".to_string()));
-                                            }
-
-                                            content_end_i -= 1;
-                                        },
-                                        None => return Err(BlockParseError::ExpectedToken(line_num, "'}'".to_string())),
-                                    }
-
-                                    loop_count = (loop_min_count, loop_max_count);
+                                    break;
+                                },
+                                "(" => {
+                                    paren_nest += 1;
+                                    token_i += 1;
+                                },
+                                ")" => {
+                                    paren_nest -= 1;
+                                    token_i += 1;
+                                },
+                                _ => {
                                     token_i += 1;
                                 }
-
-                                break;
-                            },
-                            "(" => {
-                                paren_nest += 1;
-                                token_i += 1;
-                            },
-                            ")" => {
-                                paren_nest -= 1;
-                                token_i += 1;
-                            },
-                            _ => {
-                                token_i += 1;
                             }
+
+                            continue;
                         }
+
+                        token_i += 1;
                     },
                     None => (),
                 }
-            }
-            println!("{} {}", token_i, tokens.len());
-
-            match each_tokens.get(token_i) {
-                Some(v) => {
-                    if v.kind == data::TokenKind::Symbol && v.value == "#" {
-                        println!("!####");
-                        token_i += 1;
-                        content_end_i -= 1;
-
-                        ast_reflect = match each_tokens.get(token_i) {
-                            Some(v) => {
-                                if v.kind == data::TokenKind::ID {
-                                    println!("!#### ID");
-                                    token_i += v.value.len();
-                                }
-
-                                content_end_i -= v.value.len();
-                                Some(v.value.clone())
-                            },
-                            None => Some(String::new()),
-                        }
-                    }
-                },
-                None => (),
             }
 
             println!("{} {}", token_i, tokens.len());
@@ -1442,7 +1448,7 @@ impl BlockParser {
                     println!(" ({}:{}~{})", expr_tokens.get(0).unwrap().kind, content_start_i, content_end_i);
                 }
 
-                let new_expr = BlockParser::get_expr(line_num, lookahead_kind, loop_count, expr_tokens)?;
+                let new_expr = BlockParser::get_expr(line_num, lookahead_kind, loop_count, ast_reflect, expr_tokens)?;
                 choice.elem_containers.push(rule::RuleElementContainer::RuleExpression(Box::new(new_expr)));
             }
         }
@@ -1450,7 +1456,7 @@ impl BlockParser {
         return Ok(());
     }
 
-    fn get_expr(line_num: usize, lookahead_kind: rule::RuleLookaheadKind, loop_count: (i32, i32), tokens: Vec<data::Token>) -> std::result::Result<rule::RuleExpression, BlockParseError> {
+    fn get_expr(line_num: usize, lookahead_kind: rule::RuleLookaheadKind, loop_count: (i32, i32), ast_reflect: Option<String>, tokens: Vec<data::Token>) -> std::result::Result<rule::RuleExpression, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::ExpectedToken(line_num, "id".to_string()));
         }
@@ -1459,27 +1465,13 @@ impl BlockParser {
 
         let new_expr = match first_token.kind {
             data::TokenKind::ID => {
-                let mut ast_reflect = None;
                 let mut id = first_token.value.to_string();
                 let mut token_i = 1;
 
                 while token_i < tokens.len() {
                     match tokens.get(token_i) {
                         Some(v) => {
-                            /*if v.kind == data::TokenKind::Symbol && v.value == "#" {
-                                token_i += 1;
-
-                                ast_reflect = match tokens.get(token_i) {
-                                    Some(v) => {
-                                        if v.kind == data::TokenKind::ID {
-                                            Some(v.value.to_string())
-                                        } else {
-                                            Some("".to_string())
-                                        }
-                                    },
-                                    None => None,
-                                };
-                            } else */if v.kind == data::TokenKind::Symbol && v.value == "." {
+                            if v.kind == data::TokenKind::Symbol && v.value == "." {
                                 match tokens.get(token_i + 1) {
                                     Some(v) => {
                                         if v.kind == data::TokenKind::ID {
@@ -1492,13 +1484,14 @@ impl BlockParser {
                                     None => return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "id".to_string())),
                                 }
                             } else {
-                                return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'.' and '#'".to_string()));
+                                return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'.'".to_string()));
                             }
                         },
                         None => break,
                     }
                 }
 
+                println!("ast {} {}", token_i, tokens.len());
                 rule::RuleExpression::new(line_num, rule::RuleExpressionKind::ID, lookahead_kind, loop_count, ast_reflect, id)
             },
             data::TokenKind::String => {
@@ -1508,7 +1501,7 @@ impl BlockParser {
                 }
 
                 let value = first_token.value[1..first_token.value.len() - 1].to_string();
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, Some(String::new()), value)
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, ast_reflect, value)
             },
             data::TokenKind::StringInBracket => {
                 if tokens.len() >= 2 {
@@ -1516,7 +1509,7 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::CharClass, lookahead_kind, loop_count, Some(String::new()), first_token.value.to_string())
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::CharClass, lookahead_kind, loop_count, ast_reflect, first_token.value.to_string())
             },
             data::TokenKind::Symbol => {
                 if tokens.len() >= 2 {
@@ -1528,12 +1521,33 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "'.'".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::Wildcard, lookahead_kind, loop_count, Some(String::new()), ".".to_string())
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::Wildcard, lookahead_kind, loop_count, ast_reflect, ".".to_string())
             },
             _ => return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "expression".to_string())),
         };
 
-        panic!();
+        // let ast_reflect = match tokens.get(0) {
+        //     Some(v) => {
+        //         if v.kind == data::TokenKind::Symbol && v.value == "#" {
+        //             token_i += 1;
+
+        //             match tokens.get(0) {
+        //                 Some(v) => {
+        //                     if v.kind == data::TokenKind::ID {
+        //                         Some(v.value.to_string())
+        //                     } else {
+        //                         Some("".to_string())
+        //                     }
+        //                 },
+        //                 None => None,
+        //             };
+        //         } else {
+        //             None
+        //         }
+        //     },
+        //     None => None,
+        // };
+
         println!("memo");
         return Ok(new_expr);
     }

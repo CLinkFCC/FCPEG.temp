@@ -346,7 +346,8 @@ impl std::fmt::Display for RuleChoice {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
         let random_order_symbol = if self.is_random_order { "^" } else { "" };
         let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
-        return write!(f, "{}", format!("{}({}){}{}{}", self.lookahead_kind.to_symbol_string(), seq_text.join(separator), loop_text, random_order_symbol, random_order_count));
+        let ast_reflect_text = match &self.ast_reflect { Some(v) => format!("#{}", v.to_string()), None => String::new() };
+        return write!(f, "{}", format!("{}({}){}{}{}{}", self.lookahead_kind.to_symbol_string(), seq_text.join(separator), loop_text, random_order_symbol, random_order_count, ast_reflect_text));
     }
 }
 
@@ -436,12 +437,7 @@ pub struct RuleExpression {
 impl std::fmt::Display for RuleExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
-
-        let ast_reflect_text = match &self.ast_reflect {
-            Some(v) => format!("#{}", v.to_string()),
-            None => String::new(),
-        };
-
+        let ast_reflect_text = match &self.ast_reflect { Some(v) => format!("#{}", v.to_string()), None => String::new() };
         return write!(f, "{}{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text, ast_reflect_text);
     }
 }

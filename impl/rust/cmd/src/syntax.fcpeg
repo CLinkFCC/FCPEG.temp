@@ -6,6 +6,6 @@
 [Syntax]{
     + use Symbol,
     % A <- ("a" : ("b" : "c"))*,
-    A <- (B B)#,
-    B <- " ",
+    A <- (B B#aa)#l,
+    B <- (" ")*#aa,
 }
