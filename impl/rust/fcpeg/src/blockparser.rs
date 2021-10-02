@@ -121,7 +121,7 @@ impl FCPEGFileMan {
 
         self.is_loaded = true;
 
-        if cfg!(debug) {
+        if !cfg!(debug) {
             self.setting_file.print();
         }
 
@@ -145,7 +145,7 @@ impl FCPEGFileMan {
         let tokens = BlockParser::get_tokens(&self.fcpeg_file_content)?;
         self.block_map = block_parser.parse(self.file_alias_name.to_string(), tokens)?;
 
-        if cfg!(debug) {
+        if !cfg!(debug) {
             println!();
             println!("parsing: {}", self.fcpeg_file_path);
             println!();
@@ -190,7 +190,7 @@ impl BlockParser {
         let id_num_regex = regex::Regex::new(r"[a-zA-Z0-9_]").unwrap();
         let mut tmp_id_num = "".to_string();
 
-        let symbol_regex = regex::Regex::new(r"[&!?\-+*.,:^(){}<>]").unwrap();
+        let symbol_regex = regex::Regex::new(r"[#&!?\-+*.,:^(){}<>]").unwrap();
 
         let mut line_i: usize = 0;
 
@@ -201,7 +201,7 @@ impl BlockParser {
             let each_char = chars.get(char_i).unwrap();
             let each_char_str = each_char.to_string();
 
-            // ID 判定
+            // ID, 数値判定
             if id_num_regex.is_match(&each_char_str) {
                 tmp_id_num.push(*each_char);
                 char_i += 1;
@@ -399,7 +399,7 @@ impl BlockParser {
                 continue;
             }
 
-            if cfg!(debug) {
+            if !cfg!(debug) {
                 println!("+ {} {}", *each_char as i32, *each_char);
             }
 
@@ -417,7 +417,7 @@ impl BlockParser {
             tokens.push(data::Token::new(line_i, token_kind, tmp_id_num.to_string()));
         }
 
-        if cfg!(debug) {
+        if !cfg!(debug) {
             for (token_i, each_token) in tokens.iter().enumerate() {
                 println!("[{};{}] {}\t\t{}", each_token.line, token_i, each_token.value, each_token.kind);
             }
@@ -877,7 +877,7 @@ impl BlockParser {
         }
 
         let mut choices = Vec::<Box<rule::RuleChoice>>::new();
-        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), false, (1, 1), false);
+        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), Some(String::new()), false, (1, 1), false);
 
         let mut token_i = 0;
         let mut choice_start_i = 0;
@@ -927,7 +927,7 @@ impl BlockParser {
                             choices.push(Box::new(new_choice));
                             choice_start_i = token_i + 1;
                         }
-                    }
+                    },
                     "(" => {
                         paren_nest += 1;
                     },
@@ -1095,6 +1095,8 @@ impl BlockParser {
             let mut has_choices = false;
             let mut is_random_order_syntax = false;
             let mut paren_nest = 0;
+
+            let mut ast_reflect = Option::<String>::None;
 
             let mut tmp_token_i = token_i;
 
@@ -1331,9 +1333,37 @@ impl BlockParser {
                     None => (),
                 }
             }
+            println!("{} {}", token_i, tokens.len());
+
+            match each_tokens.get(token_i) {
+                Some(v) => {
+                    if v.kind == data::TokenKind::Symbol && v.value == "#" {
+                        println!("!####");
+                        token_i += 1;
+                        content_end_i -= 1;
+
+                        ast_reflect = match each_tokens.get(token_i) {
+                            Some(v) => {
+                                if v.kind == data::TokenKind::ID {
+                                    println!("!#### ID");
+                                    token_i += v.value.len();
+                                }
+
+                                content_end_i -= v.value.len();
+                                Some(v.value.clone())
+                            },
+                            None => Some(String::new()),
+                        }
+                    }
+                },
+                None => (),
+            }
+
+            println!("{} {}", token_i, tokens.len());
+            println!("isnone: {}", ast_reflect.is_none());
 
             if token_i != each_tokens.len() {
-                if cfg!(debug) {
+                if !cfg!(debug) {
                     println!("{} {}", token_i, each_tokens.len());
                 }
 
@@ -1347,14 +1377,16 @@ impl BlockParser {
                 return Err(BlockParseError::NoChoiceOrExpressionContent(line_num));
             }
 
-            if cfg!(debug) {
+            if !cfg!(debug) {
                 print!("-- {} ", lookahead_kind.to_symbol_string());
                 for tk in &content_tokens {
                     print!("{},", tk.value);
                 }
                 print!(" {}", rule::RuleCountConverter::count_to_string(&loop_count, true, "{", ",", "}"));
                 print!(" {}", if is_random_order { "^" } else { "" });
-                println!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
+                print!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
+                print!(" {}", match &ast_reflect { Some(v) => format!("#{}", v), None => String::new() });
+                println!();
             }
 
             if is_choice {
@@ -1368,11 +1400,11 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.to_string(), expected_token.to_string()));
                 }
 
-                let mut new_choice = rule::RuleChoice::new(lookahead_kind, loop_count, is_random_order, occurrence_count, has_choices);
+                let mut new_choice = rule::RuleChoice::new(lookahead_kind, loop_count, ast_reflect.clone(), is_random_order, occurrence_count, has_choices);
                 // 選択の括弧などを取り除いてから渡す
                 let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
 
-                if cfg!(debug) {
+                if !cfg!(debug) {
                     print!("*choice: ");
                     for each_token in choice_tokens {
                         print!("{},", each_token.value);
@@ -1402,7 +1434,7 @@ impl BlockParser {
 
                 let expr_tokens = each_tokens[content_start_i..content_end_i].to_vec();
 
-                if cfg!(debug) {
+                if !cfg!(debug) {
                     print!("*expr: ");
                     for each_token in &expr_tokens {
                         print!("{},", each_token.value);
@@ -1427,13 +1459,27 @@ impl BlockParser {
 
         let new_expr = match first_token.kind {
             data::TokenKind::ID => {
+                let mut ast_reflect = None;
                 let mut id = first_token.value.to_string();
                 let mut token_i = 1;
 
                 while token_i < tokens.len() {
                     match tokens.get(token_i) {
                         Some(v) => {
-                            if v.kind == data::TokenKind::Symbol && v.value == "." {
+                            /*if v.kind == data::TokenKind::Symbol && v.value == "#" {
+                                token_i += 1;
+
+                                ast_reflect = match tokens.get(token_i) {
+                                    Some(v) => {
+                                        if v.kind == data::TokenKind::ID {
+                                            Some(v.value.to_string())
+                                        } else {
+                                            Some("".to_string())
+                                        }
+                                    },
+                                    None => None,
+                                };
+                            } else */if v.kind == data::TokenKind::Symbol && v.value == "." {
                                 match tokens.get(token_i + 1) {
                                     Some(v) => {
                                         if v.kind == data::TokenKind::ID {
@@ -1446,14 +1492,14 @@ impl BlockParser {
                                     None => return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "id".to_string())),
                                 }
                             } else {
-                                return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'.'".to_string()));
+                                return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'.' and '#'".to_string()));
                             }
                         },
                         None => break,
                     }
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::ID, lookahead_kind, loop_count, id)
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::ID, lookahead_kind, loop_count, ast_reflect, id)
             },
             data::TokenKind::String => {
                 if tokens.len() >= 2 {
@@ -1462,7 +1508,7 @@ impl BlockParser {
                 }
 
                 let value = first_token.value[1..first_token.value.len() - 1].to_string();
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, value)
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, Some(String::new()), value)
             },
             data::TokenKind::StringInBracket => {
                 if tokens.len() >= 2 {
@@ -1470,7 +1516,7 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::CharClass, lookahead_kind, loop_count, first_token.value.to_string())
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::CharClass, lookahead_kind, loop_count, Some(String::new()), first_token.value.to_string())
             },
             data::TokenKind::Symbol => {
                 if tokens.len() >= 2 {
@@ -1482,11 +1528,13 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "'.'".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::Wildcard, lookahead_kind, loop_count, ".".to_string())
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::Wildcard, lookahead_kind, loop_count, Some(String::new()), ".".to_string())
             },
             _ => return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "expression".to_string())),
         };
 
+        panic!();
+        println!("memo");
         return Ok(new_expr);
     }
 }

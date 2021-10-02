@@ -9,9 +9,10 @@ pub enum SettingFileError {
     Unknown(),
     DuplicatedPropName(String),
     FileManError(fileman::FileManError),
+    InvalidPropValue(String, String),
     InvalidPropValueLength(String),
     InvalidSyntax(usize, String),
-    UnknownPropertyName(String),
+    UnknownPropName(String),
     UnknownRegexMode(String),
 }
 
@@ -27,9 +28,10 @@ impl SettingFileError {
             SettingFileError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown", vec![], vec![]),
             SettingFileError::DuplicatedPropName(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "duplicated property name", vec![], vec![format!("property name:\t{}", prop_name)]),
             SettingFileError::FileManError(err) => err.get_log_data(),
+            SettingFileError::InvalidPropValue(prop_name, prop_value) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)]),
             SettingFileError::InvalidPropValueLength(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name)]),
             SettingFileError::InvalidSyntax(line, msg) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid syntax", vec![format!("{}", msg), format!("line:\t{}", line)], vec![]),
-            SettingFileError::UnknownPropertyName(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown property name '{}'", prop_name), vec![], vec![]),
+            SettingFileError::UnknownPropName(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown property name '{}'", prop_name), vec![], vec![]),
             SettingFileError::UnknownRegexMode(input) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown regex mode '{}'", input), vec![], vec![]),
         }
     }
@@ -65,6 +67,7 @@ impl RegexMode {
 pub struct SettingFile {
     pub file_alias_map: std::collections::HashMap<String, String>,
     pub regex_mode: RegexMode,
+    pub reverse_ast_reflect: bool,
 }
 
 impl SettingFile {
@@ -72,6 +75,7 @@ impl SettingFile {
         return SettingFile {
             file_alias_map: std::collections::HashMap::new(),
             regex_mode: RegexMode::Default,
+            reverse_ast_reflect: false,
         }
     }
 
@@ -110,7 +114,21 @@ impl SettingFile {
                         self.file_alias_map.insert(alias_name.clone(), alias_path.clone());
                     }
                 },
-                _ => return Err(SettingFileError::UnknownPropertyName(prop_name.to_string())),
+                "ASTReflect" => {
+                    // AST へのノード反映
+
+                    let ast_reflect = match prop_values.get(0) {
+                        Some(v) => v,
+                        None => return Err(SettingFileError::InvalidPropValueLength(prop_name.to_string())),
+                    };
+
+                    self.reverse_ast_reflect = match ast_reflect.to_lowercase().as_str() {
+                        "normal" => false,
+                        "reversed" => true,
+                        _ => return Err(SettingFileError::InvalidPropValue(prop_name.to_string(), ast_reflect.to_string())),
+                    };
+                },
+                _ => return Err(SettingFileError::UnknownPropName(prop_name.to_string())),
             }
         }
 

@@ -1,0 +1,11 @@
+[Main]{
+    + use Syntax,
+    + start Syntax.A,
+}
+
+[Syntax]{
+    + use Symbol,
+    % A <- ("a" : ("b" : "c"))*,
+    A <- (B B)#,
+    B <- " ",
+}

@@ -59,7 +59,7 @@ impl FCPEG {
             Ok(v) => v,
         };
 
-        if cfg!(debug) {
+        if !cfg!(debug) {
             println!("--- rule map ---");
             println!("{}", rule_map);
         }
