@@ -1228,15 +1228,12 @@ impl BlockParser {
 
                                     // ID が続いていればノード名として保持
                                     ast_reflect = match each_tokens.get(token_i) {
-                                        Some(v) => {
-                                            if v.kind == data::TokenKind::ID {
-                                                token_i += 1;
-                                            }
-
+                                        Some(v) if v.kind == data::TokenKind::ID => {
+                                            token_i += 1;
                                             content_end_i -= 1;
                                             Some(v.value.clone())
                                         },
-                                        None => Some(String::new()),
+                                        _ => Some(String::new()),
                                     }
                                 }
                                 "{" => {

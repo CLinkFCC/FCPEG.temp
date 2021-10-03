@@ -48,12 +48,12 @@ pub enum SyntaxNodeElement {
 }
 
 impl SyntaxNodeElement {
-    pub fn from_node_list_args(name: String, subnodes: Vec<SyntaxNodeElement>) -> SyntaxNodeElement {
-        return SyntaxNodeElement::NodeList(SyntaxNodeList::new(name, subnodes));
+    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflect: Option<String>) -> SyntaxNodeElement {
+        return SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflect));
     }
 
-    pub fn from_leaf_args(value: String) -> SyntaxNodeElement {
-        return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value));
+    pub fn from_leaf_args(value: String, ast_reflect: Option<String>) -> SyntaxNodeElement {
+        return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflect));
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
@@ -70,9 +70,9 @@ pub struct SyntaxTree {
 }
 
 impl SyntaxTree {
-    pub fn from_node_list_args(name: String, subnodes: Vec<SyntaxNodeElement>) -> Self {
+    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflect: Option<String>) -> Self {
         return SyntaxTree {
-            child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(name, subnodes)),
+            child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflect)),
         };
     }
 
@@ -83,35 +83,35 @@ impl SyntaxTree {
 
 #[derive(Clone)]
 pub struct SyntaxNodeList {
-    name: String,
     subnodes: Vec<SyntaxNodeElement>,
+    ast_reflect: Option<String>,
 }
 
 impl SyntaxNodeList {
-    pub fn new(name: String, subnodes: Vec<SyntaxNodeElement>) -> Self {
+    pub fn new(subnodes: Vec<SyntaxNodeElement>, ast_reflect: Option<String>) -> Self {
         return SyntaxNodeList {
-            name: name,
             subnodes: subnodes,
+            ast_reflect: ast_reflect,
         };
     }
 
-    pub fn get_subnodes(&mut self) -> &mut Vec<SyntaxNodeElement> {
-        return &mut self.subnodes;
+    pub fn get_ast_reflect(&self) -> Option<String> {
+        return self.ast_reflect.clone();
+    }
+
+    pub fn clone_subnodes(&self) -> Vec<SyntaxNodeElement> {
+        return self.subnodes.clone();
     }
 
     pub fn get_subnode_len(&self) -> usize {
         return self.subnodes.len();
     }
 
-    pub fn get_name(&self) -> String {
-        return self.name.clone();
-    }
-
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
-        let display_name = if self.name == "" {
-            "*choice".to_string()
-        } else {
-            self.name.clone()
+        println!("{}", self.ast_reflect.is_none());
+        let display_name = match self.ast_reflect.clone() {
+            Some(v) => v.clone(),
+            None => "[hidden]".to_string(),
         };
 
         writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
@@ -125,12 +125,14 @@ impl SyntaxNodeList {
 #[derive(Clone)]
 pub struct SyntaxLeaf {
     value: String,
+    ast_reflect: Option<String>,
 }
 
 impl SyntaxLeaf {
-    pub fn new(value: String) -> Self {
+    pub fn new(value: String, ast_reflect: Option<String>) -> Self {
         return SyntaxLeaf {
             value: value,
+            ast_reflect: ast_reflect,
         };
     }
 
@@ -139,7 +141,17 @@ impl SyntaxLeaf {
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
-        writeln!(writer, "|{}- \"{}\"", "   |".repeat(nest), self.value.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t")).unwrap();
+        let value = self.value
+            .replace("\\", "\\\\")
+            .replace("\n", "\\n")
+            .replace("\t", "\\t");
+
+        let ast_reflect_text = match self.ast_reflect.clone() {
+            Some(v) => format!("({})", v.clone()),
+            None => "[hidden]".to_string(),
+        };
+
+        writeln!(writer, "|{}- \"{}\" {}", "   |".repeat(nest), value, ast_reflect_text).unwrap();
     }
 }
 

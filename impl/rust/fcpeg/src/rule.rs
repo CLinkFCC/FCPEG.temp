@@ -137,7 +137,7 @@ impl RuleMap {
                         each_rule.name = format!("{}.{}.{}", fcpeg_file_man.file_alias_name, each_block.name, each_rule.name);
 
                         for each_choice in each_rule.choices.iter_mut() {
-                            self.proc_define_cmd(each_choice, &each_block.name, fcpeg_file_man, &block_alias_map)?;
+                            self.proc_define_cmd(each_choice, &each_rule.name, &each_block.name, fcpeg_file_man, &block_alias_map)?;
                         }
 
                         self.add_rule(fcpeg_file_man.file_alias_name.to_string(), each_block.name.to_string(), rule.name.to_string(), each_rule);
@@ -154,11 +154,11 @@ impl RuleMap {
         return Ok(());
     }
 
-    pub fn proc_define_cmd(&mut self, choice: &mut RuleChoice, block_name: &String, fcpeg_file_man: &blockparser::FCPEGFileMan, block_alias_map: &std::collections::HashMap<String, String>) -> std::result::Result<(), blockparser::BlockParseError> {
+    pub fn proc_define_cmd(&mut self, choice: &mut RuleChoice, rule_id: &String, block_name: &String, fcpeg_file_man: &blockparser::FCPEGFileMan, block_alias_map: &std::collections::HashMap<String, String>) -> std::result::Result<(), blockparser::BlockParseError> {
         for each_elem in choice.elem_containers.iter_mut() {
             match each_elem {
                 RuleElementContainer::RuleChoice(each_choice) => {
-                    self.proc_define_cmd(each_choice, block_name, fcpeg_file_man, block_alias_map)?;
+                    self.proc_define_cmd(each_choice, rule_id, block_name, fcpeg_file_man, block_alias_map)?;
                 },
                 RuleElementContainer::RuleExpression(each_expr) => {
                     if each_expr.kind == RuleExpressionKind::ID {
