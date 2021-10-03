@@ -43,46 +43,103 @@ impl Token {
 
 #[derive(Clone)]
 pub enum SyntaxNodeElement {
-    NodeList(String, Vec<SyntaxNodeElement>),
-    Leaf(String),
+    NodeList(SyntaxNodeList),
+    Leaf(SyntaxLeaf),
 }
 
 impl SyntaxNodeElement {
+    pub fn from_node_list_args(name: String, subnodes: Vec<SyntaxNodeElement>) -> SyntaxNodeElement {
+        return SyntaxNodeElement::NodeList(SyntaxNodeList::new(name, subnodes));
+    }
+
+    pub fn from_leaf_args(value: String) -> SyntaxNodeElement {
+        return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value));
+    }
+
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
         match self {
-            SyntaxNodeElement::NodeList(name, sub_elems) => {
-                let display_name = if name == "" { "*choice".to_string() } else { name.to_string() };
-                writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
-
-                for each_elem in sub_elems {
-                    each_elem.print(nest + 1, writer);
-                }
-            },
-            SyntaxNodeElement::Leaf(leaf) => {
-                writeln!(writer, "|{}- \"{}\"", "   |".repeat(nest), leaf.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t")).unwrap();
-            }
+            SyntaxNodeElement::NodeList(node_list) => node_list.print(nest, writer),
+            SyntaxNodeElement::Leaf(leaf) => leaf.print(nest, writer),
         }
     }
 }
 
 #[derive(Clone)]
 pub struct SyntaxTree {
-    pub name: String,
-    pub children: Vec<SyntaxNodeElement>,
+    child: SyntaxNodeElement,
 }
 
 impl SyntaxTree {
-    pub fn new(name: String) -> Self {
+    pub fn from_node_list_args(name: String, subnodes: Vec<SyntaxNodeElement>) -> Self {
         return SyntaxTree {
-            name: name,
-            children: vec![],
+            child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(name, subnodes)),
         };
     }
 
     pub fn print(&self) {
-        for each_elem in &self.children {
-            each_elem.print(0, &mut BufWriter::new(stdout().lock()));
+        self.child.print(0, &mut BufWriter::new(stdout().lock()))
+    }
+}
+
+#[derive(Clone)]
+pub struct SyntaxNodeList {
+    name: String,
+    subnodes: Vec<SyntaxNodeElement>,
+}
+
+impl SyntaxNodeList {
+    pub fn new(name: String, subnodes: Vec<SyntaxNodeElement>) -> Self {
+        return SyntaxNodeList {
+            name: name,
+            subnodes: subnodes,
+        };
+    }
+
+    pub fn get_subnodes(&mut self) -> &mut Vec<SyntaxNodeElement> {
+        return &mut self.subnodes;
+    }
+
+    pub fn get_subnode_len(&self) -> usize {
+        return self.subnodes.len();
+    }
+
+    pub fn get_name(&self) -> String {
+        return self.name.clone();
+    }
+
+    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
+        let display_name = if self.name == "" {
+            "*choice".to_string()
+        } else {
+            self.name.clone()
+        };
+
+        writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
+
+        for each_node in &self.subnodes {
+            each_node.print(nest + 1, writer);
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct SyntaxLeaf {
+    value: String,
+}
+
+impl SyntaxLeaf {
+    pub fn new(value: String) -> Self {
+        return SyntaxLeaf {
+            value: value,
+        };
+    }
+
+    pub fn get_value(&self) -> String {
+        return self.value.clone();
+    }
+
+    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
+        writeln!(writer, "|{}- \"{}\"", "   |".repeat(nest), self.value.replace("\\", "\\\\").replace("\n", "\\n").replace(" ", "\\s").replace("\t", "\\t")).unwrap();
     }
 }
 

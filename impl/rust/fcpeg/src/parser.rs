@@ -52,27 +52,24 @@ impl SyntaxParser {
         self.recursion_count = 1;
 
         let start_rule_id = self.rule_map.start_rule_id.to_string();
-        let mut tree = data::SyntaxTree::new(start_rule_id.to_string());
 
         if self.src_content.len() == 0 {
-            return Ok(tree);
+            return Ok(data::SyntaxTree::from_node_list_args(start_rule_id.to_string(), vec![]));
         }
 
         self.recursion_count += 1;
 
-        let child = match self.is_rule_successful(&start_rule_id)? {
+        let subnode = match self.is_rule_successful(&start_rule_id)? {
             Some(v) => v,
             None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.to_string(), self.src_i)),
         };
-
-        tree.children.push(child);
 
         if self.src_i < self.src_content.len() {
             return Err(SyntaxParseError::NoSucceededRule(start_rule_id.to_string(), self.src_i));
         }
 
         self.recursion_count -= 1;
-        return Ok(tree);
+        return Ok(data::SyntaxTree::from_node_list_args(start_rule_id.to_string(), vec![subnode]));
     }
 
     fn is_rule_successful(&mut self, rule_id: &String) -> std::result::Result<std::option::Option<data::SyntaxNodeElement>, SyntaxParseError> {
@@ -91,7 +88,7 @@ impl SyntaxParser {
 
             match self.is_choice_successful(&occurrence_count, each_choice)? {
                 Some(v) => {
-                    let new_node = data::SyntaxNodeElement::NodeList(rule_id.to_string(), v);
+                    let new_node = data::SyntaxNodeElement::from_node_list_args(rule_id.to_string(), v);
                     return Ok(Some(new_node));
                 },
                 None => {
@@ -160,7 +157,7 @@ impl SyntaxParser {
                 Some(node_elems) => {
                     for each_elem in node_elems {
                         match each_elem {
-                            data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                            data::SyntaxNodeElement::NodeList(node_list) if node_list.get_subnode_len() == 0 => (),
                             _ => children.push(each_elem),
                         }
                     }
@@ -211,7 +208,7 @@ impl SyntaxParser {
                                             Some(v) => {
                                                 for each_result_sub_elem in v {
                                                     match each_result_sub_elem {
-                                                        data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                                                        data::SyntaxNodeElement::NodeList(node_list) if node_list.get_subnode_len() == 0 => (),
                                                         _ => new_sub_children.push(each_result_sub_elem),
                                                     }
                                                 }
@@ -234,10 +231,10 @@ impl SyntaxParser {
                             return Ok(None);
                         }
 
-                        let new_child = data::SyntaxNodeElement::NodeList("".to_string(), new_sub_children);
+                        let new_child = data::SyntaxNodeElement::from_node_list_args("".to_string(), new_sub_children);
 
                         match new_child {
-                            data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                            data::SyntaxNodeElement::NodeList(node_list) if node_list.get_subnode_len() == 0 => (),
                             _ => children.push(new_child),
                         }
                     } else if each_choice.has_choices {
@@ -249,10 +246,10 @@ impl SyntaxParser {
                                     match self.is_choice_successful(&Some(each_choice.occurrence_count), each_sub_choice)? {
                                         Some(v) => {
                                             if choice.elem_containers.len() != 1 {
-                                                let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
+                                                let new_child = data::SyntaxNodeElement::from_node_list_args("".to_string(), v);
 
                                                 match new_child {
-                                                    data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                                                    data::SyntaxNodeElement::NodeList(node_list) if node_list.get_subnode_len() == 0 => (),
                                                     _ => children.push(new_child),
                                                 }
                                             } else {
@@ -278,10 +275,10 @@ impl SyntaxParser {
                         match self.is_choice_successful(&Some(each_choice.occurrence_count), each_choice)? {
                             Some(v) => {
                                 if choice.elem_containers.len() != 1 {
-                                    let new_child = data::SyntaxNodeElement::NodeList("".to_string(), v);
+                                    let new_child = data::SyntaxNodeElement::from_node_list_args(String::new(), v);
 
                                     match new_child {
-                                        data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                                        data::SyntaxNodeElement::NodeList(node_list) if node_list.get_subnode_len() == 0 => (),
                                         _ => children.push(new_child),
                                     }
                                 } else {
@@ -302,7 +299,7 @@ impl SyntaxParser {
                         Some(node_elems) => {
                             for each_elem in node_elems {
                                 match each_elem {
-                                    data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                                    data::SyntaxNodeElement::NodeList(node_list) if node_list.get_subnode_len() == 0 => (),
                                     _ => children.push(each_elem),
                                 }
                             }
@@ -367,7 +364,7 @@ impl SyntaxParser {
             match self.is_each_expr_matched(expr)? {
                 Some(node_elem) => {
                     match node_elem {
-                        data::SyntaxNodeElement::NodeList(_, sub_nodes) if sub_nodes.len() == 0 => (),
+                        data::SyntaxNodeElement::NodeList(node_list) if node_list.get_subnode_len() == 0 => (),
                         _ => children.push(node_elem),
                     }
 
@@ -414,7 +411,7 @@ impl SyntaxParser {
                 let tar_char = self.src_content[self.src_i..self.src_i + 1].to_string();
 
                 if pattern.is_match(&tar_char) {
-                    let new_leaf = data::SyntaxNodeElement::Leaf(tar_char);
+                    let new_leaf = data::SyntaxNodeElement::from_leaf_args(tar_char);
                     self.src_i += 1;
                     return Ok(Some(new_leaf));
                 } else {
@@ -445,7 +442,7 @@ impl SyntaxParser {
                 }
 
                 if self.src_content[self.src_i..self.src_i + expr.value.len()] == expr.value {
-                    let new_leaf = data::SyntaxNodeElement::Leaf(expr.value.to_string());
+                    let new_leaf = data::SyntaxNodeElement::from_leaf_args(expr.value.clone());
                     self.src_i += expr.value.len();
                     return Ok(Some(new_leaf));
                 } else {
@@ -458,7 +455,7 @@ impl SyntaxParser {
                 }
 
                 let expr_value = self.src_content[self.src_i..self.src_i + 1].to_string();
-                let new_leaf = data::SyntaxNodeElement::Leaf(expr_value);
+                let new_leaf = data::SyntaxNodeElement::from_leaf_args(expr_value);
                 self.src_i += 1;
                 return Ok(Some(new_leaf));
             },

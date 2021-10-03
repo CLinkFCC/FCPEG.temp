@@ -1223,7 +1223,6 @@ impl BlockParser {
                                         continue;
                                     }
 
-                                    println!("!####");
                                     token_i += 1;
                                     content_end_i -= 1;
 
@@ -1231,7 +1230,6 @@ impl BlockParser {
                                     ast_reflect = match each_tokens.get(token_i) {
                                         Some(v) => {
                                             if v.kind == data::TokenKind::ID {
-                                                println!("!#### ID");
                                                 token_i += 1;
                                             }
 
@@ -1341,7 +1339,7 @@ impl BlockParser {
                                         token_i += 1;
                                     }
 
-                                    break;
+                                    continue;
                                 },
                                 "(" => {
                                     paren_nest += 1;
@@ -1364,9 +1362,6 @@ impl BlockParser {
                     None => (),
                 }
             }
-
-            println!("{} {}", token_i, tokens.len());
-            println!("isnone: {}", ast_reflect.is_none());
 
             if token_i != each_tokens.len() {
                 if !cfg!(debug) {
@@ -1491,7 +1486,6 @@ impl BlockParser {
                     }
                 }
 
-                println!("ast {} {}", token_i, tokens.len());
                 rule::RuleExpression::new(line_num, rule::RuleExpressionKind::ID, lookahead_kind, loop_count, ast_reflect, id)
             },
             data::TokenKind::String => {
@@ -1526,29 +1520,6 @@ impl BlockParser {
             _ => return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "expression".to_string())),
         };
 
-        // let ast_reflect = match tokens.get(0) {
-        //     Some(v) => {
-        //         if v.kind == data::TokenKind::Symbol && v.value == "#" {
-        //             token_i += 1;
-
-        //             match tokens.get(0) {
-        //                 Some(v) => {
-        //                     if v.kind == data::TokenKind::ID {
-        //                         Some(v.value.to_string())
-        //                     } else {
-        //                         Some("".to_string())
-        //                     }
-        //                 },
-        //                 None => None,
-        //             };
-        //         } else {
-        //             None
-        //         }
-        //     },
-        //     None => None,
-        // };
-
-        println!("memo");
         return Ok(new_expr);
     }
 }
