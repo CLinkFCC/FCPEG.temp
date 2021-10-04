@@ -138,6 +138,7 @@ impl RuleMap {
 
                         for each_choice in each_rule.choices.iter_mut() {
                             self.proc_define_cmd(each_choice, &each_rule.name, &each_block.name, fcpeg_file_man, &block_alias_map)?;
+                            // (*(*each_choice)).ast_reflect = Some(each_rule.name.clone());
                         }
 
                         self.add_rule(fcpeg_file_man.file_alias_name.to_string(), each_block.name.to_string(), rule.name.to_string(), each_rule);

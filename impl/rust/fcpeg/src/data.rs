@@ -108,9 +108,8 @@ impl SyntaxNodeList {
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
-        println!("{}", self.ast_reflect.is_none());
         let display_name = match self.ast_reflect.clone() {
-            Some(v) => v.clone(),
+            Some(v) => if v == "" { "[noname]".to_string() } else { v.clone() },
             None => "[hidden]".to_string(),
         };
 
