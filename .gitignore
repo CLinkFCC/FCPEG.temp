@@ -1,3 +1,6 @@
 impl/rust/fcpeg/target
 impl/rust/cmd/target
+impl/rust/cmd/src/*.cfg
+impl/rust/cmd/src/*.ches
+impl/rust/cmd/src/*.fcpeg
 impl/rust/tester
