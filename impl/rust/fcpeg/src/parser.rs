@@ -39,7 +39,7 @@ impl SyntaxParser {
         return Ok(SyntaxParser {
             rule_map: rule_map,
             src_i: 0,
-            src_content: "".to_string(),
+            src_content: String::new(),
             recursion_count: 1,
             max_recursion_count: 128,
             max_loop_count: 65536,

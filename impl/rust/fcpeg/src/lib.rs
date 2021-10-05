@@ -45,7 +45,7 @@ impl FCPEG {
 
     pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {
         // ルートファイルのエイリアス名は空文字
-        let mut fcpeg_file_man = blockparser::FCPEGFileMan::new("".to_string(), fcpeg_file_path);
+        let mut fcpeg_file_man = blockparser::FCPEGFileMan::new(String::new(), fcpeg_file_path);
 
         match fcpeg_file_man.load() {
             Err(e) => return Err(FCPEGError::FCPEGFileManErr(e)),

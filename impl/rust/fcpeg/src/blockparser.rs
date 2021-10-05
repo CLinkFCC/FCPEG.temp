@@ -97,7 +97,7 @@ impl FCPEGFileMan {
             sub_file_aliase_map: HashMap::new(),
             setting_file: SettingFile::new(),
             fcpeg_file_path: fcpeg_file_path,
-            fcpeg_file_content: "".to_string(),
+            fcpeg_file_content: String::new(),
             block_map: HashMap::new(),
         }
     }
@@ -182,7 +182,7 @@ pub struct BlockParser {
 impl BlockParser {
     pub fn new() -> BlockParser {
         return BlockParser {
-            file_alias_name: "".to_string(),
+            file_alias_name: String::new(),
             token_i: 0,
             tokens: vec![],
         }
@@ -192,7 +192,7 @@ impl BlockParser {
         let mut tokens: Vec<Token> = vec![];
 
         let id_num_regex = regex::Regex::new(r"[a-zA-Z0-9_]").unwrap();
-        let mut tmp_id_num = "".to_string();
+        let mut tmp_id_num = String::new();
 
         let symbol_regex = regex::Regex::new(r"[#&!?\-+*.,:^(){}<>]").unwrap();
 
@@ -226,7 +226,7 @@ impl BlockParser {
                 };
 
                 tokens.push(Token::new(line_i, token_kind, tmp_id_num.to_string()));
-                tmp_id_num = "".to_string();
+                tmp_id_num = String::new();
             }
 
             // コメント命令

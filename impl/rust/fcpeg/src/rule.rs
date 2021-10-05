@@ -56,7 +56,7 @@ impl RuleMap {
         };
 
         let mut has_start_cmd = false;
-        let mut start_rule_id = "".to_string();
+        let mut start_rule_id = String::new();
 
         // <block_alias_name, block_id>
         let mut block_alias_map = HashMap::<String, String>::new();
@@ -240,7 +240,7 @@ impl RuleLookaheadKind {
 
     pub fn to_symbol_string(&self) -> String {
         return match self {
-            RuleLookaheadKind::None => "".to_string(),
+            RuleLookaheadKind::None => String::new(),
             RuleLookaheadKind::Positive => "&".to_string(),
             RuleLookaheadKind::Negative => "!".to_string(),
         }
@@ -252,7 +252,7 @@ pub struct RuleCountConverter {}
 impl RuleCountConverter {
     pub fn count_to_string(count: &(i32, i32), is_loop_count: bool, prefix: &str, separator: &str, suffix: &str) -> String {
         if *count == (1, 1) {
-            return "".to_string();
+            return String::new();
         }
 
         if is_loop_count {
@@ -264,8 +264,8 @@ impl RuleCountConverter {
             }
         }
 
-        let min_count = if count.0 == 0 { "".to_string() } else { count.0.to_string() };
-        let max_count = if count.1 == -1 { "".to_string() } else { count.1.to_string() };
+        let min_count = if count.0 == 0 { String::new() } else { count.0.to_string() };
+        let max_count = if count.1 == -1 { String::new() } else { count.1.to_string() };
         return format!("{}{}{}{}{}", prefix, min_count, separator, max_count, suffix);
     }
 
