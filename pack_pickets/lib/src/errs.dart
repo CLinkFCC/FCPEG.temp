@@ -35,3 +35,16 @@ class PicketExistsAlreadyErr extends PicketErr{
   @override
   String toString() => this._message;
 }
+
+class PicketVersionError extends PicketErr{
+  String _message;
+  PicketVersionError([String massage]){
+    if(massage == null){
+      this._message = "Picket version error: Unknown";
+    }else{
+      this._message = "Picket version error: $massage";
+    }
+  }
+  @override
+  String toString() => this._message;
+}
