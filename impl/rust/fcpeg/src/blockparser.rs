@@ -2,7 +2,7 @@ use std::collections::*;
 
 use crate::data::*;
 use crate::rule::*;
-use crate::setting::*;
+use crate::config::*;
 
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
@@ -10,7 +10,7 @@ use rustnutlib::fileman::*;
 pub enum FCPEGFileManError {
     Unknown(),
     FileManError(FileManError),
-    SettingFileError(SettingFileError),
+    ConfigFileError(ConfigFileError),
 }
 
 impl FCPEGFileManError {
@@ -18,7 +18,7 @@ impl FCPEGFileManError {
         match self {
             FCPEGFileManError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
             FCPEGFileManError::FileManError(err) => err.get_log_data(),
-            FCPEGFileManError::SettingFileError(err) => err.get_log_data(),
+            FCPEGFileManError::ConfigFileError(err) => err.get_log_data(),
         }
     }
 }
@@ -83,7 +83,7 @@ pub struct FCPEGFileMan {
     // ルートのエイリアス名は空文字
     pub file_alias_name: String,
     pub sub_file_aliase_map: HashMap<String, FCPEGFileMan>,
-    setting_file: SettingFile,
+    config_file: ConfigFile,
     fcpeg_file_path: String,
     fcpeg_file_content: String,
     pub block_map: HashMap<String, Block>,
@@ -95,7 +95,7 @@ impl FCPEGFileMan {
             is_loaded: false,
             file_alias_name: file_alias_name,
             sub_file_aliase_map: HashMap::new(),
-            setting_file: SettingFile::new(),
+            config_file: ConfigFile::new(),
             fcpeg_file_path: fcpeg_file_path,
             fcpeg_file_content: String::new(),
             block_map: HashMap::new(),
@@ -116,20 +116,20 @@ impl FCPEGFileMan {
             Ok(v) => v,
         };
 
-        let setting_file_path = FileMan::rename_ext(&self.fcpeg_file_path, "cfg");
+        let config_file_path = FileMan::rename_ext(&self.fcpeg_file_path, "cfg");
 
-        match self.setting_file.load(setting_file_path) {
-            Err(e) => return Err(FCPEGFileManError::SettingFileError(e)),
+        match self.config_file.load(config_file_path) {
+            Err(e) => return Err(FCPEGFileManError::ConfigFileError(e)),
             Ok(()) => (),
         }
 
         self.is_loaded = true;
 
         if !cfg!(debug) {
-            self.setting_file.print();
+            self.config_file.print();
         }
 
-        for (alias_name, alias_path) in self.setting_file.file_alias_map.clone() {
+        for (alias_name, alias_path) in self.config_file.file_alias_map.clone() {
             match self.add_sub_file_alias(alias_name.clone(), alias_path.clone()) {
                 Err(e) => return Err(e),
                 Ok(()) => (),
