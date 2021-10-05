@@ -59,28 +59,19 @@ impl SyntaxParser {
 
         self.recursion_count += 1;
 
-        let subnode = match self.is_rule_successful(&start_rule_id)? {
+        let mut root_node = match self.is_rule_successful(&start_rule_id)? {
             Some(v) => v,
             None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i)),
         };
+
+        root_node.set_ast_reflect(Some(start_rule_id.clone()));
 
         if self.src_i < self.src_content.len() {
             return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i));
         }
 
         self.recursion_count -= 1;
-
-        let start_rule_ast_reflect = match &subnode {
-            data::SyntaxNodeElement::NodeList(node_list) => node_list.get_ast_reflect().clone(),
-            _ => None,
-        };
-
-        match &start_rule_ast_reflect {
-            Some(v) => println!("start {}", v),
-            None => println!("start none"),
-        }
-
-        return Ok(data::SyntaxTree::from_node_list_args(vec![subnode], start_rule_ast_reflect));
+        return Ok(data::SyntaxTree::from_node_list(root_node));
     }
 
     fn is_rule_successful(&mut self, rule_id: &String) -> std::result::Result<std::option::Option<data::SyntaxNodeElement>, SyntaxParseError> {
@@ -112,7 +103,7 @@ impl SyntaxParser {
                     if ast_reflect == Some(String::new()) {
                         ast_reflect = Some(rule_id.clone());
                     }
-println!("fuck");
+
                     let new_node = data::SyntaxNodeElement::from_node_list_args(v, ast_reflect);
                     return Ok(Some(new_node));
                 },
@@ -181,16 +172,10 @@ println!("fuck");
             match self.is_each_choice_matched(rule_id, choice)? {
                 Some(node_elems) => {
                     for each_elem in node_elems {
-                        match each_elem {
+                        match &each_elem {
                             data::SyntaxNodeElement::NodeList(node_list) => {
                                 if node_list.get_subnode_len() != 0 {
-                                    let ast_reflect = if node_list.get_ast_reflect() == Some("".to_string()) {
-                                        println!("aaaaaa {}", rule_id);
-                                        Some(rule_id.clone())
-                                    } else {
-                                        node_list.get_ast_reflect().clone()
-                                    };
-                                    children.push(data::SyntaxNodeElement::from_node_list_args(node_list.clone_subnodes(), ast_reflect));
+                                    children.push(each_elem);
                                 }
                             },
                             _ => children.push(each_elem),
@@ -466,35 +451,6 @@ println!("fuck");
 
                         let conv_node_elem = match &node_elem {
                             data::SyntaxNodeElement::NodeList(node_list) => {
-                                // let rule = match self.rule_map.get_rule(&expr.value) {
-                                //     Some(v) => v.clone(),
-                                //     None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
-                                // };
-
-                                // let mut sub_ast_reflect = match &rule.choices.get(0) {
-                                //     Some(first_sub_choice) => {
-                                //         first_sub_choice.ast_reflect.clone()
-                                //         // match first_subnode {
-                                //         //     data::SyntaxNodeElement::NodeList(sub_node_list) => sub_node_list.get_ast_reflect().clone(),
-                                //         //     data::SyntaxNodeElement::Leaf(_) => None,
-                                //         // }
-                                //     },
-                                //     None => None,
-                                //     // data::SyntaxNodeElement::NodeList(node_list) => node_list.get_ast_reflect().clone(),
-                                //     // _ => None,
-                                // };
-
-                                // let ast_reflect = match node_list.get_ast_reflect() {
-                                //     Some(v) => {
-                                //         if v == "" {
-                                //             Some(expr.value.clone())
-                                //         } else {
-                                //             Some(v)
-                                //         }
-                                //     },
-                                //     None => None,
-                                // };
-
                                 let sub_ast_reflect = match &expr.ast_reflect {
                                     Some(v) => {
                                         if v == "" {
@@ -505,8 +461,6 @@ println!("fuck");
                                     },
                                     None => None,
                                 };
-
-                                println!("id {}", sub_ast_reflect.is_none());
 
                                 data::SyntaxNodeElement::from_node_list_args(node_list.clone_subnodes(), sub_ast_reflect)
                             },

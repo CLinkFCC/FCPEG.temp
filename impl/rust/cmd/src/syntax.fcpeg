@@ -6,6 +6,7 @@
 [Syntax]{
     + use Symbol,
     % A <- ("a" : ("b" : "c"))*,
-    A <- (B B#aa)#l,
-    B <- (" ")*#aa,
+    % #ID チェインに対応
+    A <- "ab"# "cde"#,
+    B <- ("ab")#a "a",
 }

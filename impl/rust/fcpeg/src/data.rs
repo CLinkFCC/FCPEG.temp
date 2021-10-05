@@ -56,6 +56,13 @@ impl SyntaxNodeElement {
         return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflect));
     }
 
+    pub fn set_ast_reflect(&mut self, ast_reflect: Option<String>) {
+        match self {
+            SyntaxNodeElement::NodeList(node_list) => node_list.set_ast_reflect(ast_reflect),
+            SyntaxNodeElement::Leaf(leaf) => leaf.set_ast_reflect(ast_reflect),
+        }
+    }
+
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
         match self {
             SyntaxNodeElement::NodeList(node_list) => node_list.print(nest, writer),
@@ -70,6 +77,12 @@ pub struct SyntaxTree {
 }
 
 impl SyntaxTree {
+    pub fn from_node_list(node_list: SyntaxNodeElement) -> Self {
+        return SyntaxTree {
+            child: node_list,
+        };
+    }
+
     pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflect: Option<String>) -> Self {
         return SyntaxTree {
             child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflect)),
@@ -107,6 +120,10 @@ impl SyntaxNodeList {
         return self.subnodes.len();
     }
 
+    pub fn set_ast_reflect(&mut self, ast_reflect: Option<String>) {
+        self.ast_reflect = ast_reflect;
+    }
+
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
         let display_name = match self.ast_reflect.clone() {
             Some(v) => if v == "" { "[noname]".to_string() } else { v.clone() },
@@ -137,6 +154,10 @@ impl SyntaxLeaf {
 
     pub fn get_value(&self) -> String {
         return self.value.clone();
+    }
+
+    pub fn set_ast_reflect(&mut self, ast_reflect: Option<String>) {
+        self.ast_reflect = ast_reflect;
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
