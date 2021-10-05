@@ -1,9 +1,9 @@
 import "packge:pack_pickets/src/pickets.dart";
 
-class Detector{
-  PicketsEnv _env;
+class Detector extends PicketWorker {
   Detector(PicketsEnv env){
     this._env=env;
+    this._modifyMode = false;
   }
 Future<bool> detectFile(String filePath){
   File file = File(filePath);

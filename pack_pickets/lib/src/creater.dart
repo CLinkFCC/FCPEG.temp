@@ -3,10 +3,10 @@ import "dart:io";
 import "packge:pack_pickets/src/pickets.dart";
 
 //Create Picket
-class Creater{
-  PicketsEnv _env;
+class Creater extends PicketWorker {
   Creater(PicketsEnv env){
     this._env=env;
+    this._modifyMode = true;
   }
   PicketOrErr create(String picketName,String currentPath){
     if(this._env.pickets.containsKey(picketName)){
