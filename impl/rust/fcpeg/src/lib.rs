@@ -40,7 +40,7 @@ impl FCPEG {
             input_srcs.push(new_src);
         }
 
-        return FCPEG::parse_from_srcs(fcpeg_file_path.to_string(), input_srcs);
+        return FCPEG::parse_from_srcs(fcpeg_file_path.clone(), input_srcs);
     }
 
     pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {

@@ -32,7 +32,7 @@ fn cmd_parse(_cmd_name: String, cmd_args: HashMap::<String, Vec<String>>, cons: 
                 return;
             }
 
-            v.get(0).unwrap().to_string()
+            v.get(0).unwrap().clone()
         },
         None => {
             cons.log(ConsoleLogData::new(ConsoleLogKind::Error, "command argument '-f' not found", vec![], vec![]), false);
@@ -183,7 +183,7 @@ impl FileChangeDetector {
 
     pub fn detect_multiple_file_changes(&mut self) -> bool {
         for each_path in self.target_file_paths.clone() {
-            if self.detect_file_change(&each_path.to_string()) {
+            if self.detect_file_change(&each_path.clone()) {
                 return true;
             }
         }

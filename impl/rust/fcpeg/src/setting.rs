@@ -98,12 +98,12 @@ impl SettingFile {
 
                     let regex_mode_str = match prop_values.get(0) {
                         Some(v) => v,
-                        None => return Err(SettingFileError::InvalidPropValueLength(prop_name.to_string())),
+                        None => return Err(SettingFileError::InvalidPropValueLength(prop_name.clone())),
                     };
 
                     self.regex_mode = match RegexMode::get_regex_mode(regex_mode_str) {
                         Some(v) => v,
-                        None => return Err(SettingFileError::UnknownRegexMode(regex_mode_str.to_string())),
+                        None => return Err(SettingFileError::UnknownRegexMode(regex_mode_str.clone())),
                     }
                 },
                 "FileAliases" => {
@@ -112,7 +112,7 @@ impl SettingFile {
                     for (alias_name, alias_path_vec) in prop_sub_map {
                         let alias_path = match alias_path_vec.get(0) {
                             Some(v) => v,
-                            None => return Err(SettingFileError::InvalidPropValueLength(alias_name.to_string())),
+                            None => return Err(SettingFileError::InvalidPropValueLength(alias_name.clone())),
                         };
 
                         self.file_alias_map.insert(alias_name.clone(), alias_path.clone());
@@ -123,16 +123,16 @@ impl SettingFile {
 
                     let ast_reflect = match prop_values.get(0) {
                         Some(v) => v,
-                        None => return Err(SettingFileError::InvalidPropValueLength(prop_name.to_string())),
+                        None => return Err(SettingFileError::InvalidPropValueLength(prop_name.clone())),
                     };
 
                     self.reverse_ast_reflect = match ast_reflect.to_lowercase().as_str() {
                         "normal" => false,
                         "reversed" => true,
-                        _ => return Err(SettingFileError::InvalidPropValue(prop_name.to_string(), ast_reflect.to_string())),
+                        _ => return Err(SettingFileError::InvalidPropValue(prop_name.clone(), ast_reflect.clone())),
                     };
                 },
-                _ => return Err(SettingFileError::UnknownPropName(prop_name.to_string())),
+                _ => return Err(SettingFileError::UnknownPropName(prop_name.clone())),
             }
         }
 
@@ -201,7 +201,7 @@ impl SettingFile {
 
                     // コロンを除いた行
                     let pure_line = each_line[..each_line.len() - 1].to_string();
-                    tmp_prop_name = Some(pure_line.to_string());
+                    tmp_prop_name = Some(pure_line.clone());
                 },
                 _ => return Err(SettingFileError::InvalidSyntax(line_i, "expected ',' and ':' at the end".to_string())),
             }

@@ -69,12 +69,12 @@ impl RuleMap {
                     return Err(BlockParseError::RuleInMainBlock());
                 },
                 Command::Use(line, file_alias_name, block_name, block_alias_name) => {
-                    if block_alias_map.contains_key(&block_alias_name.to_string()) {
-                        return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.to_string()));
+                    if block_alias_map.contains_key(&block_alias_name.clone()) {
+                        return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.clone()));
                     }
 
                     let rule_id = format!("{}.{}", file_alias_name, block_name);
-                    block_alias_map.insert(block_alias_name.to_string(), rule_id);
+                    block_alias_map.insert(block_alias_name.clone(), rule_id);
                 },
                 _ => (),
             }
@@ -123,12 +123,12 @@ impl RuleMap {
                 match each_cmd {
                     Command::Start(_line, _file_alias_name, _block_name, _rule_name) => return Err(BlockParseError::StartCmdOutsideMainBlock()),
                     Command::Use(line, file_alias_name, block_name, block_alias_name) => {
-                        if block_alias_map.contains_key(&block_alias_name.to_string()) {
-                            return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.to_string()));
+                        if block_alias_map.contains_key(&block_alias_name.clone()) {
+                            return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.clone()));
                         }
 
-                        let rule_id = format!("{}.{}", file_alias_name.to_string(), block_name.to_string());
-                        block_alias_map.insert(block_alias_name.to_string(), rule_id);
+                        let rule_id = format!("{}.{}", file_alias_name.clone(), block_name.clone());
+                        block_alias_map.insert(block_alias_name.clone(), rule_id);
                     },
                     _ => (),
                 }
@@ -145,7 +145,7 @@ impl RuleMap {
                             self.proc_define_cmd(each_choice, &each_rule.name, &each_block.name, fcpeg_file_man, &block_alias_map)?;
                         }
 
-                        self.add_rule(fcpeg_file_man.file_alias_name.to_string(), each_block.name.to_string(), rule.name.to_string(), each_rule);
+                        self.add_rule(fcpeg_file_man.file_alias_name.clone(), each_block.name.clone(), rule.name.clone(), each_rule);
                     },
                     _ => (),
                 }
@@ -206,12 +206,12 @@ impl RuleMap {
                             continue;
                         }
 
-                        let pattern = match Regex::new(&each_expr.value.to_string()) {
+                        let pattern = match Regex::new(&each_expr.value.clone()) {
                             Err(_e) => return Err(BlockParseError::InvalidCharClassFormat(each_expr.line, each_expr.to_string())),
                             Ok(v) => v,
                         };
 
-                        self.regex_map.insert(each_expr.value.to_string(), pattern);
+                        self.regex_map.insert(each_expr.value.clone(), pattern);
                     }
                 },
             }
@@ -352,7 +352,7 @@ impl Display for RuleChoice {
         let random_order_symbol = if self.is_random_order { "^" } else { "" };
         let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
         let ast_reflection_text = match &self.ast_reflection {
-            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.to_string()),
+            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.clone()),
             ASTReflection::Unreflectable() => String::new()
         };
 
@@ -447,7 +447,7 @@ impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
         let ast_reflection_text = match &self.ast_reflection {
-            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.to_string()),
+            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.clone()),
             ASTReflection::Unreflectable() => String::new()
         };
 
