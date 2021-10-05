@@ -1,5 +1,6 @@
 use std::io::*;
-use crate::rule;
+
+use crate::rule::*;
 
 #[derive(PartialOrd, PartialEq, Debug, Clone)]
 pub enum TokenKind {
@@ -32,7 +33,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(line: usize, kind: TokenKind, value: String) -> Self {
+    pub fn new(line: usize, kind: TokenKind, value: String) -> Token {
         return Token {
             line: line,
             kind: kind,
@@ -91,13 +92,13 @@ pub struct SyntaxTree {
 }
 
 impl SyntaxTree {
-    pub fn from_node_list(node_list: SyntaxNodeElement) -> Self {
+    pub fn from_node_list(node_list: SyntaxNodeElement) -> SyntaxTree {
         return SyntaxTree {
             child: node_list,
         };
     }
 
-    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> Self {
+    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> SyntaxTree {
         return SyntaxTree {
             child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflection)),
         };
@@ -115,7 +116,7 @@ pub struct SyntaxNodeList {
 }
 
 impl SyntaxNodeList {
-    pub fn new(nodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> Self {
+    pub fn new(nodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> SyntaxNodeList {
         return SyntaxNodeList {
             nodes: nodes,
             ast_reflection: ast_reflection,
@@ -149,7 +150,7 @@ pub struct SyntaxLeaf {
 }
 
 impl SyntaxLeaf {
-    pub fn new(value: String, ast_reflection: ASTReflection) -> Self {
+    pub fn new(value: String, ast_reflection: ASTReflection) -> SyntaxLeaf {
         return SyntaxLeaf {
             value: value,
             ast_reflection: ast_reflection,
@@ -178,7 +179,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(name: String, cmds: Vec<Command>) -> Self {
+    pub fn new(name: String, cmds: Vec<Command>) -> Block {
         return Block {
             name: name,
             cmds: cmds,
@@ -188,7 +189,7 @@ impl Block {
 
 #[derive(Clone)]
 pub enum Command {
-    Define(usize, rule::Rule),
+    Define(usize, Rule),
     Start(usize, String, String, String),
     Use(usize, String, String, String),
 }

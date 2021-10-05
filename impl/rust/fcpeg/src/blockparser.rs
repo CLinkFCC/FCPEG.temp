@@ -1,18 +1,22 @@
-use crate::data;
-use crate::rule;
-use crate::setting;
-use rustnutlib::*;
+use std::collections::*;
+
+use crate::data::*;
+use crate::rule::*;
+use crate::setting::*;
+
+use rustnutlib::console::*;
+use rustnutlib::fileman::*;
 
 pub enum FCPEGFileManError {
     Unknown(),
-    FileManError(fileman::FileManError),
-    SettingFileError(setting::SettingFileError),
+    FileManError(FileManError),
+    SettingFileError(SettingFileError),
 }
 
 impl FCPEGFileManError {
-    pub fn get_log_data(&self) -> console::ConsoleLogData {
+    pub fn get_log_data(&self) -> ConsoleLogData {
         match self {
-            FCPEGFileManError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown", vec![], vec![]),
+            FCPEGFileManError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
             FCPEGFileManError::FileManError(err) => err.get_log_data(),
             FCPEGFileManError::SettingFileError(err) => err.get_log_data(),
         }
@@ -46,30 +50,30 @@ pub enum BlockParseError {
 }
 
 impl BlockParseError {
-    pub fn get_log_data(&self) -> console::ConsoleLogData {
+    pub fn get_log_data(&self) -> ConsoleLogData {
         match self {
-            BlockParseError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown error", vec![], vec![]),
-            BlockParseError::BlockAliasNotFound(line, block_alias_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("block alias '{}' not found", block_alias_name), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::DuplicatedBlockAliasName(line, block_alias_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("duplicated block alias name '{}'", block_alias_name), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::DuplicatedBlockName(line, block_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("duplicated block name '{}'", block_name), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::DuplicatedStartCmd() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "duplicated start command", vec![], vec![]),
-            BlockParseError::ExpectedBlockDef(line) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "expected block definition", vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::ExpectedToken(line, expected_str) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("expected token {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::InternalErr(err_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("internal error: {}", err_name), vec![], vec![]),
-            BlockParseError::InvalidCharClassFormat(line, value) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("invalid character class format '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::InvalidToken(line, value) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("invalid token '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::MainBlockNotFound() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "main block not found", vec![], vec![]),
-            BlockParseError::NoChoiceOrExpressionContent(line) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "no choice or expression content", vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::NoStartCmdInMainBlock() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "no start command in main block", vec![], vec![]),
-            BlockParseError::RuleHasNoChoice(rule_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("rule '{}' has no choice", rule_name), vec![], vec![]),
-            BlockParseError::RuleInMainBlock() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "rule in main block", vec![], vec![]),
-            BlockParseError::StartCmdOutsideMainBlock() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "start command outside main block", vec![], vec![]),
-            BlockParseError::TooBigNumber(line, number) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("too big number {}", number), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::UnexpectedEOF(line, expected_str) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unexpected EOF, expected {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::UnexpectedToken(line, unexpected_token, expected_str) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unexpected token '{}', expected {}", unexpected_token, expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::UnknownPragmaName(line, unknown_pragma_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown pragma name", vec![format!("line:\t{}", line + 1), format!("pragma name:\t{}", unknown_pragma_name)], vec![]),
-            BlockParseError::UnknownSyntax(line, target_token) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown syntax", vec![format!("line: {}", line + 1), format!("target token:\t'{}'", target_token)], vec![]),
-            BlockParseError::UnknownToken(line, unknown_token) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown token '{}'", unknown_token), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown error", vec![], vec![]),
+            BlockParseError::BlockAliasNotFound(line, block_alias_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("block alias '{}' not found", block_alias_name), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::DuplicatedBlockAliasName(line, block_alias_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("duplicated block alias name '{}'", block_alias_name), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::DuplicatedBlockName(line, block_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("duplicated block name '{}'", block_name), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::DuplicatedStartCmd() => ConsoleLogData::new(ConsoleLogKind::Error, "duplicated start command", vec![], vec![]),
+            BlockParseError::ExpectedBlockDef(line) => ConsoleLogData::new(ConsoleLogKind::Error, "expected block definition", vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::ExpectedToken(line, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("expected token {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::InternalErr(err_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_name), vec![], vec![]),
+            BlockParseError::InvalidCharClassFormat(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid character class format '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::InvalidToken(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid token '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::MainBlockNotFound() => ConsoleLogData::new(ConsoleLogKind::Error, "main block not found", vec![], vec![]),
+            BlockParseError::NoChoiceOrExpressionContent(line) => ConsoleLogData::new(ConsoleLogKind::Error, "no choice or expression content", vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::NoStartCmdInMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "no start command in main block", vec![], vec![]),
+            BlockParseError::RuleHasNoChoice(rule_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("rule '{}' has no choice", rule_name), vec![], vec![]),
+            BlockParseError::RuleInMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "rule in main block", vec![], vec![]),
+            BlockParseError::StartCmdOutsideMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "start command outside main block", vec![], vec![]),
+            BlockParseError::TooBigNumber(line, number) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too big number {}", number), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::UnexpectedEOF(line, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unexpected EOF, expected {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::UnexpectedToken(line, unexpected_token, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unexpected token '{}', expected {}", unexpected_token, expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::UnknownPragmaName(line, unknown_pragma_name) => ConsoleLogData::new(ConsoleLogKind::Error, "unknown pragma name", vec![format!("line:\t{}", line + 1), format!("pragma name:\t{}", unknown_pragma_name)], vec![]),
+            BlockParseError::UnknownSyntax(line, target_token) => ConsoleLogData::new(ConsoleLogKind::Error, "unknown syntax", vec![format!("line: {}", line + 1), format!("target token:\t'{}'", target_token)], vec![]),
+            BlockParseError::UnknownToken(line, unknown_token) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown token '{}'", unknown_token), vec![format!("line:\t{}", line + 1)], vec![]),
         }
     }
 }
@@ -78,27 +82,27 @@ pub struct FCPEGFileMan {
     is_loaded: bool,
     // ルートのエイリアス名は空文字
     pub file_alias_name: String,
-    pub sub_file_aliase_map: std::collections::HashMap<String, FCPEGFileMan>,
-    setting_file: setting::SettingFile,
+    pub sub_file_aliase_map: HashMap<String, FCPEGFileMan>,
+    setting_file: SettingFile,
     fcpeg_file_path: String,
     fcpeg_file_content: String,
-    pub block_map: std::collections::HashMap<String, data::Block>,
+    pub block_map: HashMap<String, Block>,
 }
 
 impl FCPEGFileMan {
-    pub fn new(file_alias_name: String, fcpeg_file_path: String) -> Self {
+    pub fn new(file_alias_name: String, fcpeg_file_path: String) -> FCPEGFileMan {
         return FCPEGFileMan {
             is_loaded: false,
             file_alias_name: file_alias_name,
-            sub_file_aliase_map: std::collections::HashMap::new(),
-            setting_file: setting::SettingFile::new(),
+            sub_file_aliase_map: HashMap::new(),
+            setting_file: SettingFile::new(),
             fcpeg_file_path: fcpeg_file_path,
             fcpeg_file_content: "".to_string(),
-            block_map: std::collections::HashMap::new(),
+            block_map: HashMap::new(),
         }
     }
 
-    fn add_sub_file_alias(&mut self, file_alias_name: String, file_path: String) -> std::result::Result<(), FCPEGFileManError> {
+    fn add_sub_file_alias(&mut self, file_alias_name: String, file_path: String) -> Result<(), FCPEGFileManError> {
         let mut alias = FCPEGFileMan::new(file_alias_name.to_string(), file_path);
         alias.load()?;
         self.sub_file_aliase_map.insert(file_alias_name.to_string(), alias);
@@ -106,13 +110,13 @@ impl FCPEGFileMan {
         return Ok(());
     }
 
-    pub fn load(&mut self) -> std::result::Result<(), FCPEGFileManError> {
-        self.fcpeg_file_content = match fileman::FileMan::read_all(&self.fcpeg_file_path) {
+    pub fn load(&mut self) -> Result<(), FCPEGFileManError> {
+        self.fcpeg_file_content = match FileMan::read_all(&self.fcpeg_file_path) {
             Err(e) => return Err(FCPEGFileManError::FileManError(e)),
             Ok(v) => v,
         };
 
-        let setting_file_path = fileman::FileMan::rename_ext(&self.fcpeg_file_path, "cfg");
+        let setting_file_path = FileMan::rename_ext(&self.fcpeg_file_path, "cfg");
 
         match self.setting_file.load(setting_file_path) {
             Err(e) => return Err(FCPEGFileManError::SettingFileError(e)),
@@ -135,7 +139,7 @@ impl FCPEGFileMan {
         return Ok(());
     }
 
-    pub fn parse_all(&mut self) -> std::result::Result<(), BlockParseError> {
+    pub fn parse_all(&mut self) -> Result<(), BlockParseError> {
         if !self.is_loaded {
             return Err(BlockParseError::InternalErr(format!("file manager not loaded (path: '{}')", self.fcpeg_file_path)));
         }
@@ -172,11 +176,11 @@ impl FCPEGFileMan {
 pub struct BlockParser {
     file_alias_name: String,
     token_i: usize,
-    tokens: Vec<data::Token>
+    tokens: Vec<Token>
 }
 
 impl BlockParser {
-    pub fn new() -> Self {
+    pub fn new() -> BlockParser {
         return BlockParser {
             file_alias_name: "".to_string(),
             token_i: 0,
@@ -184,8 +188,8 @@ impl BlockParser {
         }
     }
 
-    pub fn get_tokens(src_content: &String) -> std::result::Result<Vec<data::Token>, BlockParseError> {
-        let mut tokens: Vec<data::Token> = vec![];
+    pub fn get_tokens(src_content: &String) -> Result<Vec<Token>, BlockParseError> {
+        let mut tokens: Vec<Token> = vec![];
 
         let id_num_regex = regex::Regex::new(r"[a-zA-Z0-9_]").unwrap();
         let mut tmp_id_num = "".to_string();
@@ -216,12 +220,12 @@ impl BlockParser {
                         }
 
                         // それ以外の場合は ID と判定する
-                        data::TokenKind::ID
+                        TokenKind::ID
                     },
-                    Ok(_v) => data::TokenKind::Number,
+                    Ok(_v) => TokenKind::Number,
                 };
 
-                tokens.push(data::Token::new(line_i, token_kind, tmp_id_num.to_string()));
+                tokens.push(Token::new(line_i, token_kind, tmp_id_num.to_string()));
                 tmp_id_num = "".to_string();
             }
 
@@ -298,7 +302,7 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_i, "\"".to_string(), "character of string".to_string()));
                 }
 
-                tokens.push(data::Token::new(line_i, data::TokenKind::String, string));
+                tokens.push(Token::new(line_i, TokenKind::String, string));
                 continue;
             }
 
@@ -352,13 +356,13 @@ impl BlockParser {
                     }
                 }
 
-                tokens.push(data::Token::new(line_i, data::TokenKind::StringInBracket, string));
+                tokens.push(Token::new(line_i, TokenKind::StringInBracket, string));
                 continue;
             }
 
             // スペース判定
             if *each_char == ' ' {
-                tokens.push(data::Token::new(line_i, data::TokenKind::Space, each_char_str.to_string()));
+                tokens.push(Token::new(line_i, TokenKind::Space, each_char_str.to_string()));
                 char_i += 1;
 
                 // スペースが連続している場合はその分スキップする
@@ -393,7 +397,7 @@ impl BlockParser {
 
             // シンボル判定
             if symbol_regex.is_match(&each_char_str) {
-                tokens.push(data::Token::new(line_i, data::TokenKind::Symbol, each_char_str.to_string()));
+                tokens.push(Token::new(line_i, TokenKind::Symbol, each_char_str.to_string()));
 
                 char_i += 1;
                 continue;
@@ -410,11 +414,11 @@ impl BlockParser {
         if tmp_id_num.len() != 0 {
             // トークンの種類を判定
             let token_kind = match tmp_id_num.parse::<i32>() {
-                Err(_e) => data::TokenKind::ID,
-                Ok(_v) => data::TokenKind::Number,
+                Err(_e) => TokenKind::ID,
+                Ok(_v) => TokenKind::Number,
             };
 
-            tokens.push(data::Token::new(line_i, token_kind, tmp_id_num.to_string()));
+            tokens.push(Token::new(line_i, token_kind, tmp_id_num.to_string()));
         }
 
         if !cfg!(debug) {
@@ -427,7 +431,7 @@ impl BlockParser {
     }
 
     // フィールドが初期化されるためブロックパーサのインスタンスを使い回せる
-    pub fn parse(&mut self, file_alias_name: String, tokens: Vec<data::Token>) -> std::result::Result<std::collections::HashMap<String, data::Block>, BlockParseError> {
+    pub fn parse(&mut self, file_alias_name: String, tokens: Vec<Token>) -> Result<HashMap<String, Block>, BlockParseError> {
         // フィールド初期化
         self.file_alias_name = file_alias_name;
         self.token_i = 0;
@@ -438,25 +442,25 @@ impl BlockParser {
     }
 
     // 初期位置: パース対象ソースの開始位置
-    fn get_blocks(&mut self) -> std::result::Result<std::collections::HashMap<String, data::Block>, BlockParseError> {
-        let mut block_map = std::collections::HashMap::<String, data::Block>::new();
+    fn get_blocks(&mut self) -> Result<HashMap<String, Block>, BlockParseError> {
+        let mut block_map = HashMap::<String, Block>::new();
 
         while self.token_i < self.tokens.len() {
             let each_token = self.tokens.get(self.token_i).unwrap().clone();
 
             // ブロック定義前にスペースがあれば飛ばす
-            if each_token.kind == data::TokenKind::Space {
+            if each_token.kind == TokenKind::Space {
                 self.token_i += 1;
                 continue;
             }
 
             // ブロック名を判定
-            if each_token.kind == data::TokenKind::StringInBracket {
+            if each_token.kind == TokenKind::StringInBracket {
                 self.token_i += 1;
 
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == data::TokenKind::Space {
+                        if v.kind == TokenKind::Space {
                             self.token_i += 1;
                         }
 
@@ -467,7 +471,7 @@ impl BlockParser {
 
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind != data::TokenKind::Symbol || v.value != "{" {
+                        if v.kind != TokenKind::Symbol || v.value != "{" {
                             return Err(BlockParseError::UnknownToken(each_token.line, each_token.value.clone()));
                         }
 
@@ -508,16 +512,16 @@ impl BlockParser {
 
     // 各ブロックの中身を取得する
     // token_i の条件は get_next_command_content() と同様
-    fn get_block_content(&mut self, block_name: String) -> std::result::Result<data::Block, BlockParseError> {
+    fn get_block_content(&mut self, block_name: String) -> Result<Block, BlockParseError> {
         let cmds = self.get_commands()?;
-        let block = data::Block::new(block_name, cmds);
+        let block = Block::new(block_name, cmds);
         return Ok(block);
     }
 
     // ブロック内のすべてのコマンドを取得する
     // token_i の条件は get_next_command_content() と同様
-    fn get_commands(&mut self) -> std::result::Result<Vec<data::Command>, BlockParseError> {
-        let mut cmds = Vec::<data::Command>::new();
+    fn get_commands(&mut self) -> Result<Vec<Command>, BlockParseError> {
+        let mut cmds = Vec::<Command>::new();
         let mut new_cmd = self.get_next_command_content()?;
 
         // get_next_command_content() の返り値が None になるまで続ける
@@ -532,24 +536,24 @@ impl BlockParser {
     // 各コマンドの中身を取得する
     // token_i がブロックの中身の開始位置もしくは前の命令の終了記号位置 + 1 であること
     // token_i は各コマンドの終了記号位置 + 1 に設定される
-    fn get_next_command_content(&mut self) -> std::result::Result<std::option::Option<data::Command>, BlockParseError> {
-        let mut pragma_args = Vec::<data::Token>::new();
+    fn get_next_command_content(&mut self) -> Result<Option<Command>, BlockParseError> {
+        let mut pragma_args = Vec::<Token>::new();
 
         while self.token_i < self.tokens.len() {
             let each_token = self.tokens.get(self.token_i).unwrap();
 
             // スペースがあれば除去する
-            if each_token.kind == data::TokenKind::Space {
+            if each_token.kind == TokenKind::Space {
                 self.token_i += 1;
                 continue;
             }
 
-            if each_token.kind == data::TokenKind::Symbol && each_token.value == "}" {
+            if each_token.kind == TokenKind::Symbol && each_token.value == "}" {
                 self.token_i += 1;
                 return Ok(None);
             }
 
-            if each_token.kind == data::TokenKind::Symbol && each_token.value == "+" {
+            if each_token.kind == TokenKind::Symbol && each_token.value == "+" {
                 self.token_i += 1;
 
                 let mut last_token_line_num = each_token.line;
@@ -573,13 +577,13 @@ impl BlockParser {
                     };
 
                     // スペースがあれば除去する
-                    if next_token.kind == data::TokenKind::Space {
+                    if next_token.kind == TokenKind::Space {
                         self.token_i += 1;
                         continue;
                     }
 
                     if pragma_name == "\0" {
-                        if next_token.kind == data::TokenKind::ID {
+                        if next_token.kind == TokenKind::ID {
                             // マクロ名が未設定であれば設定する
                             pragma_name = next_token.value.to_string();
                             self.token_i += 1;
@@ -590,13 +594,13 @@ impl BlockParser {
                         }
                     }
 
-                    if next_token.kind == data::TokenKind::ID || next_token.kind == data::TokenKind::String || (next_token.kind == data::TokenKind::Symbol && next_token.value == ".") {
+                    if next_token.kind == TokenKind::ID || next_token.kind == TokenKind::String || (next_token.kind == TokenKind::Symbol && next_token.value == ".") {
                         self.token_i += 1;
                         pragma_args.push(next_token.clone());
                         continue;
                     }
 
-                    if next_token.kind == data::TokenKind::Symbol && next_token.value == "," {
+                    if next_token.kind == TokenKind::Symbol && next_token.value == "," {
                         self.token_i += 1;
 
                         let cmd = self.get_command_from_data(next_token.line, pragma_name, pragma_args)?;
@@ -607,13 +611,13 @@ impl BlockParser {
                 }
             }
 
-            if each_token.kind == data::TokenKind::ID {
+            if each_token.kind == TokenKind::ID {
                 let mut line_num = each_token.line;
 
                 // 規則名前のスペース
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == data::TokenKind::Space {
+                        if v.kind == TokenKind::Space {
                             self.token_i += 1;
                             line_num = v.line;
                         }
@@ -624,7 +628,7 @@ impl BlockParser {
                 // 規則名
                 let rule_name_token = match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == data::TokenKind::ID {
+                        if v.kind == TokenKind::ID {
                             self.token_i += 1;
                             line_num = v.line;
                             v
@@ -638,7 +642,7 @@ impl BlockParser {
                 // 規則名後のスペース
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == data::TokenKind::Space {
+                        if v.kind == TokenKind::Space {
                             self.token_i += 1;
                             line_num = v.line;
                         }
@@ -649,7 +653,7 @@ impl BlockParser {
                 // 規則定義の記号 <
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == data::TokenKind::Symbol && v.value == "<" {
+                        if v.kind == TokenKind::Symbol && v.value == "<" {
                             self.token_i += 1;
                             line_num = v.line;
                         } else {
@@ -662,7 +666,7 @@ impl BlockParser {
                 // 規則定義の記号 -
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == data::TokenKind::Symbol && v.value == "-" {
+                        if v.kind == TokenKind::Symbol && v.value == "-" {
                             self.token_i += 1;
                             line_num = v.line;
                         } else {
@@ -675,14 +679,14 @@ impl BlockParser {
                 // 規則定義の記号後のスペース
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == data::TokenKind::Space {
+                        if v.kind == TokenKind::Space {
                             self.token_i += 1;
                         }
                     },
                     None => return Err(BlockParseError::UnexpectedEOF(line_num, "' '".to_string())),
                 }
 
-                let mut pragma_args = Vec::<data::Token>::new();
+                let mut pragma_args = Vec::<Token>::new();
                 pragma_args.push(rule_name_token.clone());
 
                 // 丸括弧
@@ -693,7 +697,7 @@ impl BlockParser {
                 while self.token_i < self.tokens.len() {
                     let next_token = self.tokens.get(self.token_i).unwrap();
 
-                    if next_token.kind == data::TokenKind::Symbol {
+                    if next_token.kind == TokenKind::Symbol {
                         match next_token.value.as_str() {
                             "(" => {
                                 paren_nest += 1;
@@ -719,7 +723,7 @@ impl BlockParser {
                         }
                     }
 
-                    if next_token.kind == data::TokenKind::Symbol && next_token.value == "," && paren_nest == 0 && brace_nest == 0 {
+                    if next_token.kind == TokenKind::Symbol && next_token.value == "," && paren_nest == 0 && brace_nest == 0 {
                         self.token_i += 1;
 
                         let cmd = self.get_command_from_data(next_token.line, "define".to_string(), pragma_args)?;
@@ -737,7 +741,7 @@ impl BlockParser {
             return Err(BlockParseError::UnexpectedToken(each_token.line, each_token.value.to_string(), "'+' and ID".to_string()));
         }
 
-        // let cmd = data::Command::;
+        // let cmd = Command::;
         // return Ok(cmd);
 
         // ブロック終了記号の検知はどうする？
@@ -747,7 +751,7 @@ impl BlockParser {
     }
 
     // pragma_arg: プラグマ名が define の場合、長さは 0 であってならない
-    fn get_command_from_data(&self, line_num: usize, pragma_name: String, pragma_args: Vec<data::Token>) -> std::result::Result<data::Command, BlockParseError> {
+    fn get_command_from_data(&self, line_num: usize, pragma_name: String, pragma_args: Vec<Token>) -> Result<Command, BlockParseError> {
         let cmd = match pragma_name.as_str() {
             "define" => {
                 if pragma_args.len() == 0 {
@@ -756,8 +760,8 @@ impl BlockParser {
 
                 let rule_name = pragma_args.get(0).unwrap().value.to_string();
                 let choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), &pragma_args[1..].to_vec())?;
-                let rule = rule::Rule::new(rule_name.to_string(), choices);
-                data::Command::Define(line_num, rule)
+                let rule = Rule::new(rule_name.to_string(), choices);
+                Command::Define(line_num, rule)
             },
             "start" => {
                 if pragma_args.len() == 0 {
@@ -772,7 +776,7 @@ impl BlockParser {
 
                 let block_name_token = pragma_args.get(0).unwrap();
 
-                if block_name_token.kind != data::TokenKind::ID {
+                if block_name_token.kind != TokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, block_name_token.value.to_string(), "ID".to_string()));
                 }
 
@@ -780,20 +784,20 @@ impl BlockParser {
 
                 let period_token = pragma_args.get(1).unwrap();
 
-                if period_token.kind != data::TokenKind::Symbol || period_token.value != "." {
+                if period_token.kind != TokenKind::Symbol || period_token.value != "." {
                     return Err(BlockParseError::UnexpectedToken(line_num, period_token.value.to_string(), "'.'".to_string()));
                 }
 
                 let rule_name_token = pragma_args.get(2).unwrap();
 
-                if rule_name_token.kind != data::TokenKind::ID {
+                if rule_name_token.kind != TokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, period_token.value.to_string(), "ID".to_string()));
                 }
 
                 let block_name = block_name_token.value.to_string();
                 let rule_name = rule_name_token.value.to_string();
 
-                data::Command::Start(line_num, self.file_alias_name.to_string(), block_name, rule_name)
+                Command::Start(line_num, self.file_alias_name.to_string(), block_name, rule_name)
             },
             "use" => {
                 if pragma_args.len() == 0 {
@@ -806,7 +810,7 @@ impl BlockParser {
 
                 let block_name_token = pragma_args.get(0).unwrap();
 
-                if block_name_token.kind != data::TokenKind::ID {
+                if block_name_token.kind != TokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, block_name_token.value.to_string(), "ID".to_string()));
                 }
 
@@ -817,12 +821,12 @@ impl BlockParser {
 
                 match pragma_args.get(arg_i) {
                     Some(period_token) => {
-                        if period_token.kind == data::TokenKind::Symbol && period_token.value == "." {
+                        if period_token.kind == TokenKind::Symbol && period_token.value == "." {
                             arg_i += 1;
 
                             match pragma_args.get(arg_i) {
                                 Some(id_token) => {
-                                    if id_token.kind != data::TokenKind::ID {
+                                    if id_token.kind != TokenKind::ID {
                                         return Err(BlockParseError::UnexpectedToken(line_num, id_token.value.clone(), "ID".to_string()));
                                     }
 
@@ -843,7 +847,7 @@ impl BlockParser {
 
                 match pragma_args.get(arg_i) {
                     Some(v) => {
-                        if v.kind != data::TokenKind::ID || v.value != "as" {
+                        if v.kind != TokenKind::ID || v.value != "as" {
                             return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "'as'".to_string()));
                         }
 
@@ -851,7 +855,7 @@ impl BlockParser {
 
                         match pragma_args.get(arg_i) {
                             Some(v) => {
-                                if v.kind != data::TokenKind::ID {
+                                if v.kind != TokenKind::ID {
                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "ID".to_string()));
                                 }
 
@@ -863,7 +867,7 @@ impl BlockParser {
                     None => (),
                 }
 
-                data::Command::Use(line_num, file_alias_name, block_name, block_alias_name)
+                Command::Use(line_num, file_alias_name, block_name, block_alias_name)
             },
             _ => return Err(BlockParseError::UnknownPragmaName(line_num, pragma_name.to_string())),
         };
@@ -871,13 +875,13 @@ impl BlockParser {
         return Ok(cmd);
     }
 
-    fn get_choice_vec(line_num: usize, rule_name: String, tokens: &Vec<data::Token>) -> std::result::Result<Vec<Box<rule::RuleChoice>>, BlockParseError> {
+    fn get_choice_vec(line_num: usize, rule_name: String, tokens: &Vec<Token>) -> Result<Vec<Box<RuleChoice>>, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::RuleHasNoChoice(rule_name.to_string()));
         }
 
-        let mut choices = Vec::<Box<rule::RuleChoice>>::new();
-        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), data::ASTReflection::Unreflectable(), false, (1, 1), false);
+        let mut choices = Vec::<Box<RuleChoice>>::new();
+        let primitive_choice = RuleChoice::new(RuleLookaheadKind::None, (1, 1), ASTReflection::Unreflectable(), false, (1, 1), false);
 
         let mut token_i = 0;
         let mut choice_start_i = 0;
@@ -885,12 +889,12 @@ impl BlockParser {
         let mut paren_nest = 0usize;
         let mut brace_nest = 0usize;
 
-        let mut is_random_order_syntax = std::option::Option::<bool>::None;
+        let mut is_random_order_syntax = Option::<bool>::None;
 
         while token_i < tokens.len() {
             let each_token = tokens.get(token_i).unwrap();
 
-            if each_token.kind == data::TokenKind::Symbol {
+            if each_token.kind == TokenKind::Symbol {
                 match each_token.value.as_str() {
                     ":" => {
                         if paren_nest == 0 && brace_nest == 0 {
@@ -967,10 +971,10 @@ impl BlockParser {
         return Ok(choices);
     }
 
-    fn get_elem_tokens(tokens: &Vec<data::Token>) -> std::result::Result<Vec<Vec<data::Token>>, BlockParseError> {
+    fn get_elem_tokens(tokens: &Vec<Token>) -> Result<Vec<Vec<Token>>, BlockParseError> {
         let mut token_i = 0;
 
-        let mut elem_tokens = Vec::<Vec<data::Token>>::new();
+        let mut elem_tokens = Vec::<Vec<Token>>::new();
         let mut elem_start_i = 0;
 
         let mut paren_nest: usize = 0;
@@ -978,7 +982,7 @@ impl BlockParser {
         while token_i < tokens.len() {
             let each_token = tokens.get(token_i).unwrap();
 
-            if each_token.kind == data::TokenKind::Space {
+            if each_token.kind == TokenKind::Space {
                 if paren_nest == 0 {
                     // トークン列を追加
 
@@ -991,7 +995,7 @@ impl BlockParser {
                 }
             }
 
-            if each_token.kind == data::TokenKind::Symbol {
+            if each_token.kind == TokenKind::Symbol {
                 match each_token.value.as_str() {
                     "(" => {
                         paren_nest += 1;
@@ -1032,11 +1036,11 @@ impl BlockParser {
 
     // arg: tokens: 両端のスペースは削除される
     // note: 実際には choice と expr 両方の解析をする?
-    fn get_choice(line_num: usize, rule_name: String, choice: &mut rule::RuleChoice, tokens: &mut Vec<data::Token>) -> std::result::Result<(), BlockParseError> {
+    fn get_choice(line_num: usize, rule_name: String, choice: &mut RuleChoice, tokens: &mut Vec<Token>) -> Result<(), BlockParseError> {
         // 最初にスペースがあれば削除
         match tokens.get(0) {
             Some(v) => {
-                if v.kind == data::TokenKind::Space {
+                if v.kind == TokenKind::Space {
                     tokens.remove(0);
                 }
 
@@ -1050,7 +1054,7 @@ impl BlockParser {
         // 最後にスペースがあれば削除
         match tokens.get(tokens.len() - 1) {
             Some(v) => {
-                if v.kind == data::TokenKind::Space {
+                if v.kind == TokenKind::Space {
                     tokens.pop();
                 }
 
@@ -1066,7 +1070,7 @@ impl BlockParser {
 
         for each_tokens in &elem_tokens {
             let starts_with_open_paren = match each_tokens.get(0) {
-                Some(v) => v.kind == data::TokenKind::Symbol && v.value == "(",
+                Some(v) => v.kind == TokenKind::Symbol && v.value == "(",
                 None => false,
             };
 
@@ -1076,15 +1080,15 @@ impl BlockParser {
 
             let lookahead_kind = match each_tokens.get(token_i) {
                 Some(v) => {
-                    let kind = rule::RuleLookaheadKind::to_lookahead_kind(&v.value);
+                    let kind = RuleLookaheadKind::to_lookahead_kind(&v.value);
 
-                    if kind != rule::RuleLookaheadKind::None {
+                    if kind != RuleLookaheadKind::None {
                         token_i += 1;
                     }
 
                     kind
                 },
-                None => rule::RuleLookaheadKind::None,
+                None => RuleLookaheadKind::None,
             };
 
             let content_start_i = token_i;
@@ -1097,7 +1101,7 @@ impl BlockParser {
             let mut is_random_order_syntax = false;
             let mut paren_nest = 0;
 
-            let mut ast_reflection = data::ASTReflection::Unreflectable();
+            let mut ast_reflection = ASTReflection::Unreflectable();
 
             let mut tmp_token_i = token_i;
 
@@ -1105,7 +1109,7 @@ impl BlockParser {
                 let token = each_tokens.get(tmp_token_i).unwrap();
                 tmp_token_i += 1;
 
-                let tmp_loop_count = rule::RuleCountConverter::loop_symbol_to_count(&token.value);
+                let tmp_loop_count = RuleCountConverter::loop_symbol_to_count(&token.value);
 
                 if tmp_loop_count != (1, 1) {
                     if paren_nest == 0 {
@@ -1114,7 +1118,7 @@ impl BlockParser {
                         token_i += 1;
                         break;
                     }
-                } else if token.kind == data::TokenKind::Symbol {
+                } else if token.kind == TokenKind::Symbol {
                     match token.value.as_str() {
                         "(" => {
                             is_choice = true;
@@ -1152,7 +1156,7 @@ impl BlockParser {
             while token_i < each_tokens.len() {
                 match each_tokens.get(token_i) {
                     Some(v) => {
-                        if v.kind == data::TokenKind::Symbol {
+                        if v.kind == TokenKind::Symbol {
                             match v.value.as_str() {
                                 "^" => {
                                     if paren_nest != 0 {
@@ -1166,7 +1170,7 @@ impl BlockParser {
 
                                     match each_tokens.get(token_i) {
                                         Some(v) => {
-                                            if v.kind != data::TokenKind::StringInBracket {
+                                            if v.kind != TokenKind::StringInBracket {
                                                 return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "string in bracket".to_string()));
                                             }
 
@@ -1228,12 +1232,12 @@ impl BlockParser {
 
                                     // ID が続いていればノード名として保持
                                     ast_reflection = match each_tokens.get(token_i) {
-                                        Some(v) if v.kind == data::TokenKind::ID => {
+                                        Some(v) if v.kind == TokenKind::ID => {
                                             token_i += 1;
                                             content_end_i -= 1;
-                                            data::ASTReflection::Reflectable(v.value.clone())
+                                            ASTReflection::Reflectable(v.value.clone())
                                         },
-                                        _ => data::ASTReflection::Reflectable(String::new()),
+                                        _ => ASTReflection::Reflectable(String::new()),
                                     }
                                 }
                                 "{" => {
@@ -1255,10 +1259,10 @@ impl BlockParser {
                                     };
 
                                     // 先のトークンが '}' であれば単体の数値が指定されたものとして扱う
-                                    if next_token.kind == data::TokenKind::Symbol && next_token.value == "}" {
+                                    if next_token.kind == TokenKind::Symbol && next_token.value == "}" {
                                         match each_tokens.get(token_i) {
                                             Some(num_token) => {
-                                                if num_token.kind != data::TokenKind::Number {
+                                                if num_token.kind != TokenKind::Number {
                                                     return Err(BlockParseError::UnexpectedToken(line_num, num_token.value.to_string(), "number".to_string()));
                                                 }
         
@@ -1276,12 +1280,12 @@ impl BlockParser {
 
                                         match each_tokens.get(token_i) {
                                             Some(v) => {
-                                                if v.kind == data::TokenKind::Number {
+                                                if v.kind == TokenKind::Number {
                                                     loop_min_count = v.value.parse::<i32>().unwrap();
                                                     content_end_i -= 1;
                                                     token_i += 1;
                                                 } else {
-                                                    if v.kind != data::TokenKind::Symbol || v.value != "," {
+                                                    if v.kind != TokenKind::Symbol || v.value != "," {
                                                         return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "','".to_string()));
                                                     }
 
@@ -1293,7 +1297,7 @@ impl BlockParser {
 
                                         match each_tokens.get(token_i) {
                                             Some(v) => {
-                                                if v.kind != data::TokenKind::Symbol || v.value != "," {
+                                                if v.kind != TokenKind::Symbol || v.value != "," {
                                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "','".to_string()));
                                                 }
 
@@ -1306,12 +1310,12 @@ impl BlockParser {
 
                                         match each_tokens.get(token_i) {
                                             Some(v) => {
-                                                if v.kind == data::TokenKind::Number {
+                                                if v.kind == TokenKind::Number {
                                                     loop_max_count = v.value.parse::<i32>().unwrap();
                                                     content_end_i -= 1;
                                                     token_i += 1;
                                                 } else {
-                                                    if v.kind != data::TokenKind::Symbol || v.value != "}" {
+                                                    if v.kind != TokenKind::Symbol || v.value != "}" {
                                                         return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'}'".to_string()));
                                                     }
 
@@ -1323,7 +1327,7 @@ impl BlockParser {
 
                                         match each_tokens.get(token_i) {
                                             Some(v) => {
-                                                if v.kind != data::TokenKind::Symbol || v.value != "}" {
+                                                if v.kind != TokenKind::Symbol || v.value != "}" {
                                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.to_string(), "'}'".to_string()));
                                                 }
 
@@ -1380,12 +1384,12 @@ impl BlockParser {
                 for tk in &content_tokens {
                     print!("{},", tk.value);
                 }
-                print!(" {}", rule::RuleCountConverter::count_to_string(&loop_count, true, "{", ",", "}"));
+                print!(" {}", RuleCountConverter::count_to_string(&loop_count, true, "{", ",", "}"));
                 print!(" {}", if is_random_order { "^" } else { "" });
-                print!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
+                print!(" {}", RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
                 print!(" {}", match &ast_reflection {
-                    data::ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name),
-                    data::ASTReflection::Unreflectable() => String::new()
+                    ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name),
+                    ASTReflection::Unreflectable() => String::new()
                 });
                 println!();
             }
@@ -1401,7 +1405,7 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.to_string(), expected_token.to_string()));
                 }
 
-                let mut new_choice = rule::RuleChoice::new(lookahead_kind, loop_count, ast_reflection.clone(), is_random_order, occurrence_count, has_choices);
+                let mut new_choice = RuleChoice::new(lookahead_kind, loop_count, ast_reflection.clone(), is_random_order, occurrence_count, has_choices);
                 // 選択の括弧などを取り除いてから渡す
                 let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
 
@@ -1415,19 +1419,19 @@ impl BlockParser {
 
                 let sub_choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), choice_tokens)?;
 
-                match rule::RuleChoice::is_hierarchy_omission_needed(&sub_choices, is_random_order) {
+                match RuleChoice::is_hierarchy_omission_needed(&sub_choices, is_random_order) {
                     Some(v) if loop_count == (1, 1) => {
                         new_choice.elem_containers = v.elem_containers;
                         new_choice.has_choices = v.has_choices;
                     },
                     _ => {
                         for each_choice in sub_choices {
-                            new_choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(each_choice));
+                            new_choice.elem_containers.push(RuleElementContainer::RuleChoice(each_choice));
                         }
                     }
                 }
 
-                choice.elem_containers.push(rule::RuleElementContainer::RuleChoice(Box::new(new_choice)));
+                choice.elem_containers.push(RuleElementContainer::RuleChoice(Box::new(new_choice)));
             } else {
                 if is_random_order {
                     return Err(BlockParseError::UnexpectedToken(line_num, "^".to_string(), "nothing".to_string()));
@@ -1444,14 +1448,14 @@ impl BlockParser {
                 }
 
                 let new_expr = BlockParser::get_expr(line_num, lookahead_kind, loop_count, ast_reflection, expr_tokens)?;
-                choice.elem_containers.push(rule::RuleElementContainer::RuleExpression(Box::new(new_expr)));
+                choice.elem_containers.push(RuleElementContainer::RuleExpression(Box::new(new_expr)));
             }
         }
 
         return Ok(());
     }
 
-    fn get_expr(line_num: usize, lookahead_kind: rule::RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: data::ASTReflection, tokens: Vec<data::Token>) -> std::result::Result<rule::RuleExpression, BlockParseError> {
+    fn get_expr(line_num: usize, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: ASTReflection, tokens: Vec<Token>) -> Result<RuleExpression, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::ExpectedToken(line_num, "id".to_string()));
         }
@@ -1459,17 +1463,17 @@ impl BlockParser {
         let first_token = tokens.get(0).unwrap();
 
         let new_expr = match first_token.kind {
-            data::TokenKind::ID => {
+            TokenKind::ID => {
                 let mut id = first_token.value.to_string();
                 let mut token_i = 1;
 
                 while token_i < tokens.len() {
                     match tokens.get(token_i) {
                         Some(v) => {
-                            if v.kind == data::TokenKind::Symbol && v.value == "." {
+                            if v.kind == TokenKind::Symbol && v.value == "." {
                                 match tokens.get(token_i + 1) {
                                     Some(v) => {
-                                        if v.kind == data::TokenKind::ID {
+                                        if v.kind == TokenKind::ID {
                                             id += &format!(".{}", v.value);
                                             token_i += 2;
                                         } else {
@@ -1486,26 +1490,26 @@ impl BlockParser {
                     }
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::ID, lookahead_kind, loop_count, ast_reflection, id)
+                RuleExpression::new(line_num, RuleExpressionKind::ID, lookahead_kind, loop_count, ast_reflection, id)
             },
-            data::TokenKind::String => {
+            TokenKind::String => {
                 if tokens.len() >= 2 {
                     let unexpected_token = tokens.get(1).unwrap();
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
                 }
 
                 let value = first_token.value[1..first_token.value.len() - 1].to_string();
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, ast_reflection, value)
+                RuleExpression::new(line_num, RuleExpressionKind::String, lookahead_kind, loop_count, ast_reflection, value)
             },
-            data::TokenKind::StringInBracket => {
+            TokenKind::StringInBracket => {
                 if tokens.len() >= 2 {
                     let unexpected_token = tokens.get(1).unwrap();
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::CharClass, lookahead_kind, loop_count, ast_reflection, first_token.value.to_string())
+                RuleExpression::new(line_num, RuleExpressionKind::CharClass, lookahead_kind, loop_count, ast_reflection, first_token.value.to_string())
             },
-            data::TokenKind::Symbol => {
+            TokenKind::Symbol => {
                 if tokens.len() >= 2 {
                     let unexpected_token = tokens.get(1).unwrap();
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
@@ -1515,7 +1519,7 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "'.'".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::Wildcard, lookahead_kind, loop_count, ast_reflection, ".".to_string())
+                RuleExpression::new(line_num, RuleExpressionKind::Wildcard, lookahead_kind, loop_count, ast_reflection, ".".to_string())
             },
             _ => return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "expression".to_string())),
         };

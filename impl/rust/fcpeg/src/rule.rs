@@ -1,15 +1,20 @@
-use crate::blockparser;
-use crate::data;
-use regex;
+use std::collections::*;
+use std::fmt::*;
+use std::option::*;
+
+use crate::blockparser::*;
+use crate::data::*;
+
+use regex::*;
 
 pub struct RuleMap {
-    pub rule_map: std::collections::HashMap<String, Rule>,
-    pub regex_map: std::collections::HashMap::<String, regex::Regex>,
+    pub rule_map: HashMap<String, Rule>,
+    pub regex_map: HashMap::<String, Regex>,
     pub start_rule_id: String,
 }
 
-impl std::fmt::Display for RuleMap {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for RuleMap {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         let mut rule_text_lines = Vec::<String>::new();
 
         for each_rule in self.rule_map.values() {
@@ -25,10 +30,10 @@ impl std::fmt::Display for RuleMap {
 }
 
 impl RuleMap {
-    pub fn new(start_rule_id: String) -> Self {
+    pub fn new(start_rule_id: String) -> RuleMap {
         return RuleMap {
-            rule_map: std::collections::HashMap::new(),
-            regex_map: std::collections::HashMap::new(),
+            rule_map: HashMap::new(),
+            regex_map: HashMap::new(),
             start_rule_id: start_rule_id,
         };
     }
@@ -39,33 +44,33 @@ impl RuleMap {
     }
 
     #[inline(always)]
-    pub fn get_rule(&mut self, rule_id: &String) -> std::option::Option<&Rule> {
+    pub fn get_rule(&mut self, rule_id: &String) -> Option<&Rule> {
         return self.rule_map.get(rule_id);
     }
 
     // ここでは規則 ID の存在チェックは行われない
-    pub fn get_from_root_fcpeg_file_man(fcpeg_file_man: blockparser::FCPEGFileMan) -> std::result::Result<RuleMap, blockparser::BlockParseError> {
+    pub fn get_from_root_fcpeg_file_man(fcpeg_file_man: FCPEGFileMan) -> std::result::Result<RuleMap, BlockParseError> {
         let main_block = match fcpeg_file_man.block_map.get("Main") {
             Some(v) => v,
-            None => return Err(blockparser::BlockParseError::MainBlockNotFound()),
+            None => return Err(BlockParseError::MainBlockNotFound()),
         };
 
         let mut has_start_cmd = false;
         let mut start_rule_id = "".to_string();
 
         // <block_alias_name, block_id>
-        let mut block_alias_map = std::collections::HashMap::<String, String>::new();
+        let mut block_alias_map = HashMap::<String, String>::new();
 
         // メインブロックの use コマンドを処理する
         // define ブロックがあればエラー
         for each_cmd in &main_block.cmds {
             match each_cmd {
-                data::Command::Define(_line, _rule) => {
-                    return Err(blockparser::BlockParseError::RuleInMainBlock());
+                Command::Define(_line, _rule) => {
+                    return Err(BlockParseError::RuleInMainBlock());
                 },
-                data::Command::Use(line, file_alias_name, block_name, block_alias_name) => {
+                Command::Use(line, file_alias_name, block_name, block_alias_name) => {
                     if block_alias_map.contains_key(&block_alias_name.to_string()) {
-                        return Err(blockparser::BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.to_string()));
+                        return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.to_string()));
                     }
 
                     let rule_id = format!("{}.{}", file_alias_name, block_name);
@@ -78,9 +83,9 @@ impl RuleMap {
         // start コマンドを処理する
         for each_cmd in &main_block.cmds {
             match each_cmd {
-                data::Command::Start(_line, file_alias_name, block_name, rule_name) => {
+                Command::Start(_line, file_alias_name, block_name, rule_name) => {
                     if has_start_cmd {
-                        return Err(blockparser::BlockParseError::DuplicatedStartCmd());
+                        return Err(BlockParseError::DuplicatedStartCmd());
                     }
 
                     has_start_cmd = true;
@@ -96,7 +101,7 @@ impl RuleMap {
         }
 
         if !has_start_cmd {
-            return Err(blockparser::BlockParseError::NoStartCmdInMainBlock());
+            return Err(BlockParseError::NoStartCmdInMainBlock());
         }
 
         let mut rule_map = RuleMap::new(start_rule_id);
@@ -105,21 +110,21 @@ impl RuleMap {
         return Ok(rule_map);
     }
 
-    pub fn add_rules_from_fcpeg_file_man(&mut self, fcpeg_file_man: &blockparser::FCPEGFileMan) -> std::result::Result<(), blockparser::BlockParseError> {
+    pub fn add_rules_from_fcpeg_file_man(&mut self, fcpeg_file_man: &FCPEGFileMan) -> std::result::Result<(), BlockParseError> {
         for each_block in fcpeg_file_man.block_map.values() {
             if each_block.name == "Main" {
                 continue;
             }
 
-            let mut block_alias_map = std::collections::HashMap::<String, String>::new();
+            let mut block_alias_map = HashMap::<String, String>::new();
 
             // start コマンドを排除しながら use コマンドを処理する
             for each_cmd in &each_block.cmds {
                 match each_cmd {
-                    data::Command::Start(_line, _file_alias_name, _block_name, _rule_name) => return Err(blockparser::BlockParseError::StartCmdOutsideMainBlock()),
-                    data::Command::Use(line, file_alias_name, block_name, block_alias_name) => {
+                    Command::Start(_line, _file_alias_name, _block_name, _rule_name) => return Err(BlockParseError::StartCmdOutsideMainBlock()),
+                    Command::Use(line, file_alias_name, block_name, block_alias_name) => {
                         if block_alias_map.contains_key(&block_alias_name.to_string()) {
-                            return Err(blockparser::BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.to_string()));
+                            return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.to_string()));
                         }
 
                         let rule_id = format!("{}.{}", file_alias_name.to_string(), block_name.to_string());
@@ -132,7 +137,7 @@ impl RuleMap {
             // define コマンドを処理する
             for each_cmd in &each_block.cmds {
                 match each_cmd {
-                    data::Command::Define(_line, rule) => {
+                    Command::Define(_line, rule) => {
                         let mut each_rule = rule.clone();
                         each_rule.name = format!("{}.{}.{}", fcpeg_file_man.file_alias_name, each_block.name, each_rule.name);
 
@@ -154,7 +159,7 @@ impl RuleMap {
         return Ok(());
     }
 
-    pub fn proc_define_cmd(&mut self, choice: &mut RuleChoice, rule_id: &String, block_name: &String, fcpeg_file_man: &blockparser::FCPEGFileMan, block_alias_map: &std::collections::HashMap<String, String>) -> std::result::Result<(), blockparser::BlockParseError> {
+    pub fn proc_define_cmd(&mut self, choice: &mut RuleChoice, rule_id: &String, block_name: &String, fcpeg_file_man: &FCPEGFileMan, block_alias_map: &HashMap<String, String>) -> std::result::Result<(), BlockParseError> {
         for each_elem in choice.elem_containers.iter_mut() {
             match each_elem {
                 RuleElementContainer::RuleChoice(each_choice) => {
@@ -178,7 +183,7 @@ impl RuleMap {
                                 each_expr.value = format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name);
                             } else {
                                 // ブロック名がエイリアスでない場合
-                                return Err(blockparser::BlockParseError::BlockAliasNotFound(each_expr.line, block_name.to_string()));
+                                return Err(BlockParseError::BlockAliasNotFound(each_expr.line, block_name.to_string()));
                             }
 
                             continue;
@@ -193,7 +198,7 @@ impl RuleMap {
                             continue;
                         }
 
-                        return Err(blockparser::BlockParseError::InternalErr(format!("invalid id expression '{}'", each_expr.value)));
+                        return Err(BlockParseError::InternalErr(format!("invalid id expression '{}'", each_expr.value)));
                     }
 
                     if each_expr.kind == RuleExpressionKind::CharClass {
@@ -201,8 +206,8 @@ impl RuleMap {
                             continue;
                         }
 
-                        let pattern = match regex::Regex::new(&each_expr.value.to_string()) {
-                            Err(_e) => return Err(blockparser::BlockParseError::InvalidCharClassFormat(each_expr.line, each_expr.to_string())),
+                        let pattern = match Regex::new(&each_expr.value.to_string()) {
+                            Err(_e) => return Err(BlockParseError::InvalidCharClassFormat(each_expr.line, each_expr.to_string())),
                             Ok(v) => v,
                         };
 
@@ -280,8 +285,8 @@ pub struct Rule {
     pub choices: Vec<Box<RuleChoice>>,
 }
 
-impl std::fmt::Display for Rule {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for Rule {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         let mut choice_text = Vec::<String>::new();
 
         for each_choice in &self.choices {
@@ -293,7 +298,7 @@ impl std::fmt::Display for Rule {
 }
 
 impl Rule {
-    pub fn new(name: String, choices: Vec<Box<RuleChoice>>) -> Self {
+    pub fn new(name: String, choices: Vec<Box<RuleChoice>>) -> Rule {
         return Rule {
             name: name,
             choices: choices,
@@ -307,8 +312,8 @@ pub enum RuleElementContainer {
     RuleExpression(Box<RuleExpression>),
 }
 
-impl std::fmt::Display for RuleElementContainer {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for RuleElementContainer {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         return match self {
             RuleElementContainer::RuleChoice(choice) => write!(f, "{}", choice),
             RuleElementContainer::RuleExpression(expr) => write!(f, "{}", expr),
@@ -321,14 +326,14 @@ pub struct RuleChoice {
     pub elem_containers: Vec<RuleElementContainer>,
     pub lookahead_kind: RuleLookaheadKind,
     pub loop_count: (i32, i32),
-    pub ast_reflection: data::ASTReflection,
+    pub ast_reflection: ASTReflection,
     pub is_random_order: bool,
     pub occurrence_count: (i32, i32),
     pub has_choices: bool,
 }
 
-impl std::fmt::Display for RuleChoice {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for RuleChoice {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         let mut seq_text = Vec::<String>::new();
 
         for each_container in &self.elem_containers {
@@ -347,8 +352,8 @@ impl std::fmt::Display for RuleChoice {
         let random_order_symbol = if self.is_random_order { "^" } else { "" };
         let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
         let ast_reflection_text = match &self.ast_reflection {
-            data::ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.to_string()),
-            data::ASTReflection::Unreflectable() => String::new()
+            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.to_string()),
+            ASTReflection::Unreflectable() => String::new()
         };
 
         return write!(f, "{}", format!("{}({}){}{}{}{}", self.lookahead_kind.to_symbol_string(), seq_text.join(separator), loop_text, random_order_symbol, random_order_count, ast_reflection_text));
@@ -356,7 +361,7 @@ impl std::fmt::Display for RuleChoice {
 }
 
 impl RuleChoice {
-    pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: data::ASTReflection, is_random_order: bool, occurrence_count: (i32, i32), has_choices: bool) -> Self {
+    pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: ASTReflection, is_random_order: bool, occurrence_count: (i32, i32), has_choices: bool) -> RuleChoice {
         return RuleChoice {
             elem_containers: vec![],
             lookahead_kind: lookahead_kind,
@@ -379,7 +384,7 @@ impl RuleChoice {
         return false;
     }
 
-    pub fn is_hierarchy_omission_needed(choices: &Vec<Box<RuleChoice>>, is_random_order: bool) -> std::option::Option<Box<RuleChoice>> {
+    pub fn is_hierarchy_omission_needed(choices: &Vec<Box<RuleChoice>>, is_random_order: bool) -> Option<Box<RuleChoice>> {
         match choices.get(0) {
             Some(v) => {
                 if choices.len() == 1 && v.lookahead_kind == RuleLookaheadKind::None && v.loop_count == (1, 1) && v.occurrence_count == (1, 1) {
@@ -434,16 +439,16 @@ pub struct RuleExpression {
     pub kind: RuleExpressionKind,
     pub lookahead_kind: RuleLookaheadKind,
     pub loop_count: (i32, i32),
-    pub ast_reflection: data::ASTReflection,
+    pub ast_reflection: ASTReflection,
     pub value: String,
 }
 
-impl std::fmt::Display for RuleExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for RuleExpression {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
         let ast_reflection_text = match &self.ast_reflection {
-            data::ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.to_string()),
-            data::ASTReflection::Unreflectable() => String::new()
+            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.to_string()),
+            ASTReflection::Unreflectable() => String::new()
         };
 
         return write!(f, "{}{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text, ast_reflection_text);
@@ -451,7 +456,7 @@ impl std::fmt::Display for RuleExpression {
 }
 
 impl RuleExpression {
-    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: data::ASTReflection, value: String) -> Self {
+    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: ASTReflection, value: String) -> RuleExpression {
         return RuleExpression {
             line: line,
             kind: kind,

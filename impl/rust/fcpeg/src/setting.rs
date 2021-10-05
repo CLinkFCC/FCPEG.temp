@@ -1,14 +1,18 @@
-use rustnutlib::*;
+use std::collections::*;
+use std::fmt::*;
+
+use rustnutlib::console::*;
+use rustnutlib::fileman::*;
 
 // HashMap<name, (values, sub_map)>
-type PropertyMap = std::collections::HashMap<String, (Vec<String>, PropertySubMap)>;
-type PropertySubMap = std::collections::HashMap::<String, Vec<String>>;
+type PropertyMap = HashMap<String, (Vec<String>, PropertySubMap)>;
+type PropertySubMap = HashMap::<String, Vec<String>>;
 
 #[derive(Debug)]
 pub enum SettingFileError {
     Unknown(),
     DuplicatedPropName(String),
-    FileManError(fileman::FileManError),
+    FileManError(FileManError),
     InvalidPropValue(String, String),
     InvalidPropValueLength(String),
     InvalidSyntax(usize, String),
@@ -16,23 +20,23 @@ pub enum SettingFileError {
     UnknownRegexMode(String),
 }
 
-impl std::fmt::Display for SettingFileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for SettingFileError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         return write!(f, "[SettingFileError]");
     }
 }
 
 impl SettingFileError {
-    pub fn get_log_data(&self) -> console::ConsoleLogData {
+    pub fn get_log_data(&self) -> ConsoleLogData {
         match self {
-            SettingFileError::Unknown() => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "unknown", vec![], vec![]),
-            SettingFileError::DuplicatedPropName(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "duplicated property name", vec![], vec![format!("property name:\t{}", prop_name)]),
+            SettingFileError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
+            SettingFileError::DuplicatedPropName(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, "duplicated property name", vec![], vec![format!("property name:\t{}", prop_name)]),
             SettingFileError::FileManError(err) => err.get_log_data(),
-            SettingFileError::InvalidPropValue(prop_name, prop_value) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)]),
-            SettingFileError::InvalidPropValueLength(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name)]),
-            SettingFileError::InvalidSyntax(line, msg) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, "invalid syntax", vec![format!("{}", msg), format!("line:\t{}", line)], vec![]),
-            SettingFileError::UnknownPropName(prop_name) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown property name '{}'", prop_name), vec![], vec![]),
-            SettingFileError::UnknownRegexMode(input) => console::ConsoleLogData::new(console::ConsoleLogKind::Error, &format!("unknown regex mode '{}'", input), vec![], vec![]),
+            SettingFileError::InvalidPropValue(prop_name, prop_value) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)]),
+            SettingFileError::InvalidPropValueLength(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name)]),
+            SettingFileError::InvalidSyntax(line, msg) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid syntax", vec![format!("{}", msg), format!("line:\t{}", line)], vec![]),
+            SettingFileError::UnknownPropName(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown property name '{}'", prop_name), vec![], vec![]),
+            SettingFileError::UnknownRegexMode(input) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown regex mode '{}'", input), vec![], vec![]),
         }
     }
 }
@@ -43,8 +47,8 @@ pub enum RegexMode {
     Posix,
 }
 
-impl std::fmt::Display for RegexMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for RegexMode {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         return match self {
             RegexMode::Default => write!(f, "Default"),
             RegexMode::Onise => write!(f, "Onise"),
@@ -65,22 +69,22 @@ impl RegexMode {
 }
 
 pub struct SettingFile {
-    pub file_alias_map: std::collections::HashMap<String, String>,
+    pub file_alias_map: HashMap<String, String>,
     pub regex_mode: RegexMode,
     pub reverse_ast_reflect: bool,
 }
 
 impl SettingFile {
-    pub fn new() -> Self {
+    pub fn new() -> SettingFile {
         return SettingFile {
-            file_alias_map: std::collections::HashMap::new(),
+            file_alias_map: HashMap::new(),
             regex_mode: RegexMode::Default,
             reverse_ast_reflect: false,
         }
     }
 
     pub fn load(&mut self, src_path: String) -> std::result::Result<(), SettingFileError> {
-        let lines = match fileman::FileMan::read_lines(&src_path) {
+        let lines = match FileMan::read_lines(&src_path) {
             Err(e) => return Err(SettingFileError::FileManError(e)),
             Ok(v) => v,
         };

@@ -4,7 +4,10 @@ pub mod parser;
 pub mod rule;
 pub mod setting;
 
-pub use rustnutlib::*;
+use std::result::*;
+
+use rustnutlib::console::*;
+use rustnutlib::fileman::*;
 
 pub enum FCPEGError {
     BlockParseErr(blockparser::BlockParseError),
@@ -13,7 +16,7 @@ pub enum FCPEGError {
 }
 
 impl FCPEGError {
-    pub fn get_console_data(&self) -> console::ConsoleLogData {
+    pub fn get_console_data(&self) -> ConsoleLogData {
         return match self {
             FCPEGError::BlockParseErr(e) => e.get_log_data(),
             FCPEGError::FCPEGFileManErr(e) => e.get_log_data(),
@@ -25,11 +28,11 @@ impl FCPEGError {
 pub struct FCPEG {}
 
 impl FCPEG {
-    pub fn parse_from_paths(fcpeg_file_path: &String, input_file_paths: &Vec<String>) -> std::result::Result<Vec<data::SyntaxTree>, FCPEGError> {
+    pub fn parse_from_paths(fcpeg_file_path: &String, input_file_paths: &Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {
         let mut input_srcs = Vec::<String>::new();
 
         for each_path in input_file_paths {
-            let new_src = match fileman::FileMan::read_all(each_path) {
+            let new_src = match FileMan::read_all(each_path) {
                 Err(e) => return Err(FCPEGError::FCPEGFileManErr(blockparser::FCPEGFileManError::FileManError(e))),
                 Ok(v) => v,
             };
@@ -40,7 +43,7 @@ impl FCPEG {
         return FCPEG::parse_from_srcs(fcpeg_file_path.to_string(), input_srcs);
     }
 
-    pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> std::result::Result<Vec<data::SyntaxTree>, FCPEGError> {
+    pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {
         // ルートファイルのエイリアス名は空文字
         let mut fcpeg_file_man = blockparser::FCPEGFileMan::new("".to_string(), fcpeg_file_path);
 

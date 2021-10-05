@@ -1,17 +1,25 @@
-pub use fcpeg::*;
-pub use rustnutlib::*;
+use std::collections::*;
+use std::option::*;
+use std::thread::*;
+use std::time::*;
+
+use fcpeg::*;
+
+use rustnutlib::cmd::*;
+use rustnutlib::console::*;
+use rustnutlib::fileman::*;
 
 fn main() {
     run_command();
 }
 
 fn run_command() {
-    let mut cmd_proc_map = cmd::CommandMap::new();
+    let mut cmd_proc_map = CommandMap::new();
     cmd_proc_map.insert("parse".to_string(), cmd_parse);
-    cmd::run_command("parse", cmd_proc_map);
+    rustnutlib::cmd::run_command("parse", cmd_proc_map);
 }
 
-fn cmd_parse(_cmd_name: String, cmd_args: std::collections::HashMap::<String, Vec<String>>, cons: &mut console::Console) {
+fn cmd_parse(_cmd_name: String, cmd_args: HashMap::<String, Vec<String>>, cons: &mut Console) {
     if cmd_args.get("-h").is_some() {
         show_parse_cmd_help(cons);
         return;
@@ -20,14 +28,14 @@ fn cmd_parse(_cmd_name: String, cmd_args: std::collections::HashMap::<String, Ve
     let fcpeg_file_path = match cmd_args.get("-f") {
         Some(v) => {
             if v.len() != 1 {
-                cons.log(console::ConsoleLogData::new(console::ConsoleLogKind::Error, "too few/many arguments with '-f'", vec![], vec![]), false);
+                cons.log(ConsoleLogData::new(ConsoleLogKind::Error, "too few/many arguments with '-f'", vec![], vec![]), false);
                 return;
             }
 
             v.get(0).unwrap().to_string()
         },
         None => {
-            cons.log(console::ConsoleLogData::new(console::ConsoleLogKind::Error, "command argument '-f' not found", vec![], vec![]), false);
+            cons.log(ConsoleLogData::new(ConsoleLogKind::Error, "command argument '-f' not found", vec![], vec![]), false);
             return;
         },
     };
@@ -51,8 +59,8 @@ fn cmd_parse(_cmd_name: String, cmd_args: std::collections::HashMap::<String, Ve
     }
 }
 
-fn show_parse_cmd_help(cons: &mut console::Console) {
-    cons.log(console::ConsoleLogData::new(console::ConsoleLogKind::Notice, "command help", vec![
+fn show_parse_cmd_help(cons: &mut Console) {
+    cons.log(ConsoleLogData::new(ConsoleLogKind::Notice, "command help", vec![
         "parse:\tparse specified files".to_string(),
         "\t-f:\tspecify .fcpeg file".to_string(),
         "\t-h:\tshow help".to_string(),
@@ -77,8 +85,8 @@ fn show_syntax_trees(input_file_paths: &Vec<String>, trees: &Vec<data::SyntaxTre
     }
 }
 
-fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut console::Console, output_tree: bool, count_duration: bool) {
-    let start_count = std::time::Instant::now();
+fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut Console, output_tree: bool, count_duration: bool) {
+    let start_count = Instant::now();
 
     let trees = match FCPEG::parse_from_paths(fcpeg_file_path, fcpeg_src_paths) {
         Err(e) => {
@@ -105,11 +113,11 @@ fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut con
     println!();
 }
 
-fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut console::Console, interval_sec: usize, quit_limit_sec: std::option::Option<usize>, output_tree: bool, count_duration: bool) {
-    cons.log(console::ConsoleLogData::new(console::ConsoleLogKind::Notice, "command help", vec!["You can quit parsing with '^C'.".to_string()], vec![]), false);
+fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut Console, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool) {
+    cons.log(ConsoleLogData::new(ConsoleLogKind::Notice, "command help", vec!["You can quit parsing with '^C'.".to_string()], vec![]), false);
 
     match quit_limit_sec {
-        Some(v) => cons.log(console::ConsoleLogData::new(console::ConsoleLogKind::Notice, "command help", vec![format!("This program will automatically quit {} sec(s) later.", interval_sec * v)], vec![]), false),
+        Some(v) => cons.log(ConsoleLogData::new(ConsoleLogKind::Notice, "command help", vec![format!("This program will automatically quit {} sec(s) later.", interval_sec * v)], vec![]), false),
         None => (),
     }
 
@@ -135,25 +143,25 @@ fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>
         }
 
         loop_count += 1;
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        sleep(Duration::from_millis(1000));
     }
 }
 
 struct FileChangeDetector {
-    log_map: std::collections::HashMap<String, String>,
+    log_map: HashMap<String, String>,
     target_file_paths: Vec<String>,
 }
 
 impl FileChangeDetector {
-    pub fn new(target_file_paths: Vec<String>) -> Self {
+    pub fn new(target_file_paths: Vec<String>) -> FileChangeDetector {
         return FileChangeDetector {
-            log_map: std::collections::HashMap::new(),
+            log_map: HashMap::new(),
             target_file_paths: target_file_paths,
         };
     }
 
     fn detect_file_change(&mut self, file_path: &str) -> bool {
-        match fileman::FileMan::read_all(file_path) {
+        match FileMan::read_all(file_path) {
             Err(_e) => return false,
             Ok(v) => {
                 let is_same_cont = match self.log_map.get(file_path) {
