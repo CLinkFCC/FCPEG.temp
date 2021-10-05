@@ -41,6 +41,20 @@ impl Token {
     }
 }
 
+#[derive(Clone, PartialEq)]
+pub enum ASTReflection {
+    // note: AST に反映される
+    Reflectable(String),
+    // note: AST に反映されない
+    Unreflectable(),
+}
+
+impl ASTReflection {
+    pub fn is_reflectable(self) -> bool {
+        return self != ASTReflection::Unreflectable();
+    }
+}
+
 #[derive(Clone)]
 pub enum SyntaxNodeElement {
     NodeList(SyntaxNodeList),
@@ -48,18 +62,18 @@ pub enum SyntaxNodeElement {
 }
 
 impl SyntaxNodeElement {
-    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflect: Option<String>) -> SyntaxNodeElement {
-        return SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflect));
+    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> SyntaxNodeElement {
+        return SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflection));
     }
 
-    pub fn from_leaf_args(value: String, ast_reflect: Option<String>) -> SyntaxNodeElement {
-        return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflect));
+    pub fn from_leaf_args(value: String, ast_reflection: ASTReflection) -> SyntaxNodeElement {
+        return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflection));
     }
 
-    pub fn set_ast_reflect(&mut self, ast_reflect: Option<String>) {
+    pub fn set_ast_reflection(&mut self, ast_reflection: ASTReflection) {
         match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.set_ast_reflect(ast_reflect),
-            SyntaxNodeElement::Leaf(leaf) => leaf.set_ast_reflect(ast_reflect),
+            SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection = ast_reflection,
+            SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection = ast_reflection,
         }
     }
 
@@ -83,9 +97,9 @@ impl SyntaxTree {
         };
     }
 
-    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflect: Option<String>) -> Self {
+    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> Self {
         return SyntaxTree {
-            child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflect)),
+            child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflection)),
         };
     }
 
@@ -96,43 +110,33 @@ impl SyntaxTree {
 
 #[derive(Clone)]
 pub struct SyntaxNodeList {
-    subnodes: Vec<SyntaxNodeElement>,
-    ast_reflect: Option<String>,
+    pub nodes: Vec<SyntaxNodeElement>,
+    pub ast_reflection: ASTReflection,
 }
 
 impl SyntaxNodeList {
-    pub fn new(subnodes: Vec<SyntaxNodeElement>, ast_reflect: Option<String>) -> Self {
+    pub fn new(nodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> Self {
         return SyntaxNodeList {
-            subnodes: subnodes,
-            ast_reflect: ast_reflect,
+            nodes: nodes,
+            ast_reflection: ast_reflection,
         };
     }
 
-    pub fn get_ast_reflect(&self) -> Option<String> {
-        return self.ast_reflect.clone();
-    }
-
-    pub fn clone_subnodes(&self) -> Vec<SyntaxNodeElement> {
-        return self.subnodes.clone();
-    }
-
-    pub fn get_subnode_len(&self) -> usize {
-        return self.subnodes.len();
-    }
-
-    pub fn set_ast_reflect(&mut self, ast_reflect: Option<String>) {
-        self.ast_reflect = ast_reflect;
-    }
-
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
-        let display_name = match self.ast_reflect.clone() {
-            Some(v) => if v == "" { "[noname]".to_string() } else { v.clone() },
-            None => "[hidden]".to_string(),
+        let display_name = match &self.ast_reflection {
+            ASTReflection::Reflectable(elem_name) => {
+                if elem_name == "" {
+                    "[noname]".to_string()
+                } else {
+                    elem_name.clone()
+                }
+            },
+            ASTReflection::Unreflectable() => "[hidden]".to_string(),
         };
 
         writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
 
-        for each_node in &self.subnodes {
+        for each_node in &self.nodes {
             each_node.print(nest + 1, writer);
         }
     }
@@ -141,23 +145,15 @@ impl SyntaxNodeList {
 #[derive(Clone)]
 pub struct SyntaxLeaf {
     value: String,
-    ast_reflect: Option<String>,
+    ast_reflection: ASTReflection,
 }
 
 impl SyntaxLeaf {
-    pub fn new(value: String, ast_reflect: Option<String>) -> Self {
+    pub fn new(value: String, ast_reflection: ASTReflection) -> Self {
         return SyntaxLeaf {
             value: value,
-            ast_reflect: ast_reflect,
+            ast_reflection: ast_reflection,
         };
-    }
-
-    pub fn get_value(&self) -> String {
-        return self.value.clone();
-    }
-
-    pub fn set_ast_reflect(&mut self, ast_reflect: Option<String>) {
-        self.ast_reflect = ast_reflect;
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
@@ -166,9 +162,9 @@ impl SyntaxLeaf {
             .replace("\n", "\\n")
             .replace("\t", "\\t");
 
-        let ast_reflect_text = match self.ast_reflect.clone() {
-            Some(v) => format!("({})", v.clone()),
-            None => "[hidden]".to_string(),
+        let ast_reflect_text = match &self.ast_reflection {
+            ASTReflection::Reflectable(elem_name) => format!("({})", elem_name.clone()),
+            ASTReflection::Unreflectable() => "[hidden]".to_string(),
         };
 
         writeln!(writer, "|{}- \"{}\" {}", "   |".repeat(nest), value, ast_reflect_text).unwrap();

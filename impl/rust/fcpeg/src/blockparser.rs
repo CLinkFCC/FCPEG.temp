@@ -877,7 +877,7 @@ impl BlockParser {
         }
 
         let mut choices = Vec::<Box<rule::RuleChoice>>::new();
-        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), None, false, (1, 1), false);
+        let primitive_choice = rule::RuleChoice::new(rule::RuleLookaheadKind::None, (1, 1), data::ASTReflection::Unreflectable(), false, (1, 1), false);
 
         let mut token_i = 0;
         let mut choice_start_i = 0;
@@ -1097,7 +1097,7 @@ impl BlockParser {
             let mut is_random_order_syntax = false;
             let mut paren_nest = 0;
 
-            let mut ast_reflect = Option::<String>::None;
+            let mut ast_reflection = data::ASTReflection::Unreflectable();
 
             let mut tmp_token_i = token_i;
 
@@ -1227,13 +1227,13 @@ impl BlockParser {
                                     content_end_i -= 1;
 
                                     // ID が続いていればノード名として保持
-                                    ast_reflect = match each_tokens.get(token_i) {
+                                    ast_reflection = match each_tokens.get(token_i) {
                                         Some(v) if v.kind == data::TokenKind::ID => {
                                             token_i += 1;
                                             content_end_i -= 1;
-                                            Some(v.value.clone())
+                                            data::ASTReflection::Reflectable(v.value.clone())
                                         },
-                                        _ => Some(String::new()),
+                                        _ => data::ASTReflection::Reflectable(String::new()),
                                     }
                                 }
                                 "{" => {
@@ -1383,7 +1383,10 @@ impl BlockParser {
                 print!(" {}", rule::RuleCountConverter::count_to_string(&loop_count, true, "{", ",", "}"));
                 print!(" {}", if is_random_order { "^" } else { "" });
                 print!(" {}", rule::RuleCountConverter::count_to_string(&occurrence_count, false, "[", "-", "]"));
-                print!(" {}", match &ast_reflect { Some(v) => format!("#{}", v), None => String::new() });
+                print!(" {}", match &ast_reflection {
+                    data::ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name),
+                    data::ASTReflection::Unreflectable() => String::new()
+                });
                 println!();
             }
 
@@ -1398,7 +1401,7 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.to_string(), expected_token.to_string()));
                 }
 
-                let mut new_choice = rule::RuleChoice::new(lookahead_kind, loop_count, ast_reflect.clone(), is_random_order, occurrence_count, has_choices);
+                let mut new_choice = rule::RuleChoice::new(lookahead_kind, loop_count, ast_reflection.clone(), is_random_order, occurrence_count, has_choices);
                 // 選択の括弧などを取り除いてから渡す
                 let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
 
@@ -1440,7 +1443,7 @@ impl BlockParser {
                     println!(" ({}:{}~{})", expr_tokens.get(0).unwrap().kind, content_start_i, content_end_i);
                 }
 
-                let new_expr = BlockParser::get_expr(line_num, lookahead_kind, loop_count, ast_reflect, expr_tokens)?;
+                let new_expr = BlockParser::get_expr(line_num, lookahead_kind, loop_count, ast_reflection, expr_tokens)?;
                 choice.elem_containers.push(rule::RuleElementContainer::RuleExpression(Box::new(new_expr)));
             }
         }
@@ -1448,7 +1451,7 @@ impl BlockParser {
         return Ok(());
     }
 
-    fn get_expr(line_num: usize, lookahead_kind: rule::RuleLookaheadKind, loop_count: (i32, i32), ast_reflect: Option<String>, tokens: Vec<data::Token>) -> std::result::Result<rule::RuleExpression, BlockParseError> {
+    fn get_expr(line_num: usize, lookahead_kind: rule::RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: data::ASTReflection, tokens: Vec<data::Token>) -> std::result::Result<rule::RuleExpression, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::ExpectedToken(line_num, "id".to_string()));
         }
@@ -1483,7 +1486,7 @@ impl BlockParser {
                     }
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::ID, lookahead_kind, loop_count, ast_reflect, id)
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::ID, lookahead_kind, loop_count, ast_reflection, id)
             },
             data::TokenKind::String => {
                 if tokens.len() >= 2 {
@@ -1492,7 +1495,7 @@ impl BlockParser {
                 }
 
                 let value = first_token.value[1..first_token.value.len() - 1].to_string();
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, ast_reflect, value)
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::String, lookahead_kind, loop_count, ast_reflection, value)
             },
             data::TokenKind::StringInBracket => {
                 if tokens.len() >= 2 {
@@ -1500,7 +1503,7 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.to_string(), "spacing, ':' and ','".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::CharClass, lookahead_kind, loop_count, ast_reflect, first_token.value.to_string())
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::CharClass, lookahead_kind, loop_count, ast_reflection, first_token.value.to_string())
             },
             data::TokenKind::Symbol => {
                 if tokens.len() >= 2 {
@@ -1512,7 +1515,7 @@ impl BlockParser {
                     return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "'.'".to_string()));
                 }
 
-                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::Wildcard, lookahead_kind, loop_count, ast_reflect, ".".to_string())
+                rule::RuleExpression::new(line_num, rule::RuleExpressionKind::Wildcard, lookahead_kind, loop_count, ast_reflection, ".".to_string())
             },
             _ => return Err(BlockParseError::UnexpectedToken(line_num, first_token.value.to_string(), "expression".to_string())),
         };

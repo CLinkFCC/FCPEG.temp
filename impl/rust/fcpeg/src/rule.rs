@@ -138,7 +138,6 @@ impl RuleMap {
 
                         for each_choice in each_rule.choices.iter_mut() {
                             self.proc_define_cmd(each_choice, &each_rule.name, &each_block.name, fcpeg_file_man, &block_alias_map)?;
-                            // (*(*each_choice)).ast_reflect = Some(each_rule.name.clone());
                         }
 
                         self.add_rule(fcpeg_file_man.file_alias_name.to_string(), each_block.name.to_string(), rule.name.to_string(), each_rule);
@@ -322,7 +321,7 @@ pub struct RuleChoice {
     pub elem_containers: Vec<RuleElementContainer>,
     pub lookahead_kind: RuleLookaheadKind,
     pub loop_count: (i32, i32),
-    pub ast_reflect: Option<String>,
+    pub ast_reflection: data::ASTReflection,
     pub is_random_order: bool,
     pub occurrence_count: (i32, i32),
     pub has_choices: bool,
@@ -347,18 +346,22 @@ impl std::fmt::Display for RuleChoice {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
         let random_order_symbol = if self.is_random_order { "^" } else { "" };
         let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
-        let ast_reflect_text = match &self.ast_reflect { Some(v) => format!("#{}", v.to_string()), None => String::new() };
-        return write!(f, "{}", format!("{}({}){}{}{}{}", self.lookahead_kind.to_symbol_string(), seq_text.join(separator), loop_text, random_order_symbol, random_order_count, ast_reflect_text));
+        let ast_reflection_text = match &self.ast_reflection {
+            data::ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.to_string()),
+            data::ASTReflection::Unreflectable() => String::new()
+        };
+
+        return write!(f, "{}", format!("{}({}){}{}{}{}", self.lookahead_kind.to_symbol_string(), seq_text.join(separator), loop_text, random_order_symbol, random_order_count, ast_reflection_text));
     }
 }
 
 impl RuleChoice {
-    pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflect: Option<String>, is_random_order: bool, occurrence_count: (i32, i32), has_choices: bool) -> Self {
+    pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: data::ASTReflection, is_random_order: bool, occurrence_count: (i32, i32), has_choices: bool) -> Self {
         return RuleChoice {
             elem_containers: vec![],
             lookahead_kind: lookahead_kind,
             loop_count: loop_count,
-            ast_reflect: ast_reflect,
+            ast_reflection: ast_reflection,
             is_random_order: is_random_order,
             occurrence_count: occurrence_count,
             has_choices: has_choices,
@@ -431,26 +434,30 @@ pub struct RuleExpression {
     pub kind: RuleExpressionKind,
     pub lookahead_kind: RuleLookaheadKind,
     pub loop_count: (i32, i32),
-    pub ast_reflect: Option<String>,
+    pub ast_reflection: data::ASTReflection,
     pub value: String,
 }
 
 impl std::fmt::Display for RuleExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
-        let ast_reflect_text = match &self.ast_reflect { Some(v) => format!("#{}", v.to_string()), None => String::new() };
-        return write!(f, "{}{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text, ast_reflect_text);
+        let ast_reflection_text = match &self.ast_reflection {
+            data::ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.to_string()),
+            data::ASTReflection::Unreflectable() => String::new()
+        };
+
+        return write!(f, "{}{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text, ast_reflection_text);
     }
 }
 
 impl RuleExpression {
-    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflect: Option<String>, value: String) -> Self {
+    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: data::ASTReflection, value: String) -> Self {
         return RuleExpression {
             line: line,
             kind: kind,
             lookahead_kind: lookahead_kind,
             loop_count: loop_count,
-            ast_reflect: ast_reflect,
+            ast_reflection: ast_reflection,
             value: value,
         }
     }
