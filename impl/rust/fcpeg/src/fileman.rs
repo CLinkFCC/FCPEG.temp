@@ -71,12 +71,12 @@ impl FCPEGFileMan {
 
         self.is_loaded = true;
 
-        if !cfg!(debug) {
+        if cfg!(release) {
             self.config_file.print();
         }
 
         for (alias_name, alias_path) in self.config_file.file_alias_map.clone() {
-            match self.add_sub_file_alias(alias_name.clone(), alias_path.clone()) {
+            match self.add_sub_file_alias(alias_name, alias_path) {
                 Err(e) => return Err(e),
                 Ok(()) => (),
             };
@@ -95,7 +95,7 @@ impl FCPEGFileMan {
         let tokens = BlockLexer::get_tokens(&self.fcpeg_file_content)?;
         self.block_map = block_parser.parse(self.file_alias_name.clone(), tokens)?;
 
-        if !cfg!(debug) {
+        if cfg!(release) {
             self.print_parsing_info();
         }
 

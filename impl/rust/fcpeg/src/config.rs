@@ -1,8 +1,12 @@
 use std::collections::*;
 use std::fmt::*;
 
+use once_cell::sync::*;
+
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
+
+pub static mut CONFIG_DATA: Lazy<ConfigData> = Lazy::new(|| ConfigData::new());
 
 // HashMap<name, (values, sub_map)>
 type PropertyMap = HashMap<String, (Vec<String>, PropertySubMap)>;
@@ -32,7 +36,7 @@ impl ConfigFileError {
             ConfigFileError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
             ConfigFileError::DuplicatedPropName(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, "duplicated property name", vec![], vec![format!("property name:\t{}", prop_name)]),
             ConfigFileError::FileManError(err) => err.get_log_data(),
-            ConfigFileError::InvalidPropValue(prop_name, prop_value) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)]),
+            ConfigFileError::InvalidPropValue(prop_name, prop_value) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value", vec![], vec![format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)]),
             ConfigFileError::InvalidPropValueLength(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name)]),
             ConfigFileError::InvalidSyntax(line, msg) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid syntax", vec![format!("{}", msg), format!("line:\t{}", line)], vec![]),
             ConfigFileError::UnknownPropName(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown property name '{}'", prop_name), vec![], vec![]),
@@ -41,6 +45,7 @@ impl ConfigFileError {
     }
 }
 
+#[derive(Clone, PartialEq)]
 pub enum RegexMode {
     Default,
     Onise,
@@ -68,10 +73,24 @@ impl RegexMode {
     }
 }
 
+pub struct ConfigData {
+    pub regex_mode: RegexMode,
+    pub reverse_ast_reflection: bool,
+}
+
+impl ConfigData {
+    pub fn new() -> ConfigData {
+        return ConfigData {
+            regex_mode: RegexMode::Default,
+            reverse_ast_reflection: false,
+        };
+    }
+}
+
 pub struct ConfigFile {
     pub file_alias_map: HashMap<String, String>,
     pub regex_mode: RegexMode,
-    pub reverse_ast_reflect: bool,
+    pub reverse_ast_reflection: bool,
 }
 
 impl ConfigFile {
@@ -79,7 +98,7 @@ impl ConfigFile {
         return ConfigFile {
             file_alias_map: HashMap::new(),
             regex_mode: RegexMode::Default,
-            reverse_ast_reflect: false,
+            reverse_ast_reflection: false,
         }
     }
 
@@ -126,7 +145,7 @@ impl ConfigFile {
                         None => return Err(ConfigFileError::InvalidPropValueLength(prop_name.clone())),
                     };
 
-                    self.reverse_ast_reflect = match ast_reflect.to_lowercase().as_str() {
+                    self.reverse_ast_reflection = match ast_reflect.to_lowercase().as_str() {
                         "normal" => false,
                         "reversed" => true,
                         _ => return Err(ConfigFileError::InvalidPropValue(prop_name.clone(), ast_reflect.clone())),
@@ -134,6 +153,11 @@ impl ConfigFile {
                 },
                 _ => return Err(ConfigFileError::UnknownPropName(prop_name.clone())),
             }
+        }
+
+        unsafe {
+            CONFIG_DATA.regex_mode = self.regex_mode.clone();
+            CONFIG_DATA.reverse_ast_reflection = self.reverse_ast_reflection;
         }
 
         return Ok(());

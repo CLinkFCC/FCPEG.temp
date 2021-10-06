@@ -1,5 +1,6 @@
 use std::io::*;
 
+use crate::config::*;
 use crate::rule::*;
 
 #[derive(Clone, PartialEq)]
@@ -11,6 +12,24 @@ pub enum ASTReflection {
 }
 
 impl ASTReflection {
+    pub fn new_with_config(is_reflectable: bool, elem_name: String) -> ASTReflection {
+        unsafe {
+            return if is_reflectable {
+                if CONFIG_DATA.reverse_ast_reflection {
+                    ASTReflection::Reflectable(elem_name)
+                } else {
+                    ASTReflection::Unreflectable()
+                }
+            } else {
+                if CONFIG_DATA.reverse_ast_reflection {
+                    ASTReflection::Unreflectable()
+                } else{
+                    ASTReflection::Reflectable(elem_name)
+                }
+            }
+        }
+    }
+
     pub fn is_reflectable(&self) -> bool {
         return *self != ASTReflection::Unreflectable();
     }

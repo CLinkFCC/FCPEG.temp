@@ -55,7 +55,7 @@ impl SyntaxParser {
         let start_rule_id = self.rule_map.start_rule_id.clone();
 
         if self.src_content.len() == 0 {
-            return Ok(SyntaxTree::from_node_list_args(vec![], ASTReflection::Unreflectable()));
+            return Ok(SyntaxTree::from_node_list_args(vec![], ASTReflection::new_with_config(false, String::new())));
         }
 
         self.recursion_count += 1;
@@ -65,6 +65,7 @@ impl SyntaxParser {
             None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i)),
         };
 
+        // ルートは常に Reflectable
         root_node.set_ast_reflection(ASTReflection::Reflectable(start_rule_id.clone()));
 
         if self.src_i < self.src_content.len() {
@@ -104,7 +105,7 @@ impl SyntaxParser {
                     match &ast_reflection {
                         ASTReflection::Reflectable(elem_name) => {
                             if *elem_name == String::new() {
-                                ast_reflection = ASTReflection::Reflectable(rule_id.clone())
+                                ast_reflection = ASTReflection::new_with_config(true, rule_id.clone())
                             }
                         },
                         _ => (),

@@ -527,7 +527,7 @@ impl BlockParser {
         }
 
         let mut choices = Vec::<Box<RuleChoice>>::new();
-        let primitive_choice = RuleChoice::new(RuleLookaheadKind::None, (1, 1), ASTReflection::Unreflectable(), false, (1, 1), false);
+        let primitive_choice = RuleChoice::new(RuleLookaheadKind::None, (1, 1), ASTReflection::new_with_config(false, String::new()), false, (1, 1), false);
 
         let mut token_i = 0;
         let mut choice_start_i = 0;
@@ -747,7 +747,7 @@ impl BlockParser {
             let mut is_random_order_syntax = false;
             let mut paren_nest = 0;
 
-            let mut ast_reflection = ASTReflection::Unreflectable();
+            let mut ast_reflection = ASTReflection::new_with_config(false, String::new());
 
             let mut tmp_token_i = token_i;
 
@@ -881,9 +881,9 @@ impl BlockParser {
                                         Some(v) if v.kind == BlockTokenKind::ID => {
                                             token_i += 1;
                                             content_end_i -= 1;
-                                            ASTReflection::Reflectable(v.value.clone())
+                                            ASTReflection::new_with_config(true, v.value.clone())
                                         },
-                                        _ => ASTReflection::Reflectable(String::new()),
+                                        _ => ASTReflection::new_with_config(true, String::new()),
                                     }
                                 }
                                 "{" => {
@@ -1011,7 +1011,7 @@ impl BlockParser {
             }
 
             if token_i != each_tokens.len() {
-                if !cfg!(debug) {
+                if cfg!(release) {
                     println!("{} {}", token_i, each_tokens.len());
                 }
 
@@ -1025,7 +1025,7 @@ impl BlockParser {
                 return Err(BlockParseError::NoChoiceOrExpressionContent(line_num));
             }
 
-            if !cfg!(debug) {
+            if cfg!(release) {
                 print!("-- {} ", lookahead_kind.to_symbol_string());
                 for tk in &content_tokens {
                     print!("{},", tk.value);
@@ -1055,7 +1055,7 @@ impl BlockParser {
                 // 選択の括弧などを取り除いてから渡す
                 let choice_tokens = &each_tokens[content_start_i + 1..content_end_i - 1].to_vec();
 
-                if !cfg!(debug) {
+                if cfg!(release) {
                     print!("*choice: ");
                     for each_token in choice_tokens {
                         print!("{},", each_token.value);
@@ -1085,7 +1085,7 @@ impl BlockParser {
 
                 let expr_tokens = each_tokens[content_start_i..content_end_i].to_vec();
 
-                if !cfg!(debug) {
+                if cfg!(release) {
                     print!("*expr: ");
                     for each_token in &expr_tokens {
                         print!("{},", each_token.value);

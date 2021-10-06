@@ -1,16 +1,16 @@
-# Pickets 和訳下書き
+# Pickets 修正 & 和訳下書き
 
 PackPickets is the package management system for FCPEG, its packages are called pickets.
 PackPickets は FCPEG 向けのパッケージシステムで、パッケージはピケット (picket) と呼ばれる。
 
-You can publish pickets via dedicated hosts sites. PicketDepot is one of them, and it is officially managed.
+Pickets can be published via dedicated hosts sites. PicketDepot is one of them, and it is officially managed.
 ピケットは専用のホストサイトによって公開することができる。PicketDepot はその中の一つで公式に管理されている。
 
 A picket have one `pegspec.cfg` , and at least one `.fcpeg` file in `lib` directory.
 ピケットは 1 つの `pegspec.cfg` と、`lib` ディレクトリ内に最低でも 1 つの `.fcpeg` ファイルをもつ。
 
-In `pegspec.cfg` , you describe configuration and parser settings for each picket.
-`pegspec.cfg` では各ピケットの構成とパーサ設定を記述する。
+In `pegspec.cfg` , configuration and parser settings for each picket are described.
+`pegspec.cfg` では各ピケットの構成とパーサ設定が記述される。
 
 A picket has the following kinds:
 ピケットには以下の種類がある:
@@ -21,7 +21,7 @@ A picket has the following kinds:
 - `product` ... 言語やプロトコルなどのために記述された通常の FCPEG コード
 - `library` ... 外部ピケットから利用される FCPEG コードの集合体
 
-As options, you can put the following directories in the root directory:
+As options, the following directories can be put in the root directory:
 オプションとして、ルートディレクト下にこれらのディレクトリを置くことができる。
 
 - `env/` ... for one or more `spec.cfg` as additional configuration
@@ -37,8 +37,8 @@ As options, you can put the following directories in the root directory:
 Above directories can have subdirectory as appropriate.
 以上のディレクトリは必要に応じてサブディレクトリをもつことができる。
 
-Also generally, as [LOSS](https://en.wikipedia.org/wiki/Free_and_open-source_software), a picket has the following files.
-また、[LOSS](https://ja.wikipedia.org/wiki/FLOSS) であるピケットは通常以下のファイルをもつ。
+Also generally, as libre software ([LOSS](https://en.wikipedia.org/wiki/Free_and_open-source_software)), a picket has the following files.
+また、自由ソフトウェア ([LOSS](https://ja.wikipedia.org/wiki/FLOSS)) であるピケットは通常以下のファイルをもつ。
 
 - `README.md`
 - `LICENSE.md`

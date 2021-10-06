@@ -258,7 +258,7 @@ impl BlockLexer {
                 continue;
             }
 
-            if !cfg!(debug) {
+            if cfg!(release) {
                 println!("+ {} {}", *each_char as i32, *each_char);
             }
 
@@ -276,7 +276,7 @@ impl BlockLexer {
             tokens.push(BlockToken::new(line_i, token_kind, tmp_id_num.clone()));
         }
 
-        if !cfg!(debug) {
+        if cfg!(release) {
             for (token_i, each_token) in tokens.iter().enumerate() {
                 println!("[{};{}] {}\t\t{}", each_token.line, token_i, each_token.value, each_token.kind);
             }
