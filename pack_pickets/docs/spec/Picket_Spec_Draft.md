@@ -1,49 +1,49 @@
 # Pickets 和訳下書き
 
-<!-- 思ったよりも文章変えちゃった -->
-PackPickets is the packaging system for FCPEG, its packages are called pickets.
+PackPickets is the package management system for FCPEG, its packages are called pickets.
 PackPickets は FCPEG 向けのパッケージシステムで、パッケージはピケット (picket) と呼ばれる。
 
 You can publish pickets via dedicated hosts sites. PicketDepot is one of them, and it is officially managed.
 ピケットは専用のホストサイトによって公開することができる。PicketDepot はその中の一つで公式に管理されている。
 
-<!-- Rust のクレートでは単数形だった ("a crate"); picket は普通名詞なので小文字から -->
-<!-- 読みやすさのためインラインコードは多めに使っていく -->
 A picket have one `pegspec.cfg` , and at least one `.fcpeg` file in `lib` directory.
 ピケットは 1 つの `pegspec.cfg` と、`lib` ディレクトリ内に最低でも 1 つの `.fcpeg` ファイルをもつ。
 
-In `pegspec.cfg` , you describe specification and configuration of each picket.
-`pegspec.cfg` では各ピケットの設計と構成を記述する。
+In `pegspec.cfg` , you describe configuration and parser settings for each picket.
+`pegspec.cfg` では各ピケットの構成とパーサ設定を記述する。
 
-A picket has following kinds:
+A picket has the following kinds:
 ピケットには以下の種類がある:
 
 - `product` ... normal FCPEG codes written for language, protocol, etc.
-- `product` ... 言語やプロトコルなどのために記述された通常の FCPEG コード
 - `library` ... an aggregation of FCPEG codes which used by external pickets.
+
+- `product` ... 言語やプロトコルなどのために記述された通常の FCPEG コード
 - `library` ... 外部ピケットから利用される FCPEG コードの集合体
 
-As options, you can put following directories in the root directory:
+As options, you can put the following directories in the root directory:
 オプションとして、ルートディレクト下にこれらのディレクトリを置くことができる。
 
 - `env/` ... for one or more `spec.cfg` as additional configuration
 - `exec/` ... for scripts of utility tools, mainly for testing
 - `docs/` ... for documentation includes specification
-<!-- 修正案 instance の略はいろいろ被る (e.g.) instruction institution instrument -->
-<!-- 何に向けたコード例...？ -->
-- `examples/` ... for code examples of \[what]
+- `inst/` ... for code examples for a picket referred to by external pickets
 
 - `env/` ... 付加的な構成としての 1 つ以上の `spec.cfg` のため
 - `exec/` ... テスト目的を主とした有用なツールのスクリプトのため
 - `docs/` ... 仕様を含むドキュメンテーションのため
-- `examples/` ... \[what] のコード例のため
+- `inst/` ... 外部ピケットから参照されるピケットに向けたコード例のため
 
 Above directories can have subdirectory as appropriate.
-以上のディレクトは必要に応じてサブディレクトリをもつことができる。
+以上のディレクトリは必要に応じてサブディレクトリをもつことができる。
 
-<!-- 和訳が正しいかわからないので修正スキップ -->
-Also generally, as Liberty Software, each Pickets has `README.md`、`LICENSE.md`、`AUTHORS.md` and `CHANGELOG.md`.
-さらに通常は Liberty Software として各ピケットは `README.md`, `LICENSE.md`, `AUTHORS.md`, `CHANGELOG.md` をもちます。
+Also generally, as [LOSS](https://en.wikipedia.org/wiki/Free_and_open-source_software), a picket has the following files.
+また、[LOSS](https://ja.wikipedia.org/wiki/FLOSS) であるピケットは通常以下のファイルをもつ。
+
+- `README.md`
+- `LICENSE.md`
+- `AUTHORS.md`
+- `CHANGELOG.md`
 
 ## pegspec.cfg
 
