@@ -2,46 +2,6 @@ use std::io::*;
 
 use crate::rule::*;
 
-#[derive(PartialOrd, PartialEq, Debug, Clone)]
-pub enum TokenKind {
-    ID,
-    Number,
-    Space,
-    String,
-    StringInBracket,
-    Symbol,
-}
-
-impl std::fmt::Display for TokenKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            TokenKind::ID => return write!(f, "ID"),
-            TokenKind::Number => return write!(f, "Number"),
-            TokenKind::Space => return write!(f, "Space"),
-            TokenKind::String => return write!(f, "String"),
-            TokenKind::StringInBracket => return write!(f, "StringInBracket"),
-            TokenKind::Symbol => return write!(f, "Symbol"),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct Token {
-    pub line: usize,
-    pub kind: TokenKind,
-    pub value: String,
-}
-
-impl Token {
-    pub fn new(line: usize, kind: TokenKind, value: String) -> Token {
-        return Token {
-            line: line,
-            kind: kind,
-            value: value,
-        }
-    }
-}
-
 #[derive(Clone, PartialEq)]
 pub enum ASTReflection {
     // note: AST に反映される

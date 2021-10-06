@@ -1,17 +1,22 @@
-pub mod data;
+pub mod blocklexer;
 pub mod blockparser;
+pub mod config;
+pub mod data;
+pub mod fileman;
 pub mod parser;
 pub mod rule;
-pub mod config;
 
 use std::result::*;
+
+use crate::blockparser::*;
+use crate::fileman::*;
 
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
 
 pub enum FCPEGError {
-    BlockParseErr(blockparser::BlockParseError),
-    FCPEGFileManErr(blockparser::FCPEGFileManError),
+    BlockParseErr(BlockParseError),
+    FCPEGFileManErr(FCPEGFileManError),
     SyntaxParseErr(parser::SyntaxParseError),
 }
 
@@ -33,7 +38,7 @@ impl FCPEG {
 
         for each_path in input_file_paths {
             let new_src = match FileMan::read_all(each_path) {
-                Err(e) => return Err(FCPEGError::FCPEGFileManErr(blockparser::FCPEGFileManError::FileManError(e))),
+                Err(e) => return Err(FCPEGError::FCPEGFileManErr(FCPEGFileManError::FileManError(e))),
                 Ok(v) => v,
             };
 
@@ -45,7 +50,7 @@ impl FCPEG {
 
     pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {
         // ルートファイルのエイリアス名は空文字
-        let mut fcpeg_file_man = blockparser::FCPEGFileMan::new(String::new(), fcpeg_file_path);
+        let mut fcpeg_file_man = FCPEGFileMan::new(String::new(), fcpeg_file_path);
 
         match fcpeg_file_man.load() {
             Err(e) => return Err(FCPEGError::FCPEGFileManErr(e)),

@@ -4,6 +4,7 @@ use std::option::*;
 
 use crate::blockparser::*;
 use crate::data::*;
+use crate::fileman::*;
 
 use regex::*;
 

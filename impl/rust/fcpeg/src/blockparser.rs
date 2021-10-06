@@ -1,27 +1,10 @@
 use std::collections::*;
 
+use crate::blocklexer::*;
 use crate::data::*;
 use crate::rule::*;
-use crate::config::*;
 
 use rustnutlib::console::*;
-use rustnutlib::fileman::*;
-
-pub enum FCPEGFileManError {
-    Unknown(),
-    FileManError(FileManError),
-    ConfigFileError(ConfigFileError),
-}
-
-impl FCPEGFileManError {
-    pub fn get_log_data(&self) -> ConsoleLogData {
-        match self {
-            FCPEGFileManError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
-            FCPEGFileManError::FileManError(err) => err.get_log_data(),
-            FCPEGFileManError::ConfigFileError(err) => err.get_log_data(),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum BlockParseError {
@@ -78,105 +61,10 @@ impl BlockParseError {
     }
 }
 
-pub struct FCPEGFileMan {
-    is_loaded: bool,
-    // ルートのエイリアス名は空文字
-    pub file_alias_name: String,
-    pub sub_file_aliase_map: HashMap<String, FCPEGFileMan>,
-    config_file: ConfigFile,
-    fcpeg_file_path: String,
-    fcpeg_file_content: String,
-    pub block_map: HashMap<String, Block>,
-}
-
-impl FCPEGFileMan {
-    pub fn new(file_alias_name: String, fcpeg_file_path: String) -> FCPEGFileMan {
-        return FCPEGFileMan {
-            is_loaded: false,
-            file_alias_name: file_alias_name,
-            sub_file_aliase_map: HashMap::new(),
-            config_file: ConfigFile::new(),
-            fcpeg_file_path: fcpeg_file_path,
-            fcpeg_file_content: String::new(),
-            block_map: HashMap::new(),
-        }
-    }
-
-    fn add_sub_file_alias(&mut self, file_alias_name: String, file_path: String) -> Result<(), FCPEGFileManError> {
-        let mut alias = FCPEGFileMan::new(file_alias_name.clone(), file_path);
-        alias.load()?;
-        self.sub_file_aliase_map.insert(file_alias_name.clone(), alias);
-
-        return Ok(());
-    }
-
-    pub fn load(&mut self) -> Result<(), FCPEGFileManError> {
-        self.fcpeg_file_content = match FileMan::read_all(&self.fcpeg_file_path) {
-            Err(e) => return Err(FCPEGFileManError::FileManError(e)),
-            Ok(v) => v,
-        };
-
-        let config_file_path = FileMan::rename_ext(&self.fcpeg_file_path, "cfg");
-
-        match self.config_file.load(config_file_path) {
-            Err(e) => return Err(FCPEGFileManError::ConfigFileError(e)),
-            Ok(()) => (),
-        }
-
-        self.is_loaded = true;
-
-        if !cfg!(debug) {
-            self.config_file.print();
-        }
-
-        for (alias_name, alias_path) in self.config_file.file_alias_map.clone() {
-            match self.add_sub_file_alias(alias_name.clone(), alias_path.clone()) {
-                Err(e) => return Err(e),
-                Ok(()) => (),
-            };
-        }
-
-        return Ok(());
-    }
-
-    pub fn parse_all(&mut self) -> Result<(), BlockParseError> {
-        if !self.is_loaded {
-            return Err(BlockParseError::InternalErr(format!("file manager not loaded (path: '{}')", self.fcpeg_file_path)));
-        }
-
-        let mut block_parser = BlockParser::new();
-
-        let tokens = BlockParser::get_tokens(&self.fcpeg_file_content)?;
-        self.block_map = block_parser.parse(self.file_alias_name.clone(), tokens)?;
-
-        if !cfg!(debug) {
-            println!();
-            println!("parsing: {}", self.fcpeg_file_path);
-            println!();
-
-            for (block_name, each_block) in &self.block_map {
-                println!("block {}", block_name);
-
-                for cmd in &each_block.cmds {
-                    println!("\t{}", cmd);
-                }
-            }
-
-            println!();
-        }
-
-        for alias_item in self.sub_file_aliase_map.values_mut() {
-            alias_item.parse_all()?;
-        }
-
-        return Ok(());
-    }
-}
-
 pub struct BlockParser {
     file_alias_name: String,
     token_i: usize,
-    tokens: Vec<Token>
+    tokens: Vec<BlockToken>
 }
 
 impl BlockParser {
@@ -188,250 +76,8 @@ impl BlockParser {
         }
     }
 
-    pub fn get_tokens(src_content: &String) -> Result<Vec<Token>, BlockParseError> {
-        let mut tokens: Vec<Token> = vec![];
-
-        let id_num_regex = regex::Regex::new(r"[a-zA-Z0-9_]").unwrap();
-        let mut tmp_id_num = String::new();
-
-        let symbol_regex = regex::Regex::new(r"[#&!?\-+*.,:^(){}<>]").unwrap();
-
-        let mut line_i: usize = 0;
-
-        let chars: Vec<char> = src_content.chars().collect();
-        let mut char_i: usize = 0;
-
-        while char_i < chars.len() {
-            let each_char = chars.get(char_i).unwrap();
-            let each_char_str = each_char.to_string();
-
-            // ID, 数値判定
-            if id_num_regex.is_match(&each_char_str) {
-                tmp_id_num.push(*each_char);
-                char_i += 1;
-                continue;
-            } else if tmp_id_num.len() != 0 {
-                // トークンの種類を判定
-                let token_kind = match tmp_id_num.parse::<i32>() {
-                    Err(e) => {
-                        // 数値が大きすぎる場合はエラー
-                        if e.to_string() == "number too large to fit in target type" {
-                            return Err(BlockParseError::TooBigNumber(line_i, tmp_id_num));
-                        }
-
-                        // それ以外の場合は ID と判定する
-                        TokenKind::ID
-                    },
-                    Ok(_v) => TokenKind::Number,
-                };
-
-                tokens.push(Token::new(line_i, token_kind, tmp_id_num.clone()));
-                tmp_id_num = String::new();
-            }
-
-            // コメント命令
-            if *each_char == '%' {
-                char_i += 1;
-
-                while char_i < chars.len() {
-                    let next_char = chars.get(char_i).unwrap();
-
-                    char_i += 1;
-
-                    if *next_char == '\n' {
-                        line_i += 1;
-                        break;
-                    }
-                }
-
-                continue;
-            }
-
-            // 文字列判定
-            if *each_char == '"' {
-                let mut string = each_char_str.clone();
-
-                char_i += 1;
-
-                // 一文字ずつ解析する
-                loop {
-                    // 文字列中に EOF が来た場合は弾く
-                    let next_char = match chars.get(char_i) {
-                        Some(v) => v,
-                        None => return Err(BlockParseError::UnexpectedEOF(line_i, "'\"'".to_string())),
-                    };
-
-                    // 文字列中の改行を弾く
-                    if *next_char == '\n' {
-                        return Err(BlockParseError::UnexpectedToken(line_i, "\\n".to_string(), "'\"'".to_string()));
-                    }
-
-                    char_i += 1;
-
-                    // エスケープシーケンスの解析
-                    if *next_char == '\\' {
-                        // エスケープ文字の後ろが EOF である場合は弾く
-                        let esc_char = match chars.get(char_i) {
-                            Some(v) => v,
-                            None => return Err(BlockParseError::UnexpectedEOF(line_i, "'\"'".to_string())),
-                        };
-
-                        let escaped_char = match esc_char {
-                            '\\' => '\\',
-                            'n' => '\n',
-                            't' => '\t',
-                            '"' => '"',
-                            _ => return Err(BlockParseError::UnexpectedToken(line_i, esc_char.to_string(), "'\\', 'n' and 't'".to_string())),
-                        };
-
-                        string.push(escaped_char.clone());
-
-                        char_i += 1;
-                        continue;
-                    }
-
-                    string.push(next_char.clone());
-
-                    if *next_char == '"' {
-                        break;
-                    }
-                }
-
-                // 文字列が空であれば構文エラー
-                if string == "\"\"" {
-                    return Err(BlockParseError::UnexpectedToken(line_i, "\"".to_string(), "character of string".to_string()));
-                }
-
-                tokens.push(Token::new(line_i, TokenKind::String, string));
-                continue;
-            }
-
-            // 角括弧内の文字列判定
-            if *each_char == '[' {
-                let mut string = each_char_str.clone();
-
-                char_i += 1;
-
-                // 一文字ずつ解析する
-                loop {
-                    // 文字列中に EOF が来た場合は弾く
-                    let next_char = match chars.get(char_i) {
-                        Some(v) => v,
-                        None => return Err(BlockParseError::UnexpectedEOF(line_i, "']'".to_string())),
-                    };
-
-                    char_i += 1;
-
-                    // エスケープシーケンスの解析
-                    if *next_char == '\\' {
-                        // エスケープ文字の後ろが EOF である場合は弾く
-                        let esc_char = match chars.get(char_i) {
-                            Some(v) => v,
-                            None => return Err(BlockParseError::UnexpectedEOF(line_i, "']'".to_string())),
-                        };
-
-                        let escaped_char = match esc_char {
-                            '\\' => '\\',
-                            '[' => '[',
-                            ']' => ']',
-                            'n' => '\n',
-                            't' => '\t',
-                            _ => return Err(BlockParseError::UnexpectedToken(line_i, esc_char.to_string(), "'\\', '[', ']', 'n' and 't'".to_string())),
-                        };
-
-                        string.push(escaped_char.clone());
-
-                        char_i += 1;
-                        continue;
-                    }
-
-                    if *next_char == '[' {
-                        return Err(BlockParseError::UnexpectedToken(line_i, next_char.to_string(), "'\\' before '['".to_string()));
-                    }
-
-                    string.push(next_char.clone());
-
-                    if *next_char == ']' {
-                        break;
-                    }
-                }
-
-                tokens.push(Token::new(line_i, TokenKind::StringInBracket, string));
-                continue;
-            }
-
-            // スペース判定
-            if *each_char == ' ' {
-                tokens.push(Token::new(line_i, TokenKind::Space, each_char_str.clone()));
-                char_i += 1;
-
-                // スペースが連続している場合はその分スキップする
-                loop {
-                    let is_next_char_space = match chars.get(char_i) {
-                        Some(v) => *v == ' ',
-                        None => return Err(BlockParseError::UnexpectedEOF(line_i, "'\"'".to_string())),
-                    };
-
-                    if !is_next_char_space {
-                        break;
-                    }
-
-                    char_i += 1;
-                }
-
-                continue;
-            }
-
-            // 改行を無視, line_i を加算
-            if *each_char == '\n' {
-                line_i += 1;
-                char_i += 1;
-                continue;
-            }
-
-            // 余計な改行コードを無視 ... CR 0x0a, LF 0x0d
-            if *each_char as i32 == 10 || *each_char as i32 == 13 {
-                char_i += 1;
-                continue;
-            }
-
-            // シンボル判定
-            if symbol_regex.is_match(&each_char_str) {
-                tokens.push(Token::new(line_i, TokenKind::Symbol, each_char_str.clone()));
-
-                char_i += 1;
-                continue;
-            }
-
-            if !cfg!(debug) {
-                println!("+ {} {}", *each_char as i32, *each_char);
-            }
-
-            return Err(BlockParseError::UnknownToken(line_i, each_char.to_string()));
-        }
-
-        // 最後に tmp_id が残っていないかチェック
-        if tmp_id_num.len() != 0 {
-            // トークンの種類を判定
-            let token_kind = match tmp_id_num.parse::<i32>() {
-                Err(_e) => TokenKind::ID,
-                Ok(_v) => TokenKind::Number,
-            };
-
-            tokens.push(Token::new(line_i, token_kind, tmp_id_num.clone()));
-        }
-
-        if !cfg!(debug) {
-            for (token_i, each_token) in tokens.iter().enumerate() {
-                println!("[{};{}] {}\t\t{}", each_token.line, token_i, each_token.value, each_token.kind);
-            }
-        }
-
-        return Ok(tokens);
-    }
-
     // フィールドが初期化されるためブロックパーサのインスタンスを使い回せる
-    pub fn parse(&mut self, file_alias_name: String, tokens: Vec<Token>) -> Result<HashMap<String, Block>, BlockParseError> {
+    pub fn parse(&mut self, file_alias_name: String, tokens: Vec<BlockToken>) -> Result<HashMap<String, Block>, BlockParseError> {
         // フィールド初期化
         self.file_alias_name = file_alias_name;
         self.token_i = 0;
@@ -449,18 +95,18 @@ impl BlockParser {
             let each_token = self.tokens.get(self.token_i).unwrap().clone();
 
             // ブロック定義前にスペースがあれば飛ばす
-            if each_token.kind == TokenKind::Space {
+            if each_token.kind == BlockTokenKind::Space {
                 self.token_i += 1;
                 continue;
             }
 
             // ブロック名を判定
-            if each_token.kind == TokenKind::StringInBracket {
+            if each_token.kind == BlockTokenKind::StringInBracket {
                 self.token_i += 1;
 
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == TokenKind::Space {
+                        if v.kind == BlockTokenKind::Space {
                             self.token_i += 1;
                         }
 
@@ -471,7 +117,7 @@ impl BlockParser {
 
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind != TokenKind::Symbol || v.value != "{" {
+                        if v.kind != BlockTokenKind::Symbol || v.value != "{" {
                             return Err(BlockParseError::UnknownToken(each_token.line, each_token.value.clone()));
                         }
 
@@ -537,23 +183,23 @@ impl BlockParser {
     // token_i がブロックの中身の開始位置もしくは前の命令の終了記号位置 + 1 であること
     // token_i は各コマンドの終了記号位置 + 1 に設定される
     fn get_next_command_content(&mut self) -> Result<Option<Command>, BlockParseError> {
-        let mut pragma_args = Vec::<Token>::new();
+        let mut pragma_args = Vec::<BlockToken>::new();
 
         while self.token_i < self.tokens.len() {
             let each_token = self.tokens.get(self.token_i).unwrap();
 
             // スペースがあれば除去する
-            if each_token.kind == TokenKind::Space {
+            if each_token.kind == BlockTokenKind::Space {
                 self.token_i += 1;
                 continue;
             }
 
-            if each_token.kind == TokenKind::Symbol && each_token.value == "}" {
+            if each_token.kind == BlockTokenKind::Symbol && each_token.value == "}" {
                 self.token_i += 1;
                 return Ok(None);
             }
 
-            if each_token.kind == TokenKind::Symbol && each_token.value == "+" {
+            if each_token.kind == BlockTokenKind::Symbol && each_token.value == "+" {
                 self.token_i += 1;
 
                 let mut last_token_line_num = each_token.line;
@@ -577,13 +223,13 @@ impl BlockParser {
                     };
 
                     // スペースがあれば除去する
-                    if next_token.kind == TokenKind::Space {
+                    if next_token.kind == BlockTokenKind::Space {
                         self.token_i += 1;
                         continue;
                     }
 
                     if pragma_name == "\0" {
-                        if next_token.kind == TokenKind::ID {
+                        if next_token.kind == BlockTokenKind::ID {
                             // マクロ名が未設定であれば設定する
                             pragma_name = next_token.value.clone();
                             self.token_i += 1;
@@ -594,13 +240,13 @@ impl BlockParser {
                         }
                     }
 
-                    if next_token.kind == TokenKind::ID || next_token.kind == TokenKind::String || (next_token.kind == TokenKind::Symbol && next_token.value == ".") {
+                    if next_token.kind == BlockTokenKind::ID || next_token.kind == BlockTokenKind::String || (next_token.kind == BlockTokenKind::Symbol && next_token.value == ".") {
                         self.token_i += 1;
                         pragma_args.push(next_token.clone());
                         continue;
                     }
 
-                    if next_token.kind == TokenKind::Symbol && next_token.value == "," {
+                    if next_token.kind == BlockTokenKind::Symbol && next_token.value == "," {
                         self.token_i += 1;
 
                         let cmd = self.get_command_from_data(next_token.line, pragma_name, pragma_args)?;
@@ -611,13 +257,13 @@ impl BlockParser {
                 }
             }
 
-            if each_token.kind == TokenKind::ID {
+            if each_token.kind == BlockTokenKind::ID {
                 let mut line_num = each_token.line;
 
                 // 規則名前のスペース
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == TokenKind::Space {
+                        if v.kind == BlockTokenKind::Space {
                             self.token_i += 1;
                             line_num = v.line;
                         }
@@ -628,7 +274,7 @@ impl BlockParser {
                 // 規則名
                 let rule_name_token = match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == TokenKind::ID {
+                        if v.kind == BlockTokenKind::ID {
                             self.token_i += 1;
                             line_num = v.line;
                             v
@@ -642,7 +288,7 @@ impl BlockParser {
                 // 規則名後のスペース
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == TokenKind::Space {
+                        if v.kind == BlockTokenKind::Space {
                             self.token_i += 1;
                             line_num = v.line;
                         }
@@ -653,7 +299,7 @@ impl BlockParser {
                 // 規則定義の記号 <
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == TokenKind::Symbol && v.value == "<" {
+                        if v.kind == BlockTokenKind::Symbol && v.value == "<" {
                             self.token_i += 1;
                             line_num = v.line;
                         } else {
@@ -666,7 +312,7 @@ impl BlockParser {
                 // 規則定義の記号 -
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == TokenKind::Symbol && v.value == "-" {
+                        if v.kind == BlockTokenKind::Symbol && v.value == "-" {
                             self.token_i += 1;
                             line_num = v.line;
                         } else {
@@ -679,14 +325,14 @@ impl BlockParser {
                 // 規則定義の記号後のスペース
                 match self.tokens.get(self.token_i) {
                     Some(v) => {
-                        if v.kind == TokenKind::Space {
+                        if v.kind == BlockTokenKind::Space {
                             self.token_i += 1;
                         }
                     },
                     None => return Err(BlockParseError::UnexpectedEOF(line_num, "' '".to_string())),
                 }
 
-                let mut pragma_args = Vec::<Token>::new();
+                let mut pragma_args = Vec::<BlockToken>::new();
                 pragma_args.push(rule_name_token.clone());
 
                 // 丸括弧
@@ -697,7 +343,7 @@ impl BlockParser {
                 while self.token_i < self.tokens.len() {
                     let next_token = self.tokens.get(self.token_i).unwrap();
 
-                    if next_token.kind == TokenKind::Symbol {
+                    if next_token.kind == BlockTokenKind::Symbol {
                         match next_token.value.as_str() {
                             "(" => {
                                 paren_nest += 1;
@@ -723,7 +369,7 @@ impl BlockParser {
                         }
                     }
 
-                    if next_token.kind == TokenKind::Symbol && next_token.value == "," && paren_nest == 0 && brace_nest == 0 {
+                    if next_token.kind == BlockTokenKind::Symbol && next_token.value == "," && paren_nest == 0 && brace_nest == 0 {
                         self.token_i += 1;
 
                         let cmd = self.get_command_from_data(next_token.line, "define".to_string(), pragma_args)?;
@@ -751,7 +397,7 @@ impl BlockParser {
     }
 
     // pragma_arg: プラグマ名が define の場合、長さは 0 であってならない
-    fn get_command_from_data(&self, line_num: usize, pragma_name: String, pragma_args: Vec<Token>) -> Result<Command, BlockParseError> {
+    fn get_command_from_data(&self, line_num: usize, pragma_name: String, pragma_args: Vec<BlockToken>) -> Result<Command, BlockParseError> {
         let cmd = match pragma_name.as_str() {
             "define" => {
                 if pragma_args.len() == 0 {
@@ -776,7 +422,7 @@ impl BlockParser {
 
                 let block_name_token = pragma_args.get(0).unwrap();
 
-                if block_name_token.kind != TokenKind::ID {
+                if block_name_token.kind != BlockTokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, block_name_token.value.clone(), "ID".to_string()));
                 }
 
@@ -784,13 +430,13 @@ impl BlockParser {
 
                 let period_token = pragma_args.get(1).unwrap();
 
-                if period_token.kind != TokenKind::Symbol || period_token.value != "." {
+                if period_token.kind != BlockTokenKind::Symbol || period_token.value != "." {
                     return Err(BlockParseError::UnexpectedToken(line_num, period_token.value.clone(), "'.'".to_string()));
                 }
 
                 let rule_name_token = pragma_args.get(2).unwrap();
 
-                if rule_name_token.kind != TokenKind::ID {
+                if rule_name_token.kind != BlockTokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, period_token.value.clone(), "ID".to_string()));
                 }
 
@@ -810,7 +456,7 @@ impl BlockParser {
 
                 let block_name_token = pragma_args.get(0).unwrap();
 
-                if block_name_token.kind != TokenKind::ID {
+                if block_name_token.kind != BlockTokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, block_name_token.value.to_string(), "ID".to_string()));
                 }
 
@@ -821,12 +467,12 @@ impl BlockParser {
 
                 match pragma_args.get(arg_i) {
                     Some(period_token) => {
-                        if period_token.kind == TokenKind::Symbol && period_token.value == "." {
+                        if period_token.kind == BlockTokenKind::Symbol && period_token.value == "." {
                             arg_i += 1;
 
                             match pragma_args.get(arg_i) {
                                 Some(id_token) => {
-                                    if id_token.kind != TokenKind::ID {
+                                    if id_token.kind != BlockTokenKind::ID {
                                         return Err(BlockParseError::UnexpectedToken(line_num, id_token.value.clone(), "ID".to_string()));
                                     }
 
@@ -847,7 +493,7 @@ impl BlockParser {
 
                 match pragma_args.get(arg_i) {
                     Some(v) => {
-                        if v.kind != TokenKind::ID || v.value != "as" {
+                        if v.kind != BlockTokenKind::ID || v.value != "as" {
                             return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "'as'".to_string()));
                         }
 
@@ -855,7 +501,7 @@ impl BlockParser {
 
                         match pragma_args.get(arg_i) {
                             Some(v) => {
-                                if v.kind != TokenKind::ID {
+                                if v.kind != BlockTokenKind::ID {
                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "ID".to_string()));
                                 }
 
@@ -875,7 +521,7 @@ impl BlockParser {
         return Ok(cmd);
     }
 
-    fn get_choice_vec(line_num: usize, rule_name: String, tokens: &Vec<Token>) -> Result<Vec<Box<RuleChoice>>, BlockParseError> {
+    fn get_choice_vec(line_num: usize, rule_name: String, tokens: &Vec<BlockToken>) -> Result<Vec<Box<RuleChoice>>, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::RuleHasNoChoice(rule_name.clone()));
         }
@@ -894,7 +540,7 @@ impl BlockParser {
         while token_i < tokens.len() {
             let each_token = tokens.get(token_i).unwrap();
 
-            if each_token.kind == TokenKind::Symbol {
+            if each_token.kind == BlockTokenKind::Symbol {
                 match each_token.value.as_str() {
                     ":" => {
                         if paren_nest == 0 && brace_nest == 0 {
@@ -971,10 +617,10 @@ impl BlockParser {
         return Ok(choices);
     }
 
-    fn get_elem_tokens(tokens: &Vec<Token>) -> Result<Vec<Vec<Token>>, BlockParseError> {
+    fn get_elem_tokens(tokens: &Vec<BlockToken>) -> Result<Vec<Vec<BlockToken>>, BlockParseError> {
         let mut token_i = 0;
 
-        let mut elem_tokens = Vec::<Vec<Token>>::new();
+        let mut elem_tokens = Vec::<Vec<BlockToken>>::new();
         let mut elem_start_i = 0;
 
         let mut paren_nest: usize = 0;
@@ -982,7 +628,7 @@ impl BlockParser {
         while token_i < tokens.len() {
             let each_token = tokens.get(token_i).unwrap();
 
-            if each_token.kind == TokenKind::Space {
+            if each_token.kind == BlockTokenKind::Space {
                 if paren_nest == 0 {
                     // トークン列を追加
 
@@ -995,7 +641,7 @@ impl BlockParser {
                 }
             }
 
-            if each_token.kind == TokenKind::Symbol {
+            if each_token.kind == BlockTokenKind::Symbol {
                 match each_token.value.as_str() {
                     "(" => {
                         paren_nest += 1;
@@ -1036,11 +682,11 @@ impl BlockParser {
 
     // arg: tokens: 両端のスペースは削除される
     // note: 実際には choice と expr 両方の解析をする?
-    fn get_choice(line_num: usize, rule_name: String, choice: &mut RuleChoice, tokens: &mut Vec<Token>) -> Result<(), BlockParseError> {
+    fn get_choice(line_num: usize, rule_name: String, choice: &mut RuleChoice, tokens: &mut Vec<BlockToken>) -> Result<(), BlockParseError> {
         // 最初にスペースがあれば削除
         match tokens.get(0) {
             Some(v) => {
-                if v.kind == TokenKind::Space {
+                if v.kind == BlockTokenKind::Space {
                     tokens.remove(0);
                 }
 
@@ -1054,7 +700,7 @@ impl BlockParser {
         // 最後にスペースがあれば削除
         match tokens.get(tokens.len() - 1) {
             Some(v) => {
-                if v.kind == TokenKind::Space {
+                if v.kind == BlockTokenKind::Space {
                     tokens.pop();
                 }
 
@@ -1070,7 +716,7 @@ impl BlockParser {
 
         for each_tokens in &elem_tokens {
             let starts_with_open_paren = match each_tokens.get(0) {
-                Some(v) => v.kind == TokenKind::Symbol && v.value == "(",
+                Some(v) => v.kind == BlockTokenKind::Symbol && v.value == "(",
                 None => false,
             };
 
@@ -1118,7 +764,7 @@ impl BlockParser {
                         token_i += 1;
                         break;
                     }
-                } else if token.kind == TokenKind::Symbol {
+                } else if token.kind == BlockTokenKind::Symbol {
                     match token.value.as_str() {
                         "(" => {
                             is_choice = true;
@@ -1156,7 +802,7 @@ impl BlockParser {
             while token_i < each_tokens.len() {
                 match each_tokens.get(token_i) {
                     Some(v) => {
-                        if v.kind == TokenKind::Symbol {
+                        if v.kind == BlockTokenKind::Symbol {
                             match v.value.as_str() {
                                 "^" => {
                                     if paren_nest != 0 {
@@ -1170,7 +816,7 @@ impl BlockParser {
 
                                     match each_tokens.get(token_i) {
                                         Some(v) => {
-                                            if v.kind != TokenKind::StringInBracket {
+                                            if v.kind != BlockTokenKind::StringInBracket {
                                                 return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "string in bracket".to_string()));
                                             }
 
@@ -1232,7 +878,7 @@ impl BlockParser {
 
                                     // ID が続いていればノード名として保持
                                     ast_reflection = match each_tokens.get(token_i) {
-                                        Some(v) if v.kind == TokenKind::ID => {
+                                        Some(v) if v.kind == BlockTokenKind::ID => {
                                             token_i += 1;
                                             content_end_i -= 1;
                                             ASTReflection::Reflectable(v.value.clone())
@@ -1259,10 +905,10 @@ impl BlockParser {
                                     };
 
                                     // 先のトークンが '}' であれば単体の数値が指定されたものとして扱う
-                                    if next_token.kind == TokenKind::Symbol && next_token.value == "}" {
+                                    if next_token.kind == BlockTokenKind::Symbol && next_token.value == "}" {
                                         match each_tokens.get(token_i) {
                                             Some(num_token) => {
-                                                if num_token.kind != TokenKind::Number {
+                                                if num_token.kind != BlockTokenKind::Number {
                                                     return Err(BlockParseError::UnexpectedToken(line_num, num_token.value.clone(), "number".to_string()));
                                                 }
         
@@ -1280,12 +926,12 @@ impl BlockParser {
 
                                         match each_tokens.get(token_i) {
                                             Some(v) => {
-                                                if v.kind == TokenKind::Number {
+                                                if v.kind == BlockTokenKind::Number {
                                                     loop_min_count = v.value.parse::<i32>().unwrap();
                                                     content_end_i -= 1;
                                                     token_i += 1;
                                                 } else {
-                                                    if v.kind != TokenKind::Symbol || v.value != "," {
+                                                    if v.kind != BlockTokenKind::Symbol || v.value != "," {
                                                         return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "','".to_string()));
                                                     }
 
@@ -1297,7 +943,7 @@ impl BlockParser {
 
                                         match each_tokens.get(token_i) {
                                             Some(v) => {
-                                                if v.kind != TokenKind::Symbol || v.value != "," {
+                                                if v.kind != BlockTokenKind::Symbol || v.value != "," {
                                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "','".to_string()));
                                                 }
 
@@ -1310,12 +956,12 @@ impl BlockParser {
 
                                         match each_tokens.get(token_i) {
                                             Some(v) => {
-                                                if v.kind == TokenKind::Number {
+                                                if v.kind == BlockTokenKind::Number {
                                                     loop_max_count = v.value.parse::<i32>().unwrap();
                                                     content_end_i -= 1;
                                                     token_i += 1;
                                                 } else {
-                                                    if v.kind != TokenKind::Symbol || v.value != "}" {
+                                                    if v.kind != BlockTokenKind::Symbol || v.value != "}" {
                                                         return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "'}'".to_string()));
                                                     }
 
@@ -1327,7 +973,7 @@ impl BlockParser {
 
                                         match each_tokens.get(token_i) {
                                             Some(v) => {
-                                                if v.kind != TokenKind::Symbol || v.value != "}" {
+                                                if v.kind != BlockTokenKind::Symbol || v.value != "}" {
                                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "'}'".to_string()));
                                                 }
 
@@ -1455,7 +1101,7 @@ impl BlockParser {
         return Ok(());
     }
 
-    fn get_expr(line_num: usize, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: ASTReflection, tokens: Vec<Token>) -> Result<RuleExpression, BlockParseError> {
+    fn get_expr(line_num: usize, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: ASTReflection, tokens: Vec<BlockToken>) -> Result<RuleExpression, BlockParseError> {
         if tokens.len() == 0 {
             return Err(BlockParseError::ExpectedToken(line_num, "id".to_string()));
         }
@@ -1463,17 +1109,17 @@ impl BlockParser {
         let first_token = tokens.get(0).unwrap();
 
         let new_expr = match first_token.kind {
-            TokenKind::ID => {
+            BlockTokenKind::ID => {
                 let mut id = first_token.value.clone();
                 let mut token_i = 1;
 
                 while token_i < tokens.len() {
                     match tokens.get(token_i) {
                         Some(v) => {
-                            if v.kind == TokenKind::Symbol && v.value == "." {
+                            if v.kind == BlockTokenKind::Symbol && v.value == "." {
                                 match tokens.get(token_i + 1) {
                                     Some(v) => {
-                                        if v.kind == TokenKind::ID {
+                                        if v.kind == BlockTokenKind::ID {
                                             id += &format!(".{}", v.value);
                                             token_i += 2;
                                         } else {
@@ -1492,7 +1138,7 @@ impl BlockParser {
 
                 RuleExpression::new(line_num, RuleExpressionKind::ID, lookahead_kind, loop_count, ast_reflection, id)
             },
-            TokenKind::String => {
+            BlockTokenKind::String => {
                 if tokens.len() >= 2 {
                     let unexpected_token = tokens.get(1).unwrap();
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.clone(), "spacing, ':' and ','".to_string()));
@@ -1501,7 +1147,7 @@ impl BlockParser {
                 let value = first_token.value[1..first_token.value.len() - 1].to_string();
                 RuleExpression::new(line_num, RuleExpressionKind::String, lookahead_kind, loop_count, ast_reflection, value)
             },
-            TokenKind::StringInBracket => {
+            BlockTokenKind::StringInBracket => {
                 if tokens.len() >= 2 {
                     let unexpected_token = tokens.get(1).unwrap();
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.clone(), "spacing, ':' and ','".to_string()));
@@ -1509,7 +1155,7 @@ impl BlockParser {
 
                 RuleExpression::new(line_num, RuleExpressionKind::CharClass, lookahead_kind, loop_count, ast_reflection, first_token.value.to_string())
             },
-            TokenKind::Symbol => {
+            BlockTokenKind::Symbol => {
                 if tokens.len() >= 2 {
                     let unexpected_token = tokens.get(1).unwrap();
                     return Err(BlockParseError::UnexpectedToken(line_num, unexpected_token.value.clone(), "spacing, ':' and ','".to_string()));
