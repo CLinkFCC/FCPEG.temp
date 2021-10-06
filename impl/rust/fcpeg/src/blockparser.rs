@@ -166,8 +166,8 @@ impl BlockParser {
 
     // ブロック内のすべてのコマンドを取得する
     // token_i の条件は get_next_command_content() と同様
-    fn get_commands(&mut self) -> Result<Vec<Command>, BlockParseError> {
-        let mut cmds = Vec::<Command>::new();
+    fn get_commands(&mut self) -> Result<Vec<BlockCommand>, BlockParseError> {
+        let mut cmds = Vec::<BlockCommand>::new();
         let mut new_cmd = self.get_next_command_content()?;
 
         // get_next_command_content() の返り値が None になるまで続ける
@@ -182,7 +182,7 @@ impl BlockParser {
     // 各コマンドの中身を取得する
     // token_i がブロックの中身の開始位置もしくは前の命令の終了記号位置 + 1 であること
     // token_i は各コマンドの終了記号位置 + 1 に設定される
-    fn get_next_command_content(&mut self) -> Result<Option<Command>, BlockParseError> {
+    fn get_next_command_content(&mut self) -> Result<Option<BlockCommand>, BlockParseError> {
         let mut pragma_args = Vec::<BlockToken>::new();
 
         while self.token_i < self.tokens.len() {
@@ -397,7 +397,7 @@ impl BlockParser {
     }
 
     // pragma_arg: プラグマ名が define の場合、長さは 0 であってならない
-    fn get_command_from_data(&self, line_num: usize, pragma_name: String, pragma_args: Vec<BlockToken>) -> Result<Command, BlockParseError> {
+    fn get_command_from_data(&self, line_num: usize, pragma_name: String, pragma_args: Vec<BlockToken>) -> Result<BlockCommand, BlockParseError> {
         let cmd = match pragma_name.as_str() {
             "define" => {
                 if pragma_args.len() == 0 {
@@ -407,7 +407,7 @@ impl BlockParser {
                 let rule_name = pragma_args.get(0).unwrap().value.clone();
                 let choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), &pragma_args[1..].to_vec())?;
                 let rule = Rule::new(rule_name.to_string(), choices);
-                Command::Define(line_num, rule)
+                BlockCommand::Define(line_num, rule)
             },
             "start" => {
                 if pragma_args.len() == 0 {
@@ -443,7 +443,7 @@ impl BlockParser {
                 let block_name = block_name_token.value.clone();
                 let rule_name = rule_name_token.value.clone();
 
-                Command::Start(line_num, self.file_alias_name.clone(), block_name, rule_name)
+                BlockCommand::Start(line_num, self.file_alias_name.clone(), block_name, rule_name)
             },
             "use" => {
                 if pragma_args.len() == 0 {
@@ -513,7 +513,7 @@ impl BlockParser {
                     None => (),
                 }
 
-                Command::Use(line_num, file_alias_name, block_name, block_alias_name)
+                BlockCommand::Use(line_num, file_alias_name, block_name, block_alias_name)
             },
             _ => return Err(BlockParseError::UnknownPragmaName(line_num, pragma_name.clone())),
         };

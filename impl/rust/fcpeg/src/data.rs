@@ -135,11 +135,11 @@ impl SyntaxLeaf {
 #[derive(Clone)]
 pub struct Block {
     pub name: String,
-    pub cmds: Vec<Command>,
+    pub cmds: Vec<BlockCommand>,
 }
 
 impl Block {
-    pub fn new(name: String, cmds: Vec<Command>) -> Block {
+    pub fn new(name: String, cmds: Vec<BlockCommand>) -> Block {
         return Block {
             name: name,
             cmds: cmds,
@@ -148,18 +148,18 @@ impl Block {
 }
 
 #[derive(Clone)]
-pub enum Command {
+pub enum BlockCommand {
     Define(usize, Rule),
     Start(usize, String, String, String),
     Use(usize, String, String, String),
 }
 
-impl std::fmt::Display for Command {
+impl std::fmt::Display for BlockCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Command::Define(line, rule) => return write!(f, "{}| rule {}", line, rule),
-            Command::Start(line, file_alias_name, block_name, rule_name) => return write!(f, "{}| start rule '{}.{}.{}'", line, file_alias_name, block_name, rule_name),
-            Command::Use(line, file_alias_name, block_name, block_alias_name) => return write!(f, "{}| use block '{}.{}' as '{}'", line, file_alias_name, block_name, block_alias_name),
+            BlockCommand::Define(line, rule) => return write!(f, "{}| rule {}", line, rule),
+            BlockCommand::Start(line, file_alias_name, block_name, rule_name) => return write!(f, "{}| start rule '{}.{}.{}'", line, file_alias_name, block_name, rule_name),
+            BlockCommand::Use(line, file_alias_name, block_name, block_alias_name) => return write!(f, "{}| use block '{}.{}' as '{}'", line, file_alias_name, block_name, block_alias_name),
         }
     }
 }

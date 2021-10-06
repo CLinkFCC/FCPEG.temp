@@ -66,10 +66,10 @@ impl RuleMap {
         // define ブロックがあればエラー
         for each_cmd in &main_block.cmds {
             match each_cmd {
-                Command::Define(_line, _rule) => {
+                BlockCommand::Define(_line, _rule) => {
                     return Err(BlockParseError::RuleInMainBlock());
                 },
-                Command::Use(line, file_alias_name, block_name, block_alias_name) => {
+                BlockCommand::Use(line, file_alias_name, block_name, block_alias_name) => {
                     if block_alias_map.contains_key(&block_alias_name.clone()) {
                         return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.clone()));
                     }
@@ -84,7 +84,7 @@ impl RuleMap {
         // start コマンドを処理する
         for each_cmd in &main_block.cmds {
             match each_cmd {
-                Command::Start(_line, file_alias_name, block_name, rule_name) => {
+                BlockCommand::Start(_line, file_alias_name, block_name, rule_name) => {
                     if has_start_cmd {
                         return Err(BlockParseError::DuplicatedStartCmd());
                     }
@@ -122,8 +122,8 @@ impl RuleMap {
             // start コマンドを排除しながら use コマンドを処理する
             for each_cmd in &each_block.cmds {
                 match each_cmd {
-                    Command::Start(_line, _file_alias_name, _block_name, _rule_name) => return Err(BlockParseError::StartCmdOutsideMainBlock()),
-                    Command::Use(line, file_alias_name, block_name, block_alias_name) => {
+                    BlockCommand::Start(_line, _file_alias_name, _block_name, _rule_name) => return Err(BlockParseError::StartCmdOutsideMainBlock()),
+                    BlockCommand::Use(line, file_alias_name, block_name, block_alias_name) => {
                         if block_alias_map.contains_key(&block_alias_name.clone()) {
                             return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.clone()));
                         }
@@ -138,7 +138,7 @@ impl RuleMap {
             // define コマンドを処理する
             for each_cmd in &each_block.cmds {
                 match each_cmd {
-                    Command::Define(_line, rule) => {
+                    BlockCommand::Define(_line, rule) => {
                         let mut each_rule = rule.clone();
                         each_rule.name = format!("{}.{}.{}", fcpeg_file_man.file_alias_name, each_block.name, each_rule.name);
 
