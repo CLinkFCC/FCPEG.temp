@@ -80,7 +80,7 @@ fn show_syntax_trees(input_file_paths: &Vec<String>, trees: &Vec<data::SyntaxTre
 
     for i in 0..input_file_paths.len() {
         println!("{}", input_file_paths[i]);
-        trees[i].print();
+        trees[i].print(true);
         println!();
     }
 }

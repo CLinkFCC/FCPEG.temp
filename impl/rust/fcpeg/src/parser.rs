@@ -180,7 +180,7 @@ impl SyntaxParser {
                     for each_elem in node_elems {
                         match &each_elem {
                             SyntaxNodeElement::NodeList(node_list) => {
-                                if node_list.nodes.len() != 0 {
+                                if node_list.elems.len() != 0 {
                                     children.push(each_elem);
                                 }
                             },
@@ -234,7 +234,7 @@ impl SyntaxParser {
                                             Some(v) => {
                                                 for each_result_sub_elem in v {
                                                     match each_result_sub_elem {
-                                                        SyntaxNodeElement::NodeList(node_list) if node_list.nodes.len() == 0 => (),
+                                                        SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
                                                         _ => new_sub_children.push(each_result_sub_elem),
                                                     }
                                                 }
@@ -260,7 +260,7 @@ impl SyntaxParser {
                         let new_child = SyntaxNodeElement::from_node_list_args(new_sub_children, each_choice.ast_reflection.clone());
 
                         match new_child {
-                            SyntaxNodeElement::NodeList(node_list) if node_list.nodes.len() == 0 => (),
+                            SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
                             _ => children.push(new_child),
                         }
                     } else if each_choice.has_choices {
@@ -275,7 +275,7 @@ impl SyntaxParser {
                                                 let new_child = SyntaxNodeElement::from_node_list_args(v, each_sub_choice.ast_reflection.clone());
 
                                                 match new_child {
-                                                    SyntaxNodeElement::NodeList(node_list) if node_list.nodes.len() == 0 => (),
+                                                    SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
                                                     _ => children.push(new_child),
                                                 }
                                             } else {
@@ -304,7 +304,7 @@ impl SyntaxParser {
                                     let new_child = SyntaxNodeElement::from_node_list_args(v, each_choice.ast_reflection.clone());
 
                                     match new_child {
-                                        SyntaxNodeElement::NodeList(node_list) if node_list.nodes.len() == 0 => (),
+                                        SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
                                         _ => children.push(new_child),
                                     }
                                 } else {
@@ -325,7 +325,7 @@ impl SyntaxParser {
                         Some(node_elems) => {
                             for each_elem in node_elems {
                                 match each_elem {
-                                    SyntaxNodeElement::NodeList(node_list) if node_list.nodes.len() == 0 => (),
+                                    SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
                                     _ => children.push(each_elem),
                                 }
                             }
@@ -390,7 +390,7 @@ impl SyntaxParser {
             match self.is_each_expr_matched(expr)? {
                 Some(node_elem) => {
                     match node_elem {
-                        SyntaxNodeElement::NodeList(node_list) if node_list.nodes.len() == 0 => (),
+                        SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
                         _ => children.push(node_elem),
                     }
 
@@ -470,7 +470,7 @@ impl SyntaxParser {
                                     ASTReflection::Unreflectable() => expr.ast_reflection.clone(),
                                 };
 
-                                SyntaxNodeElement::from_node_list_args(node_list.nodes.clone(), sub_ast_reflection)
+                                SyntaxNodeElement::from_node_list_args(node_list.elems.clone(), sub_ast_reflection)
                             },
                             SyntaxNodeElement::Leaf(_) => node_elem,
                         };

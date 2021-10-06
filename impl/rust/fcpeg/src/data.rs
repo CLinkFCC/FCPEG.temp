@@ -11,8 +11,8 @@ pub enum ASTReflection {
 }
 
 impl ASTReflection {
-    pub fn is_reflectable(self) -> bool {
-        return self != ASTReflection::Unreflectable();
+    pub fn is_reflectable(&self) -> bool {
+        return *self != ASTReflection::Unreflectable();
     }
 }
 
@@ -31,6 +31,13 @@ impl SyntaxNodeElement {
         return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflection));
     }
 
+    pub fn is_hidden(&self) -> bool {
+        return match self {
+            SyntaxNodeElement::NodeList(node_list) => node_list.is_hidden(),
+            SyntaxNodeElement::Leaf(leaf) => leaf.is_hidden(),
+        };
+    }
+
     pub fn set_ast_reflection(&mut self, ast_reflection: ASTReflection) {
         match self {
             SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection = ast_reflection,
@@ -38,10 +45,10 @@ impl SyntaxNodeElement {
         }
     }
 
-    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
+    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
         match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.print(nest, writer),
-            SyntaxNodeElement::Leaf(leaf) => leaf.print(nest, writer),
+            SyntaxNodeElement::NodeList(node_list) => node_list.print(nest, writer, ignore_hidden_elems),
+            SyntaxNodeElement::Leaf(leaf) => leaf.print(nest, writer, ignore_hidden_elems),
         }
     }
 }
@@ -64,26 +71,30 @@ impl SyntaxTree {
         };
     }
 
-    pub fn print(&self) {
-        self.child.print(0, &mut BufWriter::new(stdout().lock()))
+    pub fn print(&self, ignore_hidden_elems: bool) {
+        self.child.print(0, &mut BufWriter::new(stdout().lock()), ignore_hidden_elems)
     }
 }
 
 #[derive(Clone)]
 pub struct SyntaxNodeList {
-    pub nodes: Vec<SyntaxNodeElement>,
+    pub elems: Vec<SyntaxNodeElement>,
     pub ast_reflection: ASTReflection,
 }
 
 impl SyntaxNodeList {
-    pub fn new(nodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> SyntaxNodeList {
+    pub fn new(elems: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> SyntaxNodeList {
         return SyntaxNodeList {
-            nodes: nodes,
+            elems: elems,
             ast_reflection: ast_reflection,
         };
     }
 
-    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
+    pub fn is_hidden(&self) -> bool {
+        return !self.ast_reflection.is_reflectable();
+    }
+
+    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
         let display_name = match &self.ast_reflection {
             ASTReflection::Reflectable(elem_name) => {
                 if elem_name == "" {
@@ -97,8 +108,10 @@ impl SyntaxNodeList {
 
         writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
 
-        for each_node in &self.nodes {
-            each_node.print(nest + 1, writer);
+        for each_elem in &self.elems {
+            if !ignore_hidden_elems && !each_elem.is_hidden() {
+                each_elem.print(nest + 1, writer, ignore_hidden_elems);
+            }
         }
     }
 }
@@ -117,7 +130,15 @@ impl SyntaxLeaf {
         };
     }
 
-    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>) {
+    pub fn is_hidden(&self) -> bool {
+        return !self.ast_reflection.is_reflectable();
+    }
+
+    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
+        if ignore_hidden_elems {
+            return;
+        }
+
         let value = self.value
             .replace("\\", "\\\\")
             .replace("\n", "\\n")
