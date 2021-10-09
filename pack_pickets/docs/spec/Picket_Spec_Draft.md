@@ -9,7 +9,7 @@ Pickets can be published via dedicated hosts sites. PicketDepot is one of them, 
 A picket have one `pegspec.cfg` , and at least one `.fcpeg` file in `lib` directory.
 ピケットは 1 つの `pegspec.cfg` と、`lib` ディレクトリ内に最低でも 1 つの `.fcpeg` ファイルをもつ。
 
-In `pegspec.cfg` , configuration and parser settings for each picket are described.
+Picket settings and parser configuration are described in `pegspec.cfg`.
 `pegspec.cfg` では各ピケットの構成とパーサ設定が記述される。
 
 A picket has the following kinds:
@@ -165,11 +165,11 @@ The items of `pegspec.cfg` are bellow.
 
 ## Version
 
-The format envisaged for the Version is as follows.
+The format envisaged for the version is as follows.
 
 ```fcpeg
   [Version]{
-    Virsion <- VirsionCore (":" Revision)? ("-" Tag)? ("@" State)?
+    Version <- VersionCore (":" Revision)? ("-" Tag)? ("@" State)?
     VersionCore <- Major "." (Middle ".")? Miner "." Patch?,
     Major <- Number,
     Middle <- Number,
@@ -185,8 +185,10 @@ The format envisaged for the Version is as follows.
   }
 ```
 
-## Comment
+## Comments
 
-Single Comment starts `-- `, double hyphen and single space.
+The single-line comment starts with `--` and follows a single space.
+単数行コメントは `--` で始まり、後ろに 1 つのスペースが続く。
 
-Multiple Comment starts `{|`, single bra and single bar, and ends `|}`, single bar and single ket.
+The multi-line comment starts with `{|`, and ends with `|}`.
+複数行コメントは `{|` で始まり、`|}` で終わる。
