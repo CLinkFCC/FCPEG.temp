@@ -6,7 +6,7 @@ use rustnutlib::console::*;
 pub enum SyntaxParseError {
     Unknown(),
     InternalErr(String),
-    NoSucceededRule(String, usize),
+    NoSucceededRule(String, usize, Vec<(usize, String)>),
     TooDeepRecursion(usize),
     TooLongRepeat(usize),
     UnknownRuleID(String),
@@ -17,7 +17,7 @@ impl SyntaxParseError {
         match self {
             SyntaxParseError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown error", vec![], vec![]),
             SyntaxParseError::InternalErr(err_msg) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_msg), vec![], vec![]),
-            SyntaxParseError::NoSucceededRule(rule_id, src_i) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), vec![], vec![]),
+            SyntaxParseError::NoSucceededRule(rule_id, src_i, rule_stack) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), vec![format!("rule stack: {:?}", rule_stack)], vec![]),
             SyntaxParseError::TooDeepRecursion(max_recur_count) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too deep recursion over {}", max_recur_count), vec![], vec![]),
             SyntaxParseError::TooLongRepeat(max_loop_count) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too long repeat over {}", max_loop_count), vec![], vec![]),
             SyntaxParseError::UnknownRuleID(rule_id) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown rule id '{}'", rule_id), vec![], vec![]),
@@ -32,6 +32,7 @@ pub struct SyntaxParser {
     recursion_count: usize,
     max_recursion_count: usize,
     max_loop_count: usize,
+    rule_stack: Vec<(usize, String)>,
 }
 
 impl SyntaxParser {
@@ -43,6 +44,7 @@ impl SyntaxParser {
             recursion_count: 1,
             max_recursion_count: 128,
             max_loop_count: 65536,
+            rule_stack: vec![],
         });
     }
 
@@ -62,14 +64,14 @@ impl SyntaxParser {
 
         let mut root_node = match self.is_rule_successful(&start_rule_id)? {
             Some(v) => v,
-            None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i)),
+            None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i, self.rule_stack.clone())),
         };
 
         // ルートは常に Reflectable
         root_node.set_ast_reflection(ASTReflection::Reflectable(start_rule_id.clone()));
 
         if self.src_i < self.src_content.len() {
-            return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i));
+            return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i, self.rule_stack.clone()));
         }
 
         self.recursion_count -= 1;
@@ -83,6 +85,8 @@ impl SyntaxParser {
         };
 
         for each_choice in &rule.choices {
+            self.rule_stack.push((self.src_i, rule_id.clone()));
+
             let start_src_i = self.src_i;
             let occurrence_count = if each_choice.is_random_order {
                 Some(each_choice.occurrence_count)
@@ -111,6 +115,7 @@ impl SyntaxParser {
                         _ => (),
                     };
 
+                    self.rule_stack.pop().unwrap();
                     let new_node = SyntaxNodeElement::from_node_list_args(v, ast_reflection);
                     return Ok(Some(new_node));
                 },
