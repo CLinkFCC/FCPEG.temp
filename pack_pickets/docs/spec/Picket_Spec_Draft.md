@@ -34,7 +34,7 @@ As options, the following directories can be put in the root directory:
 - `docs/` ... 仕様を含むドキュメンテーションのため
 - `inst/` ... 外部ピケットから参照されるピケットに向けたコード例のため
 
-Above directories can have subdirectory as appropriate.
+Above directories can have subdirectories as appropriate.
 以上のディレクトリは必要に応じてサブディレクトリをもつことができる。
 
 Also generally, as libre software ([LOSS](https://en.wikipedia.org/wiki/Free_and_open-source_software)), a picket has the following files.
@@ -44,6 +44,42 @@ Also generally, as libre software ([LOSS](https://en.wikipedia.org/wiki/Free_and
 - `LICENSE.md`
 - `AUTHORS.md`
 - `CHANGELOG.md`
+
+## 仕様ファイル
+
+`pegspec.cfg` に記述するプロパティを列挙する。
+
+### Root Block
+
+| Name    | Content        | Type   | Required |
+| :-----: | -------------- | :----: | :------: |
+| Name    | picket name    | String | Yes      |
+| Kind    | picket kind    | String | Yes      |
+| Author  | author name    | String | No       |
+| Version | picket version | String | Yes      |
+
+### `Lang` Block
+
+Information of the language that the Picket defines for. This must have sub key-val set.
+
+| Name  | Content                    | Type            | Required |
+| :---: | -------------------------- | :-------------: | :------: |
+| Name  | language name              | String          | Yes      |
+| Kind  | language version           | String          | Yes      |
+| Links | related URLs to the picket | Array of String | No       |
+
+### `Dependencies` Block
+
+This can be pretermitted in the Picket is not use any dependencies. This must have sub key-val set. This is allowed to have multiple sub key-val set .
+
+#### Original Block
+
+ブロック名は依存するピケット名
+
+| Name    | Content                                      | Type   | Required |
+| :-----: | -------------------------------------------- | :----: | :------: |
+| Path    | local directory path or URL on any host site | String | Yes      |
+| GitLink | URL of picket repository managed with Git    | String | Yes      |
 
 ## pegspec.cfg
 
