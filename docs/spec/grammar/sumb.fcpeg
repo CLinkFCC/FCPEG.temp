@@ -1,0 +1,7 @@
+[FCPEGKind]{
+  + use
+  + pub
+  QString <- "\"" String "\"",
+  Union<A,B> <- A : B,
+  Union<A,B,C,...> <- A: Union<B,C,...>,
+}
