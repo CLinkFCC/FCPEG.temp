@@ -350,12 +350,10 @@ impl SyntaxParser {
         return Ok(Some(children));
     }
 
-    #[inline(always)]
     fn is_expr_successful(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
         return self.is_lookahead_expr_successful(expr);
     }
 
-    #[inline(always)]
     fn is_lookahead_expr_successful(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
         match expr.lookahead_kind {
             RuleLookaheadKind::None => {
@@ -377,7 +375,6 @@ impl SyntaxParser {
         }
     }
 
-    #[inline(always)]
     fn is_loop_expr_successful(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
         let (min_count, max_count) = expr.loop_count;
 
@@ -423,7 +420,6 @@ impl SyntaxParser {
         }
     }
 
-    #[inline(always)]
     fn is_each_expr_matched(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<SyntaxNodeElement>, SyntaxParseError> {
         if self.src_i >= self.src_content.len() {
             return Ok(None);
