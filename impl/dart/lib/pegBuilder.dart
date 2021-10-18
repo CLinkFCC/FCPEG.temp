@@ -1,11 +1,12 @@
-import "pegNode.dart";
-
-class FCPEG{
-  List<Block> bls;
-  FCPEG()=>List();
+import "package:fcpeg/pegNode.dart";
+import "package:fcpeg/stdLib.dart";
+class PEGWorker{}
+class PEGLoader extends PEGWorker{
+  List<Block<Commands>> _bls;
+  PEGLoader()=>this._bls=List<Block<Commands>>[];
   //Str block_tag, Str kind, Str data/RuleDef rule
-  static FCPEG parsePEG(String imput) {
-    FCPEG peg = FCPEG();
+  static PEGLoader parsePEG(String imput) {
+    PEGLoader peg = PEGLoader();
     imput.split("}\n").map((String value) {
       value.split("]{\n").indexedMap((int ind, String val) {
         Strig tag,lines;
@@ -19,14 +20,4 @@ class FCPEG{
     });
   }
   void addBlock(String tag,String lines)=>this.bls.add(Block(tag).update(lines));
-}
-
-extension IndexedMap<T, E> on List<T> {
- List<E> indexedMap<E>(E Function(int index, T item) function) {
-   final list = <E>[];
-   asMap().forEach((index, element) {
-     list.add(function(index, element));
-   });
-   return list;
- }
 }

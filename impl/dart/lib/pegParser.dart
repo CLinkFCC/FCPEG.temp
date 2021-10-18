@@ -1,6 +1,6 @@
-import "pegBuilder.dart";
-import "langNode.dart";
+import "package:fcpeg/pegBuilder.dart";
+import "package:fcpeg/langNode.dart";
 
-extension Parser on FCPEG {
+extension PEGParser on PEGLoader {
   SyntaxNode parseCode(String im){}
 }
