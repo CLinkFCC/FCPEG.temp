@@ -1,5 +1,7 @@
 use crate::blockparser::*;
 
+use regex::*;
+
 #[derive(PartialOrd, PartialEq, Debug, Clone)]
 pub enum BlockTokenKind {
     ID,
@@ -46,10 +48,10 @@ impl BlockLexer {
     pub fn get_tokens(src_content: &String) -> Result<Vec<BlockToken>, BlockParseError> {
         let mut tokens: Vec<BlockToken> = vec![];
 
-        let id_num_regex = regex::Regex::new(r"[a-zA-Z0-9_]").unwrap();
+        let id_num_regex = Regex::new(r"[a-zA-Z0-9_]").unwrap();
         let mut tmp_id_num = String::new();
 
-        let symbol_regex = regex::Regex::new(r"[#&!?\-+*.,:^(){}<>]").unwrap();
+        let symbol_regex = Regex::new(r"[#&!?\-+*.,:^(){}<>]").unwrap();
 
         let mut line_i: usize = 0;
 
