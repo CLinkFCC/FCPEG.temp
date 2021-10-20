@@ -6,7 +6,7 @@
 
 ## フィールド
 
-### position: [TokenPosition](../TokenPosition/index.md)
+### position: [CharacterPosition](../CharacterPosition/index.md)
 
 トークンの位置。
 
@@ -14,12 +14,6 @@
 
 トークンの種別。
 
-### value: String
+### value: string
 
 トークンの値。
-
-## メソッド
-
-### new(kind TokenKind, value String)
-
-構造体のコンストラクタ。
