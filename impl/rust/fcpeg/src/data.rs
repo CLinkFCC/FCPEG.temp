@@ -1,7 +1,38 @@
 use std::io::*;
+use std::fmt::*;
 
 use crate::config::*;
 use crate::rule::*;
+
+#[derive(Clone, PartialEq)]
+pub enum PragmaKind {
+    Unknown,
+    Define,
+    Start,
+    Use,
+}
+
+impl PragmaKind {
+    pub fn from_string(pragma_name: String) -> PragmaKind {
+        return match pragma_name.as_str() {
+            "define" => PragmaKind::Define,
+            "start" => PragmaKind::Start,
+            "use" => PragmaKind::Use,
+            _ => PragmaKind::Unknown,
+        };
+    }
+}
+
+impl Display for PragmaKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        return match self {
+            PragmaKind::Unknown => write!(f, "unknown"),
+            PragmaKind::Define => write!(f, "define"),
+            PragmaKind::Start => write!(f, "start"),
+            PragmaKind::Use => write!(f, "use"),
+        };
+    }
+}
 
 #[derive(Clone, PartialEq)]
 pub enum ASTReflection {

@@ -249,7 +249,7 @@ impl BlockParser {
                     if next_token.kind == BlockTokenKind::Symbol && next_token.value == "," {
                         self.token_i += 1;
 
-                        let cmd = self.get_command_from_data(next_token.line, pragma_name, pragma_args)?;
+                        let cmd = self.get_command_from_data(next_token.line, PragmaKind::from_string(pragma_name), pragma_args)?;
                         return Ok(Some(cmd));
                     }
 
@@ -372,7 +372,7 @@ impl BlockParser {
                     if next_token.kind == BlockTokenKind::Symbol && next_token.value == "," && paren_nest == 0 && brace_nest == 0 {
                         self.token_i += 1;
 
-                        let cmd = self.get_command_from_data(next_token.line, "define".to_string(), pragma_args)?;
+                        let cmd = self.get_command_from_data(next_token.line, PragmaKind::Define, pragma_args)?;
                         return Ok(Some(cmd));
                     }
 
@@ -397,9 +397,9 @@ impl BlockParser {
     }
 
     // pragma_arg: プラグマ名が define の場合、長さは 0 であってならない
-    fn get_command_from_data(&self, line_num: usize, pragma_name: String, pragma_args: Vec<BlockToken>) -> Result<BlockCommand, BlockParseError> {
-        let cmd = match pragma_name.as_str() {
-            "define" => {
+    fn get_command_from_data(&self, line_num: usize, pragma_kind: PragmaKind, pragma_args: Vec<BlockToken>) -> Result<BlockCommand, BlockParseError> {
+        let cmd = match pragma_kind {
+            PragmaKind::Define => {
                 if pragma_args.len() == 0 {
                     return Err(BlockParseError::InternalErr("invalid pragma argument length".to_string()));
                 }
@@ -409,7 +409,7 @@ impl BlockParser {
                 let rule = Rule::new(rule_name.to_string(), choices);
                 BlockCommand::Define(line_num, rule)
             },
-            "start" => {
+            PragmaKind::Start => {
                 if pragma_args.len() == 0 {
                     return Err(BlockParseError::UnexpectedToken(line_num, ",".to_string(), "pragma argument".to_string()));
                 }
@@ -445,7 +445,7 @@ impl BlockParser {
 
                 BlockCommand::Start(line_num, self.file_alias_name.clone(), block_name, rule_name)
             },
-            "use" => {
+            PragmaKind::Use => {
                 if pragma_args.len() == 0 {
                     return Err(BlockParseError::UnexpectedToken(line_num, ",".to_string(), "pragma argument".to_string()));
                 }
@@ -515,7 +515,7 @@ impl BlockParser {
 
                 BlockCommand::Use(line_num, file_alias_name, block_name, block_alias_name)
             },
-            _ => return Err(BlockParseError::UnknownPragmaName(line_num, pragma_name.clone())),
+            _ => return Err(BlockParseError::UnknownPragmaName(line_num, pragma_kind.to_string())),
         };
 
         return Ok(cmd);
