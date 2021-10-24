@@ -109,8 +109,6 @@ impl BlockParser {
                         if v.kind == BlockTokenKind::Space {
                             self.token_i += 1;
                         }
-
-                        ()
                     },
                     None => return Err(BlockParseError::UnknownToken(each_token.line, each_token.value.clone())),
                 }
@@ -120,8 +118,6 @@ impl BlockParser {
                         if v.kind != BlockTokenKind::Symbol || v.value != "{" {
                             return Err(BlockParseError::UnknownToken(each_token.line, each_token.value.clone()));
                         }
-
-                        ()
                     },
                     None => return Err(BlockParseError::UnknownToken(each_token.line, each_token.value.clone())),
                 }
@@ -183,7 +179,7 @@ impl BlockParser {
     // token_i がブロックの中身の開始位置もしくは前の命令の終了記号位置 + 1 であること
     // token_i は各コマンドの終了記号位置 + 1 に設定される
     fn get_next_command_content(&mut self) -> Result<Option<BlockCommand>, BlockParseError> {
-        let mut pragma_args = Vec::<BlockToken>::new();
+        let mut pragma_tokens = Vec::<BlockToken>::new();
 
         while self.token_i < self.tokens.len() {
             let each_token = self.tokens.get(self.token_i).unwrap();
@@ -242,14 +238,20 @@ impl BlockParser {
 
                     if next_token.kind == BlockTokenKind::ID || next_token.kind == BlockTokenKind::String || (next_token.kind == BlockTokenKind::Symbol && next_token.value == ".") {
                         self.token_i += 1;
-                        pragma_args.push(next_token.clone());
+                        pragma_tokens.push(next_token.clone());
                         continue;
                     }
 
                     if next_token.kind == BlockTokenKind::Symbol && next_token.value == "," {
                         self.token_i += 1;
 
-                        let cmd = self.get_command_from_data(next_token.line, PragmaKind::from_string(pragma_name), pragma_args)?;
+                        let pragma = match pragma_name.as_str() {
+                            "start" => Pragma::Start(pragma_tokens),
+                            "use" => Pragma::Use(pragma_tokens),
+                            _ => Pragma::Unknown,
+                        };
+
+                        let cmd = self.get_command_from_data(next_token.line, pragma)?;
                         return Ok(Some(cmd));
                     }
 
@@ -272,12 +274,12 @@ impl BlockParser {
                 }
 
                 // 規則名
-                let rule_name_token = match self.tokens.get(self.token_i) {
+                let rule_name = match self.tokens.get(self.token_i) {
                     Some(v) => {
                         if v.kind == BlockTokenKind::ID {
                             self.token_i += 1;
                             line_num = v.line;
-                            v
+                            v.value.clone()
                         } else {
                             return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "ID".to_string()));
                         }
@@ -295,6 +297,47 @@ impl BlockParser {
                     },
                     None => return Err(BlockParseError::UnexpectedEOF(line_num, "' '".to_string())),
                 }
+
+                // マクロ関数の括弧内
+                let macro_func_args = match self.tokens.get(self.token_i) {
+                    Some(v) => {
+                        if v.kind == BlockTokenKind::Symbol && v.value == "(" {
+                            self.token_i += 1;
+                            let arg_start_i = self.token_i;
+                            let arg_end_i;
+
+                            loop {
+                                match self.tokens.get(self.token_i) {
+                                    Some(v) => {
+                                        if v.kind == BlockTokenKind::Symbol && v.value == ")" {
+                                            arg_end_i = self.token_i;
+                                            self.token_i += 1;
+                                            break;
+                                        }
+                                    },
+                                    None => return Err(BlockParseError::UnexpectedEOF(v.line, "')'".to_string())),
+                                }
+                                println!("{}", self.token_i);
+
+                                self.token_i += 1;
+                            }
+
+                            match self.tokens.get(self.token_i) {
+                                Some(v) => {
+                                    if v.kind == BlockTokenKind::Space {
+                                        self.token_i += 1;
+                                    }
+                                },
+                                None => (),
+                            }
+
+                            self.get_macro_func_args_from_index(arg_start_i, arg_end_i)?
+                        } else {
+                            vec![]
+                        }
+                    },
+                    None => vec![],
+                };
 
                 // 規則定義の記号 <
                 match self.tokens.get(self.token_i) {
@@ -331,9 +374,6 @@ impl BlockParser {
                     },
                     None => return Err(BlockParseError::UnexpectedEOF(line_num, "' '".to_string())),
                 }
-
-                let mut pragma_args = Vec::<BlockToken>::new();
-                pragma_args.push(rule_name_token.clone());
 
                 // 丸括弧
                 let mut paren_nest = 0;
@@ -372,11 +412,11 @@ impl BlockParser {
                     if next_token.kind == BlockTokenKind::Symbol && next_token.value == "," && paren_nest == 0 && brace_nest == 0 {
                         self.token_i += 1;
 
-                        let cmd = self.get_command_from_data(next_token.line, PragmaKind::Define, pragma_args)?;
+                        let cmd = self.get_command_from_data(next_token.line, Pragma::Define(rule_name, pragma_tokens.to_vec(), macro_func_args))?;
                         return Ok(Some(cmd));
                     }
 
-                    pragma_args.push(next_token.clone());
+                    pragma_tokens.push(next_token.clone());
                     self.token_i += 1;
                 }
 
@@ -387,40 +427,70 @@ impl BlockParser {
             return Err(BlockParseError::UnexpectedToken(each_token.line, each_token.value.clone(), "'+' and ID".to_string()));
         }
 
-        // let cmd = Command::;
-        // return Ok(cmd);
-
-        // ブロック終了記号の検知はどうする？
         // これ以上コマンドが見つからないため None を返す
 
         return Ok(None);
     }
 
-    // pragma_arg: プラグマ名が define の場合、長さは 0 であってならない
-    fn get_command_from_data(&self, line_num: usize, pragma_kind: PragmaKind, pragma_args: Vec<BlockToken>) -> Result<BlockCommand, BlockParseError> {
-        let cmd = match pragma_kind {
-            PragmaKind::Define => {
-                if pragma_args.len() == 0 {
-                    return Err(BlockParseError::InternalErr("invalid pragma argument length".to_string()));
-                }
+    fn get_macro_func_args_from_index(&self, start_i: usize, end_i: usize) -> Result<Vec<String>, BlockParseError> {
+        let mut args = Vec::<String>::new();
+        let mut index = start_i;
 
-                let rule_name = pragma_args.get(0).unwrap().value.clone();
-                let choices = BlockParser::get_choice_vec(line_num, rule_name.to_string(), &pragma_args[1..].to_vec())?;
-                let rule = Rule::new(rule_name.to_string(), choices);
+        while index < end_i {
+            println!("{}", index);
+            match self.tokens.get(index) {
+                Some(v) => {
+                    if v.kind == BlockTokenKind::ID {
+                        args.push(v.value.clone());
+                        index += 1;
+                    } else {
+                        return Err(BlockParseError::UnexpectedToken(v.line, v.value.clone(), "ID".to_string()));
+                    }
+                },
+                None => return Err(BlockParseError::InternalErr("FCPEG source index is invalid.".to_string())),
+            }
+
+            match self.tokens.get(index) {
+                Some(v) => {
+                    if v.kind == BlockTokenKind::Symbol && v.value == "," {
+                        index += 1;
+
+                        match self.tokens.get(index) {
+                            Some(v) => {
+                                if v.kind == BlockTokenKind::Space {
+                                    break;
+                                }
+                            },
+                            None => return Err(BlockParseError::InternalErr("FCPEG source index is invalid.".to_string())),
+                        }
+                    }
+                },
+                None => return Err(BlockParseError::InternalErr("FCPEG source index is invalid.".to_string())),
+            }
+        }
+
+        return Ok(args);
+    }
+
+    fn get_command_from_data(&self, line_num: usize, pragma: Pragma) -> Result<BlockCommand, BlockParseError> {
+        let cmd = match pragma {
+            Pragma::Define(rule_name, pragma_tokens, macro_func_args) => {
+                let choices = BlockParser::get_choice_vec(line_num, rule_name.clone(), &pragma_tokens)?;
+                let rule = Rule::new(rule_name.clone(), macro_func_args, choices);
                 BlockCommand::Define(line_num, rule)
             },
-            PragmaKind::Start => {
-                if pragma_args.len() == 0 {
-                    return Err(BlockParseError::UnexpectedToken(line_num, ",".to_string(), "pragma argument".to_string()));
+            Pragma::Start(pragma_tokens) => {
+                if pragma_tokens.len() == 0 {
+                    return Err(BlockParseError::UnexpectedToken(line_num, ",".to_string(), "pragma tokens".to_string()));
                 }
 
-                if pragma_args.len() != 3 {
-                    return Err(BlockParseError::UnexpectedToken(line_num, pragma_args.get(0).unwrap().value.clone(), "','".to_string()));
+                if pragma_tokens.len() != 3 {
+                    return Err(BlockParseError::UnexpectedToken(line_num, pragma_tokens.get(0).unwrap().value.clone(), "','".to_string()));
                 }
 
                 // ブロック名を取得
 
-                let block_name_token = pragma_args.get(0).unwrap();
+                let block_name_token = pragma_tokens.get(0).unwrap();
 
                 if block_name_token.kind != BlockTokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, block_name_token.value.clone(), "ID".to_string()));
@@ -428,13 +498,13 @@ impl BlockParser {
 
                 // 識別子間のピリオドをチェック
 
-                let period_token = pragma_args.get(1).unwrap();
+                let period_token = pragma_tokens.get(1).unwrap();
 
                 if period_token.kind != BlockTokenKind::Symbol || period_token.value != "." {
                     return Err(BlockParseError::UnexpectedToken(line_num, period_token.value.clone(), "'.'".to_string()));
                 }
 
-                let rule_name_token = pragma_args.get(2).unwrap();
+                let rule_name_token = pragma_tokens.get(2).unwrap();
 
                 if rule_name_token.kind != BlockTokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, period_token.value.clone(), "ID".to_string()));
@@ -445,8 +515,8 @@ impl BlockParser {
 
                 BlockCommand::Start(line_num, self.file_alias_name.clone(), block_name, rule_name)
             },
-            PragmaKind::Use => {
-                if pragma_args.len() == 0 {
+            Pragma::Use(pragma_tokens) => {
+                if pragma_tokens.len() == 0 {
                     return Err(BlockParseError::UnexpectedToken(line_num, ",".to_string(), "pragma argument".to_string()));
                 }
 
@@ -454,7 +524,7 @@ impl BlockParser {
 
                 // ブロック名を取得
 
-                let block_name_token = pragma_args.get(0).unwrap();
+                let block_name_token = pragma_tokens.get(0).unwrap();
 
                 if block_name_token.kind != BlockTokenKind::ID {
                     return Err(BlockParseError::UnexpectedToken(line_num, block_name_token.value.to_string(), "ID".to_string()));
@@ -465,12 +535,12 @@ impl BlockParser {
 
                 arg_i += 1;
 
-                match pragma_args.get(arg_i) {
+                match pragma_tokens.get(arg_i) {
                     Some(period_token) => {
                         if period_token.kind == BlockTokenKind::Symbol && period_token.value == "." {
                             arg_i += 1;
 
-                            match pragma_args.get(arg_i) {
+                            match pragma_tokens.get(arg_i) {
                                 Some(id_token) => {
                                     if id_token.kind != BlockTokenKind::ID {
                                         return Err(BlockParseError::UnexpectedToken(line_num, id_token.value.clone(), "ID".to_string()));
@@ -491,7 +561,7 @@ impl BlockParser {
 
                 let mut block_alias_name = block_name.clone();
 
-                match pragma_args.get(arg_i) {
+                match pragma_tokens.get(arg_i) {
                     Some(v) => {
                         if v.kind != BlockTokenKind::ID || v.value != "as" {
                             return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "'as'".to_string()));
@@ -499,7 +569,7 @@ impl BlockParser {
 
                         arg_i += 1;
 
-                        match pragma_args.get(arg_i) {
+                        match pragma_tokens.get(arg_i) {
                             Some(v) => {
                                 if v.kind != BlockTokenKind::ID {
                                     return Err(BlockParseError::UnexpectedToken(line_num, v.value.clone(), "ID".to_string()));
@@ -515,7 +585,7 @@ impl BlockParser {
 
                 BlockCommand::Use(line_num, file_alias_name, block_name, block_alias_name)
             },
-            _ => return Err(BlockParseError::UnknownPragmaName(line_num, pragma_kind.to_string())),
+            _ => return Err(BlockParseError::UnknownPragmaName(line_num, pragma.to_string())),
         };
 
         return Ok(cmd);

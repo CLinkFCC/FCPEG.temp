@@ -283,6 +283,7 @@ impl RuleCountConverter {
 #[derive(Clone)]
 pub struct Rule {
     pub name: String,
+    pub args: Vec<String>,
     pub choices: Vec<Box<RuleChoice>>,
 }
 
@@ -294,14 +295,21 @@ impl Display for Rule {
             choice_text.push(each_choice.to_string());
         }
 
-        return write!(f, "{} <- {}", self.name, choice_text.join(" : "))
+        let args_text = if self.args.len() == 0 {
+            String::new()
+        } else {
+            format!("({})", self.args.join(", "))
+        };
+
+        return write!(f, "{}{} <- {}", self.name, args_text, choice_text.join(" : "))
     }
 }
 
 impl Rule {
-    pub fn new(name: String, choices: Vec<Box<RuleChoice>>) -> Rule {
+    pub fn new(name: String, args: Vec<String>, choices: Vec<Box<RuleChoice>>) -> Rule {
         return Rule {
             name: name,
+            args: args,
             choices: choices,
         };
     }

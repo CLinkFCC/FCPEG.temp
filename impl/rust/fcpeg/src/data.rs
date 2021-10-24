@@ -1,35 +1,25 @@
 use std::io::*;
 use std::fmt::*;
 
+use crate::blocklexer::*;
 use crate::config::*;
 use crate::rule::*;
 
-#[derive(Clone, PartialEq)]
-pub enum PragmaKind {
+#[derive(Clone)]
+pub enum Pragma {
     Unknown,
-    Define,
-    Start,
-    Use,
+    Define(String, Vec<BlockToken>, Vec<String>),
+    Start(Vec<BlockToken>),
+    Use(Vec<BlockToken>),
 }
 
-impl PragmaKind {
-    pub fn from_string(pragma_name: String) -> PragmaKind {
-        return match pragma_name.as_str() {
-            "define" => PragmaKind::Define,
-            "start" => PragmaKind::Start,
-            "use" => PragmaKind::Use,
-            _ => PragmaKind::Unknown,
-        };
-    }
-}
-
-impl Display for PragmaKind {
+impl Display for Pragma {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         return match self {
-            PragmaKind::Unknown => write!(f, "unknown"),
-            PragmaKind::Define => write!(f, "define"),
-            PragmaKind::Start => write!(f, "start"),
-            PragmaKind::Use => write!(f, "use"),
+            Pragma::Unknown => write!(f, "unknown"),
+            Pragma::Define(_, _, _) => write!(f, "define"),
+            Pragma::Start(_) => write!(f, "start"),
+            Pragma::Use(_) => write!(f, "use"),
         };
     }
 }
