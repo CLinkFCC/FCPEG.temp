@@ -63,7 +63,7 @@ macro_rules! choice {
         }
     };
 
-    ($($field_name:ident = $field_value:expr), *) => {
+    ($($field_name:ident = $field_value:expr), *,) => {
         {
             let mut choice = choice!();
             $(choice.$field_name = $field_value;)*
@@ -129,17 +129,17 @@ impl BlockParserA {
     }
 
     fn get_syntax_block() -> Block {
+        // code: FCPEG <- 
         let fcpeg_rule_def = def_cmd!("FCPEG", vec![
             Box::new(choice!(
                 elem_containers = vec![
                     choice_elem!(choice!(
                         elem_containers = vec![
-                            expr_elem!(expr!(String, "fcpeg"))
-                        ]
+                            expr_elem!(expr!(ID, ".Syntax")),
+                        ],
                     ))
                 ],
-                ast_reflection = ASTReflection::Reflectable("Syntax".to_string()),
-                has_choices = true
+                has_choices = true,
             )),
         ]);
 
