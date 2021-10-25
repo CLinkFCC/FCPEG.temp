@@ -48,7 +48,18 @@ impl SyntaxParser {
         });
     }
 
-    pub fn get_syntax_tree(&mut self, src_content: String) -> std::result::Result<SyntaxTree, SyntaxParseError> {
+    pub fn get_syntax_tree(&mut self, mut src_content: String) -> std::result::Result<SyntaxTree, SyntaxParseError> {
+        // todo: 高速化: replace() と比べてどちらが速いか検証する
+        // note: 余分な改行コード 0x0d を排除する
+        loop {
+            match src_content.find(0x0d as char) {
+                Some(v) => {
+                    src_content.remove(v);
+                },
+                None => break,
+            }
+        }
+
         // フィールドを初期化
         self.src_i = 0;
         self.src_content = src_content;

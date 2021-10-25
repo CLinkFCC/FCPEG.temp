@@ -39,8 +39,11 @@ impl RuleMap {
         };
     }
 
-    pub fn add_rule(&mut self, file_alias_name: String, block_name: String, rule_name: String, rule: Rule) {
-        let rule_id = file_alias_name + "." + block_name.as_str() + "." + rule_name.as_str();
+    pub fn get_rule_id(file_alias_name: String, block_name: String, rule_name: String) -> String {
+        return format!("{}.{}.{}", file_alias_name, block_name, rule_name);
+    }
+
+    pub fn insert_rule(&mut self, rule_id: String, rule: Rule) {
         self.rule_map.insert(rule_id, rule);
     }
 
@@ -51,6 +54,7 @@ impl RuleMap {
 
     // ここでは規則 ID の存在チェックは行われない
     pub fn get_from_root_fcpeg_file_man(fcpeg_file_man: FCPEGFileMan) -> std::result::Result<RuleMap, BlockParseError> {
+        println!("{}", fcpeg_file_man.block_map.len());
         let main_block = match fcpeg_file_man.block_map.get("Main") {
             Some(v) => v,
             None => return Err(BlockParseError::MainBlockNotFound()),
@@ -146,7 +150,8 @@ impl RuleMap {
                             self.proc_define_cmd(each_choice, &each_rule.name, &each_block.name, fcpeg_file_man, &block_alias_map)?;
                         }
 
-                        self.add_rule(fcpeg_file_man.file_alias_name.clone(), each_block.name.clone(), rule.name.clone(), each_rule);
+                        let rule_id = RuleMap::get_rule_id(fcpeg_file_man.file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
+                        self.insert_rule(rule_id, each_rule);
                     },
                     _ => (),
                 }

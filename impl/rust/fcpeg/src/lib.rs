@@ -1,3 +1,4 @@
+pub mod block;
 pub mod blocklexer;
 pub mod blockparser;
 pub mod config;
@@ -8,6 +9,7 @@ pub mod rule;
 
 use std::result::*;
 
+use crate::block::*;
 use crate::blockparser::*;
 use crate::fileman::*;
 
@@ -57,14 +59,23 @@ impl FCPEG {
             Ok(()) => (),
         };
 
-        match fcpeg_file_man.parse_all() {
-            Err(e) => return Err(FCPEGError::BlockParseErr(e)),
-            Ok(()) => (),
-        };
+        // match fcpeg_file_man.parse_all() {
+        //     Err(e) => return Err(FCPEGError::BlockParseErr(e)),
+        //     Ok(()) => (),
+        // };
 
-        let rule_map = match rule::RuleMap::get_from_root_fcpeg_file_man(fcpeg_file_man) {
-            Err(e) => return Err(FCPEGError::BlockParseErr(e)),
+        // let rule_map = match rule::RuleMap::get_from_root_fcpeg_file_man(fcpeg_file_man) {
+        //     Err(e) => return Err(FCPEGError::BlockParseErr(e)),
+        //     Ok(v) => v,
+        // };
+
+        let rule_map = match BlockParserA::get_rule_map(&mut fcpeg_file_man) {
             Ok(v) => v,
+            Err(e) => {
+                let mut cons = Console::new();
+                cons.log(e.get_log_data(), false);
+                panic!();
+            },
         };
 
         if cfg!(release) {
@@ -79,18 +90,7 @@ impl FCPEG {
 
         let mut trees = Vec::<data::SyntaxTree>::new();
 
-        for mut each_src in input_srcs {
-            // todo: 高速化: replace() と比べてどちらが速いか検証する
-            // 余分な改行コード 0x0d を排除する
-            loop {
-                match each_src.find(0x0d as char) {
-                    Some(v) => {
-                        each_src.remove(v);
-                    },
-                    None => break,
-                }
-            }
-
+        for each_src in input_srcs {
             let new_tree = match parser.get_syntax_tree(each_src) {
                 Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
                 Ok(v) => v,

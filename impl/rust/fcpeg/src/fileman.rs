@@ -1,7 +1,7 @@
 use std::collections::*;
 
-use crate::config::*;
 use crate::blocklexer::*;
+use crate::config::*;
 use crate::blockparser::*;
 use crate::data::*;
 
@@ -30,8 +30,8 @@ pub struct FCPEGFileMan {
     pub file_alias_name: String,
     pub sub_file_aliase_map: HashMap<String, FCPEGFileMan>,
     config_file: ConfigFile,
-    fcpeg_file_path: String,
-    fcpeg_file_content: String,
+    pub fcpeg_file_path: String,
+    pub fcpeg_file_content: String,
     pub block_map: HashMap<String, Block>,
 }
 
@@ -91,9 +91,11 @@ impl FCPEGFileMan {
         }
 
         let mut block_parser = BlockParser::new();
-
+        // self.block_map = match BlockParserA::get_rule_map(&mut self) {
+        //     Ok(v) => v,
+        //     Err(_) => panic!(),
+        // };
         let tokens = BlockLexer::get_tokens(&self.fcpeg_file_content)?;
-        self.block_map = block_parser.parse(self.file_alias_name.clone(), tokens)?;
 
         if cfg!(release) {
             self.print_parsing_info();
