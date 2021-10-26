@@ -6,7 +6,7 @@
     + use Block,
     + use Symbol,
 
-    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+)* Symbol.LineEnd*# Symbol.Space*#,
+    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*#,
 }
 
 [Symbol]{

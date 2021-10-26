@@ -289,6 +289,7 @@ impl RuleCountConverter {
 pub struct Rule {
     pub name: String,
     pub args: Vec<String>,
+    // note: choice は単体でよさそう
     pub choices: Vec<Box<RuleChoice>>,
 }
 

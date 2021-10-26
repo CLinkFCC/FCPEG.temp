@@ -13,40 +13,25 @@ macro_rules! block {
     };
 }
 
-macro_rules! def_cmd {
-    ($rule_name:expr, $sub_elems:expr) => {
-        BlockCommand::Define(0, Rule::new($rule_name.to_string(), vec![], $sub_elems))
+macro_rules! rule {
+    ($rule_name:expr, $($choice:expr), *,) => {
+        {
+            let choices = vec![$(
+                match $choice {
+                    RuleElementContainer::RuleChoice(v) => v,
+                    _ => panic!(),
+                }
+            )*];
+
+            let rule = Rule::new($rule_name.to_string(), vec![], choices);
+            BlockCommand::Define(0, rule)
+        }
     };
 }
 
 macro_rules! start_cmd {
     ($file_alias_name:expr, $block_name:expr, $rule_name:expr) => {
         BlockCommand::Start(0, $file_alias_name.to_string(), $block_name.to_string(), $rule_name.to_string())
-    };
-}
-
-macro_rules! choice_elem {
-    ($choice:expr) => {
-        RuleElementContainer::RuleChoice(Box::new($choice))
-    };
-}
-
-macro_rules! expr_elem {
-    ($expr:expr) => {
-        RuleElementContainer::RuleExpression(Box::new($expr))
-    };
-}
-
-macro_rules! expr {
-    ($kind:ident, $value:expr) => {
-        RuleExpression {
-            line: 0,
-            kind: RuleExpressionKind::$kind,
-            lookahead_kind: RuleLookaheadKind::None,
-            loop_count: (1, 1),
-            ast_reflection: ASTReflection::Reflectable("".to_string()),
-            value: $value.to_string(),
-        }
     };
 }
 
@@ -63,11 +48,56 @@ macro_rules! choice {
         }
     };
 
-    ($($field_name:ident = $field_value:expr), *,) => {
+    ($options:expr, $($sub_elem:expr), *,) => {
         {
             let mut choice = choice!();
-            $(choice.$field_name = $field_value;)*
-            choice
+            choice.elem_containers = vec![$($sub_elem,)*];
+
+            for opt in $options {
+                match opt {
+                    "?" => choice.loop_count = (0, 1),
+                    "*" => choice.loop_count = (0, -1),
+                    "+" => choice.loop_count = (1, -1),
+                    "#" => choice.ast_reflection = ASTReflection::Unreflectable(),
+                    ":" => choice.has_choices = true,
+                    _ => (),
+                }
+            }
+
+            // $(choice.$field_name = $field_value;)*
+            RuleElementContainer::RuleChoice(Box::new(choice))
+        }
+    };
+}
+
+macro_rules! expr {
+    ($kind:ident) => {
+        RuleExpression {
+            line: 0,
+            kind: RuleExpressionKind::$kind,
+            lookahead_kind: RuleLookaheadKind::None,
+            loop_count: (1, 1),
+            ast_reflection: ASTReflection::Reflectable("".to_string()),
+            value: "".to_string(),
+        }
+    };
+
+    ($kind:ident, $value:expr $(, $option:expr) *) => {
+        {
+            let mut expr = expr!($kind);
+            expr.value = $value.to_string();
+
+            $(
+                match $option {
+                    "?" => expr.loop_count = (0, 1),
+                    "*" => expr.loop_count = (0, -1),
+                    "+" => expr.loop_count = (1, -1),
+                    "#" => expr.ast_reflection = ASTReflection::Unreflectable(),
+                    _ => (),
+                }
+            )*
+
+            RuleElementContainer::RuleExpression(Box::new(expr))
         }
     };
 }
@@ -80,7 +110,7 @@ impl BlockParserA {
         let mut tmp_file_man = FCPEGFileMan::new("".to_string(), "".to_string());
         tmp_file_man.block_map = BlockParserA::get_fcpeg_block_map();
         let mut fcpeg_rule_map = RuleMap::new(".Syntax.FCPEG".to_string());
-        fcpeg_rule_map.add_rules_from_fcpeg_file_man(&tmp_file_man).unwrap();
+        match fcpeg_rule_map.add_rules_from_fcpeg_file_man(&tmp_file_man) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
         let mut parser = SyntaxParser::new(fcpeg_rule_map)?;
 
         BlockParserA::set_block_map_to_all_files(&mut parser, fcpeg_file_man)?;
@@ -129,19 +159,30 @@ impl BlockParserA {
     }
 
     fn get_syntax_block() -> Block {
-        // code: FCPEG <- 
-        let fcpeg_rule_def = def_cmd!("FCPEG", vec![
-            Box::new(choice!(
-                elem_containers = vec![
-                    choice_elem!(choice!(
-                        elem_containers = vec![
-                            expr_elem!(expr!(ID, ".Syntax")),
-                        ],
-                    ))
-                ],
-                has_choices = true,
-            )),
-        ]);
+        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*#,
+        /*let fcpeg_rule_def = rule!{
+            "FCPEG",
+            choice!{
+                vec![],
+                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, "Symbol.LineEnd", "*", "#"),
+                choice!{
+                    vec!["*", "#"],
+                    expr!(ID, "Symbol.LineEnd", "+", "#"),
+                },
+            },
+        };*/
+
+        let fcpeg_rule_def = rule!{
+            "FCPEG",
+            choice!{
+                vec![":"],
+                expr!(String, "|"),
+                expr!(String, "|"),
+                expr!(String, " ", "?"),
+                expr!(String, "|", "*"),
+            },
+        };
 
         return block!("Syntax", vec![fcpeg_rule_def]);
     }

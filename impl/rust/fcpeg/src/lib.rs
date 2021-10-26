@@ -71,11 +71,7 @@ impl FCPEG {
 
         let rule_map = match BlockParserA::get_rule_map(&mut fcpeg_file_man) {
             Ok(v) => v,
-            Err(e) => {
-                let mut cons = Console::new();
-                cons.log(e.get_log_data(), false);
-                panic!();
-            },
+            Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
         };
 
         if cfg!(release) {
