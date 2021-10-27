@@ -1,6 +1,6 @@
 use std::collections::*;
 
-use crate::blocklexer::*;
+// use crate::blocklexer::*;
 use crate::config::*;
 use crate::blockparser::*;
 use crate::data::*;
@@ -90,12 +90,12 @@ impl FCPEGFileMan {
             return Err(BlockParseError::InternalErr(format!("file manager not loaded (path: '{}')", self.fcpeg_file_path)));
         }
 
-        let mut block_parser = BlockParser::new();
+        // let mut block_parser = BlockParser::new();
         // self.block_map = match BlockParserA::get_rule_map(&mut self) {
         //     Ok(v) => v,
         //     Err(_) => panic!(),
         // };
-        let tokens = BlockLexer::get_tokens(&self.fcpeg_file_content)?;
+        // let tokens = BlockLexer::get_tokens(&self.fcpeg_file_content)?;
 
         if cfg!(release) {
             self.print_parsing_info();

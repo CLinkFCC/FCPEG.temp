@@ -26,7 +26,7 @@
 
     Block <- "["# Symbol.Space*# Misc.SingleID Symbol.Space*# "]"# Symbol.Space*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
     Cmd <- Comment : DefineCmd : StartCmd : UseCmd,
-    Comment <- "%"# (!"," !Symbol.LineEnd .)* ",",
+    Comment <- "%"# (!"," !Symbol.LineEnd .)* ","#,
     DefineCmd <- Misc.SingleID Symbol.Space*# "<-"# Symbol.Space*# Rule.PureChoice Symbol.Space*# ","#,
     StartCmd <- "+"# Symbol.Space*# "start"# Symbol.Space+# Misc.ChainID Symbol.Space*# ","#,
     UseCmd <- "+"# Symbol.Space*# "use"# Symbol.Space+# Misc.ChainID UseCmdBlockAlias? Symbol.Space*# ","#,

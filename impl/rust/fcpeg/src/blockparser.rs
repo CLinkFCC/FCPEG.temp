@@ -1,9 +1,9 @@
-use std::collections::*;
+// use std::collections::*;
 
-use crate::block::*;
-use crate::blocklexer::*;
-use crate::data::*;
-use crate::rule::*;
+// use crate::block::*;
+// use crate::blocklexer::*;
+// use crate::data::*;
+// use crate::rule::*;
 
 use rustnutlib::console::*;
 
@@ -63,35 +63,36 @@ impl BlockParseError {
 }
 
 pub struct BlockParser {
-    file_alias_name: String,
-    token_i: usize,
-    tokens: Vec<BlockToken>
+    // file_alias_name: String,
+    // token_i: usize,
+    // tokens: Vec<BlockToken>
 }
 
 impl BlockParser {
     pub fn new() -> BlockParser {
         return BlockParser {
-            file_alias_name: String::new(),
-            token_i: 0,
-            tokens: vec![],
+            // file_alias_name: String::new(),
+            // token_i: 0,
+            // tokens: vec![],
         }
     }
 
-    // // フィールドが初期化されるためブロックパーサのインスタンスを使い回せる
-    // pub fn parse(&mut self, file_alias_name: String, fcpeg_src: String, tokens: Vec<BlockToken>) -> Result<BlockMap, BlockParseError> {
-    //     // フィールド初期化
-    //     self.file_alias_name = file_alias_name;
-    //     self.token_i = 0;
-    //     self.tokens = tokens;
+    /*
+    // フィールドが初期化されるためブロックパーサのインスタンスを使い回せる
+    pub fn parse(&mut self, file_alias_name: String, fcpeg_src: String, tokens: Vec<BlockToken>) -> Result<BlockMap, BlockParseError> {
+        // フィールド初期化
+        self.file_alias_name = file_alias_name;
+        self.token_i = 0;
+        self.tokens = tokens;
 
-    //     // todo: 消す
-    //     let block_map = self.get_blocks()?;
-    //     let block_map = match BlockParserA::get_block_map(fcpeg_src) {
-    //         Ok(v) => v,
-    //         Err(_) => panic!(),
-    //     };
-    //     return Ok(block_map);
-    // }
+        // todo: 消す
+        let block_map = self.get_blocks()?;
+        let block_map = match BlockParserA::get_block_map(fcpeg_src) {
+            Ok(v) => v,
+            Err(_) => panic!(),
+        };
+        return Ok(block_map);
+    }
 
     // 初期位置: パース対象ソースの開始位置
     fn get_blocks(&mut self) -> Result<HashMap<String, Block>, BlockParseError> {
@@ -1248,4 +1249,5 @@ impl BlockParser {
 
         return Ok(new_expr);
     }
+    */
 }
