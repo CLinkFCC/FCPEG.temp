@@ -90,6 +90,8 @@ impl SyntaxParser {
     }
 
     fn is_rule_successful(&mut self, rule_id: &String) -> std::result::Result<std::option::Option<SyntaxNodeElement>, SyntaxParseError> {
+        println!("rule {}", rule_id);
+
         let rule = match self.rule_map.get_rule(rule_id) {
             Some(v) => v.clone(),
             None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),

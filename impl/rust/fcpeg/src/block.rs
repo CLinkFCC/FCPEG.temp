@@ -68,14 +68,12 @@ macro_rules! choice {
         {
             let mut choice = choice!();
             choice.elem_containers = vec![$($sub_elem,)*];
+            choice.ast_reflection = ASTReflection::Reflectable("".to_string());
 
             for opt in $options {
                 match opt {
-                    "!" => choice.lookahead_kind = RuleLookaheadKind::Negative,
-                    "&" => choice.lookahead_kind = RuleLookaheadKind::Positive,
-                    "?" => choice.loop_count = (0, 1),
-                    "*" => choice.loop_count = (0, -1),
-                    "+" => choice.loop_count = (1, -1),
+                    "&" | "!" => choice.lookahead_kind = RuleLookaheadKind::to_lookahead_kind(opt),
+                    "?" | "*" | "+" => choice.loop_count = RuleCountConverter::loop_symbol_to_count(opt),
                     "#" => choice.ast_reflection = ASTReflection::Unreflectable(),
                     ":" => choice.has_choices = true,
                     _ => panic!(),
@@ -95,7 +93,7 @@ macro_rules! expr {
             kind: RuleExpressionKind::$kind,
             lookahead_kind: RuleLookaheadKind::None,
             loop_count: (1, 1),
-            ast_reflection: ASTReflection::Reflectable("".to_string()),
+            ast_reflection: ASTReflection::Unreflectable(),
             value: "".to_string(),
         }
     };
@@ -105,13 +103,17 @@ macro_rules! expr {
             let mut expr = expr!($kind);
             expr.value = $value.to_string();
 
+            let leaf_name = match RuleExpressionKind::$kind {
+                RuleExpressionKind::ID => $value.to_string(),
+                _ => "".to_string(),
+            };
+
+            expr.ast_reflection = ASTReflection::Reflectable(leaf_name);
+
             $(
                 match $option {
-                    "!" => expr.lookahead_kind = RuleLookaheadKind::Negative,
-                    "&" => expr.lookahead_kind = RuleLookaheadKind::Positive,
-                    "?" => expr.loop_count = (0, 1),
-                    "*" => expr.loop_count = (0, -1),
-                    "+" => expr.loop_count = (1, -1),
+                    "&" | "!" => expr.lookahead_kind = RuleLookaheadKind::to_lookahead_kind($option),
+                    "?" | "*" | "+" => expr.loop_count = RuleCountConverter::loop_symbol_to_count($option),
                     "#" => expr.ast_reflection = ASTReflection::Unreflectable(),
                     _ => panic!(),
                 }
@@ -157,8 +159,8 @@ impl BlockParserA {
     fn to_syntax_tree(parser: &mut SyntaxParser, fcpeg_file_man: &FCPEGFileMan) -> Result<SyntaxTree, SyntaxParseError> {
         let tree = parser.get_syntax_tree(fcpeg_file_man.fcpeg_file_content.clone())?;
 
-        println!("print");
-        tree.print(true);
+        println!("print {}", fcpeg_file_man.fcpeg_file_content);
+        tree.print(false);
 
         return Ok(tree);
     }
@@ -181,6 +183,7 @@ impl FCPEGBlock {
             "Symbol" => get_symbol_block,
             "Misc" => get_misc_block,
             "Block" => get_block_block,
+            "Rule" => get_rule_block,
         };
     }
 
@@ -202,8 +205,11 @@ impl FCPEGBlock {
                 expr!(ID, "Symbol.LineEnd", "*", "#"),
                 choice!{
                     vec!["*"],
-                    expr!(ID, "Block.Block"),
-                    expr!(ID, "Symbol.LineEnd", "+", "#"),
+                    choice!{
+                        vec![],
+                        expr!(ID, "Block.Block"),
+                        expr!(ID, "Symbol.LineEnd", "+", "#"),
+                    },
                 },
                 expr!(ID, "Symbol.LineEnd", "*", "#"),
                 expr!(ID, "Symbol.Space", "*", "#"),
@@ -256,8 +262,11 @@ impl FCPEGBlock {
                 expr!(ID, "SingleID"),
                 choice!{
                     vec!["*"],
-                    expr!(Wildcard, "."),
-                    expr!(ID, "SingleID"),
+                    choice!{
+                        vec![],
+                        expr!(Wildcard, "."),
+                        expr!(ID, "SingleID"),
+                    },
                 },
             },
         };
@@ -285,8 +294,11 @@ impl FCPEGBlock {
                 expr!(ID, "Symbol.LineEnd", "+", "#"),
                 choice!{
                     vec!["*"],
-                    expr!(ID, "Cmd"),
-                    expr!(ID, "Symbol.LineEnd", "+", "#"),
+                    choice!{
+                        vec![],
+                        expr!(ID, "Cmd"),
+                        expr!(ID, "Symbol.LineEnd", "+", "#"),
+                    },
                 },
                 expr!(String, "}", "#"),
             },
@@ -296,15 +308,30 @@ impl FCPEGBlock {
         let cmd_rule = rule!{
             "Cmd",
             choice!{
-                vec![":"],
-                expr!(ID, "Comment"),
-                expr!(ID, "DefineCmd"),
-                expr!(ID, "StartCmd"),
-                expr!(ID, "UseCmd"),
+                vec![],
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(ID, "Comment"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, "DefineCmd"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, "StartCmd"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, "UseCmd"),
+                    },
+                },
             },
         };
 
-        // code: Comment <- "%"# (!"," !Symbol.LineEnd .)* ",",
+        // code: Comment <- "%"# (!"," !Symbol.LineEnd .)* ","#,
         let comment_rule = rule!{
             "Comment",
             choice!{
@@ -312,9 +339,12 @@ impl FCPEGBlock {
                 expr!(String, "%", "#"),
                 choice!{
                     vec!["*"],
-                    expr!(String, ",", "!"),
-                    expr!(ID, "Symbol.LineEnd", "!"),
-                    expr!(Wildcard, "."),
+                    choice!{
+                        vec![],
+                        expr!(String, ",", "!"),
+                        expr!(ID, "Symbol.LineEnd", "!"),
+                        expr!(Wildcard, "."),
+                    },
                 },
                 expr!(String, ",", "#"),
             },
@@ -372,12 +402,340 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(ID, "Symbol.Space", "+", "#"),
-                expr!(String, "as", "+", "#"),
+                expr!(String, "as", "#"),
                 expr!(ID, "Symbol.Space", "+", "#"),
                 expr!(ID, "Misc.SingleID"),
             },
         };
 
         return block!("Block", vec![misc_use, rule_use, symbol_use, block_rule, cmd_rule, comment_rule, define_cmd_rule, start_cmd_rule, use_cmd_rule, use_cmd_block_alias_rule]);
+    }
+
+    fn get_rule_block() -> Block {
+        let misc_use = use_block!("Misc");
+        let symbol_use = use_block!("Symbol");
+
+        // code: PureChoice <- Seq (Symbol.Space# ":"# Symbol.Space# Seq)*,
+        let pure_choice_rule = rule!{
+            "PureChoice",
+            choice!{
+                vec![],
+                expr!(ID, "Seq"),
+                choice!{
+                vec!["*"],
+                    expr!(ID, "Symbol.Space", "#"),
+                    expr!(String, ":", "#"),
+                    expr!(ID, "Symbol.Space", "#"),
+                    expr!(ID, "Seq"),
+                },
+            },
+        };
+
+        // code: Choice <- "("# PureChoice ")"#,
+        let choice_rule = rule!{
+            "Choice",
+            choice!{
+                vec![],
+                expr!(String, "(", "#"),
+                expr!(ID, "PureChoice"),
+                expr!(String, ")", "#"),
+            },
+        };
+
+        // code: Seq <- SeqElem (Symbol.Space+# SeqElem)*,
+        let seq_rule = rule!{
+            "Seq",
+            choice!{
+                vec![],
+                expr!(ID, "SeqElem"),
+                choice!{
+                    vec!["*"],
+                    choice!{
+                        vec![],
+                        choice!{
+                            vec![],
+                            expr!(ID, "Symbol.Space", "+", "#"),
+                            expr!(ID, "SeqElem"),
+                        },
+                    },
+                },
+            },
+        };
+
+        // code: SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflection?,
+        let seq_elem_rule = rule!{
+            "SeqElem",
+            choice!{
+                vec![],
+                expr!(ID, "Lookahead", "?"),
+                choice!{
+                    vec![],
+                    choice!{
+                        vec![":"],
+                        choice!{
+                            vec![],
+                            expr!(ID, "Choice"),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(ID, "Expr"),
+                        },
+                    },
+                },
+                expr!(ID, "Loop", "?"),
+                expr!(ID, "RandomOrder", "?"),
+                expr!(ID, "ASTReflection", "?"),
+            },
+        };
+
+        // code: Expr <- ID : Str : CharClass : Wildcard,
+        let expr_rule = rule!{
+            "Expr",
+            choice!{
+                vec![],
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(ID, "ID"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, "Str"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, "CharClass"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, "Wildcard"),
+                    },
+                },
+            },
+        };
+
+        // code: Lookahead <- "!" : "&",
+        let lookahead_rule = rule!{
+            "Lookahead",
+            choice!{
+                vec![],
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(String, "!"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(String, "&"),
+                    },
+                },
+            },
+        };
+
+        // code: Loop <- "?" : "*" : "+" : LoopRange,
+        let loop_rule = rule!{
+            "Loop",
+            choice!{
+                vec![],
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(String, "?"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(String, "*"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(String, "+"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, "LoopRange"),
+                    },
+                },
+            },
+        };
+
+        // code: LoopRange <- "{"# Num? ","# Num? "}"#,
+        let loop_range_rule = rule!{
+            "LoopRange",
+            choice!{
+                vec![],
+                expr!(String, "{", "#"),
+                expr!(ID, "Num", "?"),
+                expr!(String, ",", "#"),
+                expr!(ID, "Num", "?"),
+                expr!(String, "}", "#"),
+            },
+        };
+
+        // expr: RandomOrder <- "^"# RandomOrderRange?,
+        let random_order_rule = rule!{
+            "RandomOrder",
+            choice!{
+                vec![],
+                expr!(String, "^", "#"),
+                expr!(String, "RandomOrderRange", "?"),
+            },
+        };
+
+        // code: RandomOrderRange <- "["# Num? ","# Num? "]"#,
+        let random_order_range_rule = rule!{
+            "RandomOrderRange",
+            choice!{
+                vec![],
+                expr!(String, "[", "#"),
+                expr!(ID, "Num", "?"),
+                expr!(String, "ID", "#"),
+            },
+        };
+
+        // code: ASTReflection <- "#"# Misc.SingleID?,
+        let ast_reflection_rule = rule!{
+            "ASTReflection",
+            choice!{
+                vec![],
+                expr!(String, "#", "#"),
+                expr!(ID, "Misc.SingleID", "?"),
+            },
+        };
+
+        // code: Num <- [0-9]+,
+        let num_rule = rule!{
+            "Num",
+            choice!{
+                vec![],
+                expr!(CharClass, "[0-9]+", "+"),
+            },
+        };
+
+        // code: ID <- Misc.ChainID,
+        let id_rule = rule!{
+            "ID",
+            choice!{
+                vec![],
+                expr!(ID, "Misc.ChainID"),
+            },
+        };
+
+        // code: EscSeq <- "\\" ("\\" : "0" : "\"" : "n"),
+        let esc_seq_rule = rule!{
+            "EscSeq",
+            choice!{
+                vec![],
+                expr!(String, "\\"),
+                choice!{
+                    vec![],
+                    choice!{
+                        vec![":"],
+                        choice!{
+                            vec![],
+                            expr!(String, "\\"),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, "0"),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, "\""),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, "n"),
+                        },
+                    },
+                },
+            },
+        };
+
+        // code: Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))+ "\""#,
+        let str_rule = rule!{
+            "Str",
+            choice!{
+                vec![],
+                expr!(String, "\"", "#"),
+                choice!{
+                    vec!["+"],
+                    choice!{
+                        vec![":"],
+                        choice!{
+                            vec![],
+                            expr!(ID, "EscSeq"),
+                        },
+                        choice!{
+                            vec![],
+                            choice!{
+                                vec!["!"],
+                                choice!{
+                                    vec![":"],
+                                    choice!{
+                                        vec![],
+                                        expr!(String, "\\"),
+                                    },
+                                    choice!{
+                                        vec![],
+                                        expr!(String, "\""),
+                                    },
+                                },
+                            },
+                            expr!(Wildcard, "."),
+                        },
+                    },
+                },
+                expr!(String, "\"", "#"),
+            },
+        };
+
+        // code: CharClass <- "["# (!"[" !"]" !Symbol.LineEnd ("\\[" : "\\]" : "\\\\" : .))+ "]"#,
+        let char_class_rule = rule!{
+            "CharClass",
+            choice!{
+                vec![],
+                expr!(String, "[", "#"),
+                choice!{
+                    vec!["+"],
+                    expr!(String, "[", "!"),
+                    expr!(String, "]", "!"),
+                    expr!(ID, "Symbol.LineEnd", "!"),
+                    choice!{
+                        vec![":"],
+                        choice!{
+                            vec![],
+                            expr!(String, "\\["),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, "\\]"),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, "\\\\"),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(Wildcard, "."),
+                        },
+                    },
+                },
+                expr!(String, "]", "#"),
+            },
+        };
+
+        // code: Wildcard <- "."#,
+        let wildcard_rule = rule!{
+            "Wildcard",
+            choice!{
+                vec![],
+                expr!(String, ".", "#"),
+            },
+        };
+
+        return block!("Rule", vec![misc_use, symbol_use, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }

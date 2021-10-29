@@ -54,6 +54,6 @@
     ID <- Misc.ChainID,
     EscSeq <- "\\" ("\\" : "0" : "\"" : "n"),
     Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))+ "\""#,
-    CharClass <- "["# (!"[" !"]" !Symbol.LineEnd ("\\[" : "\\]" : .))+ "]"#,
+    CharClass <- "["# (!"[" !"]" !Symbol.LineEnd ("\\[" : "\\]" : "\\\\" : .))+ "]"#,
     Wildcard <- "."#,
 }
