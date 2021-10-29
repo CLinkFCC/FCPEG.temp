@@ -1,14 +1,14 @@
 use std::io::*;
 use std::fmt::*;
 
-use crate::blocklexer::*;
+use crate::block::*;
 use crate::config::*;
 use crate::rule::*;
 
 #[derive(Clone)]
 pub enum Pragma {
     Unknown,
-    Define(String, Vec<BlockToken>, Vec<String>),
+    Define(String, Vec<crate::block::BlockToken>, Vec<String>),
     Start(Vec<BlockToken>),
     Use(Vec<BlockToken>),
 }

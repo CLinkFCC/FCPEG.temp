@@ -2,7 +2,7 @@ use std::collections::*;
 use std::fmt::*;
 use std::option::*;
 
-use crate::blockparser::*;
+use crate::block::*;
 use crate::data::*;
 use crate::fileman::*;
 

@@ -5,7 +5,7 @@ use crate::data::*;
 use crate::parser::*;
 use crate::rule::*;
 
-pub type BlockMap = HashMap<String, Block>;
+use rustnutlib::console::*;
 
 macro_rules! block_map {
     ($($block_name:expr => $func_name:ident), *,) => {
@@ -124,10 +124,107 @@ macro_rules! expr {
     };
 }
 
-pub struct BlockParserA {}
+pub type BlockMap = HashMap<String, Block>;
 
-impl BlockParserA {
-    // FileMan から最終的な RuleMap を取得する
+#[derive(PartialOrd, PartialEq, Debug, Clone)]
+pub enum BlockTokenKind {
+    ID,
+    Number,
+    Space,
+    String,
+    StringInBracket,
+    Symbol,
+}
+
+impl std::fmt::Display for BlockTokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            BlockTokenKind::ID => return write!(f, "ID"),
+            BlockTokenKind::Number => return write!(f, "Number"),
+            BlockTokenKind::Space => return write!(f, "Space"),
+            BlockTokenKind::String => return write!(f, "String"),
+            BlockTokenKind::StringInBracket => return write!(f, "StringInBracket"),
+            BlockTokenKind::Symbol => return write!(f, "Symbol"),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct BlockToken {
+    pub line: usize,
+    pub kind: BlockTokenKind,
+    pub value: String,
+}
+
+impl BlockToken {
+    pub fn new(line: usize, kind: BlockTokenKind, value: String) -> BlockToken {
+        return BlockToken {
+            line: line,
+            kind: kind,
+            value: value,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum BlockParseError {
+    Unknown(),
+    BlockAliasNotFound(usize, String),
+    DuplicatedBlockAliasName(usize, String),
+    DuplicatedBlockName(usize, String),
+    DuplicatedStartCmd(),
+    ExpectedBlockDef(usize),
+    ExpectedToken(usize, String),
+    InternalErr(String),
+    InvalidCharClassFormat(usize, String),
+    InvalidToken(usize, String),
+    MainBlockNotFound(),
+    NoChoiceOrExpressionContent(usize),
+    NoStartCmdInMainBlock(),
+    RuleHasNoChoice(String),
+    RuleInMainBlock(),
+    StartCmdOutsideMainBlock(),
+    TooBigNumber(usize, String),
+    UnexpectedEOF(usize, String),
+    UnexpectedToken(usize, String, String),
+    UnknownPragmaName(usize, String),
+    UnknownSyntax(usize, String),
+    UnknownToken(usize, String),
+}
+
+impl BlockParseError {
+    pub fn get_log_data(&self) -> ConsoleLogData {
+        match self {
+            BlockParseError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown error", vec![], vec![]),
+            BlockParseError::BlockAliasNotFound(line, block_alias_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("block alias '{}' not found", block_alias_name), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::DuplicatedBlockAliasName(line, block_alias_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("duplicated block alias name '{}'", block_alias_name), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::DuplicatedBlockName(line, block_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("duplicated block name '{}'", block_name), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::DuplicatedStartCmd() => ConsoleLogData::new(ConsoleLogKind::Error, "duplicated start command", vec![], vec![]),
+            BlockParseError::ExpectedBlockDef(line) => ConsoleLogData::new(ConsoleLogKind::Error, "expected block definition", vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::ExpectedToken(line, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("expected token {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::InternalErr(err_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_name), vec![], vec![]),
+            BlockParseError::InvalidCharClassFormat(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid character class format '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::InvalidToken(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid token '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::MainBlockNotFound() => ConsoleLogData::new(ConsoleLogKind::Error, "main block not found", vec![], vec![]),
+            BlockParseError::NoChoiceOrExpressionContent(line) => ConsoleLogData::new(ConsoleLogKind::Error, "no choice or expression content", vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::NoStartCmdInMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "no start command in main block", vec![], vec![]),
+            BlockParseError::RuleHasNoChoice(rule_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("rule '{}' has no choice", rule_name), vec![], vec![]),
+            BlockParseError::RuleInMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "rule in main block", vec![], vec![]),
+            BlockParseError::StartCmdOutsideMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "start command outside main block", vec![], vec![]),
+            BlockParseError::TooBigNumber(line, number) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too big number {}", number), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::UnexpectedEOF(line, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unexpected EOF, expected {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::UnexpectedToken(line, unexpected_token, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unexpected token '{}', expected {}", unexpected_token, expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::UnknownPragmaName(line, unknown_pragma_name) => ConsoleLogData::new(ConsoleLogKind::Error, "unknown pragma name", vec![format!("line:\t{}", line + 1), format!("pragma name:\t{}", unknown_pragma_name)], vec![]),
+            BlockParseError::UnknownSyntax(line, target_token) => ConsoleLogData::new(ConsoleLogKind::Error, "unknown syntax", vec![format!("line: {}", line + 1), format!("target token:\t'{}'", target_token)], vec![]),
+            BlockParseError::UnknownToken(line, unknown_token) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown token '{}'", unknown_token), vec![format!("line:\t{}", line + 1)], vec![]),
+        }
+    }
+}
+
+pub struct BlockParser {}
+
+impl BlockParser {
+    // note: FileMan から最終的な RuleMap を取得する
     pub fn get_rule_map(fcpeg_file_man: &mut FCPEGFileMan) -> Result<RuleMap, SyntaxParseError> {
         let mut tmp_file_man = FCPEGFileMan::new("".to_string(), "".to_string());
         tmp_file_man.block_map = FCPEGBlock::get_block_map();
@@ -135,7 +232,7 @@ impl BlockParserA {
         match fcpeg_rule_map.add_rules_from_fcpeg_file_man(&tmp_file_man) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
         let mut parser = SyntaxParser::new(fcpeg_rule_map)?;
 
-        BlockParserA::set_block_map_to_all_files(&mut parser, fcpeg_file_man)?;
+        BlockParser::set_block_map_to_all_files(&mut parser, fcpeg_file_man)?;
 
         let mut rule_map = RuleMap::new("Main".to_string());
         rule_map.add_rules_from_fcpeg_file_man(fcpeg_file_man).unwrap();
@@ -143,19 +240,19 @@ impl BlockParserA {
         return Ok(rule_map);
     }
 
-    // 全ファイルに BlockMap を設定する
+    // note: 全ファイルに BlockMap を設定する
     fn set_block_map_to_all_files(parser: &mut SyntaxParser, fcpeg_file_man: &mut FCPEGFileMan) -> Result<(), SyntaxParseError> {
-        let tree = BlockParserA::to_syntax_tree(parser, fcpeg_file_man)?;
-        fcpeg_file_man.block_map = BlockParserA::to_block_map(&tree);
+        let tree = BlockParser::to_syntax_tree(parser, fcpeg_file_man)?;
+        fcpeg_file_man.block_map = BlockParser::to_block_map(&tree);
 
         for sub_file_man in fcpeg_file_man.sub_file_aliase_map.values_mut() {
-            BlockParserA::set_block_map_to_all_files(parser, sub_file_man)?;
+            BlockParser::set_block_map_to_all_files(parser, sub_file_man)?;
         }
 
         return Ok(());
     }
 
-    // ブロックマップとファイルを元に 1 ファイルの FCPEG コードの構文木を取得する
+    // note: ブロックマップとファイルを元に 1 ファイルの FCPEG コードの構文木を取得する
     fn to_syntax_tree(parser: &mut SyntaxParser, fcpeg_file_man: &FCPEGFileMan) -> Result<SyntaxTree, SyntaxParseError> {
         let tree = parser.get_syntax_tree(fcpeg_file_man.fcpeg_file_content.clone())?;
 

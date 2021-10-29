@@ -1,6 +1,4 @@
 pub mod block;
-pub mod blocklexer;
-pub mod blockparser;
 pub mod config;
 pub mod data;
 pub mod fileman;
@@ -10,7 +8,6 @@ pub mod rule;
 use std::result::*;
 
 use crate::block::*;
-use crate::blockparser::*;
 use crate::fileman::*;
 
 use rustnutlib::console::*;
@@ -69,7 +66,7 @@ impl FCPEG {
         //     Ok(v) => v,
         // };
 
-        let rule_map = match BlockParserA::get_rule_map(&mut fcpeg_file_man) {
+        let rule_map = match BlockParser::get_rule_map(&mut fcpeg_file_man) {
             Ok(v) => v,
             Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
         };
