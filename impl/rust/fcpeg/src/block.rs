@@ -243,7 +243,7 @@ impl BlockParser {
     // note: 全ファイルに BlockMap を設定する
     fn set_block_map_to_all_files(parser: &mut SyntaxParser, fcpeg_file_man: &mut FCPEGFileMan) -> Result<(), SyntaxParseError> {
         let tree = BlockParser::to_syntax_tree(parser, fcpeg_file_man)?;
-        fcpeg_file_man.block_map = BlockParser::to_block_map(&tree);
+        fcpeg_file_man.block_map = BlockParser::to_block_map(&tree)?;
 
         for sub_file_man in fcpeg_file_man.sub_file_aliase_map.values_mut() {
             BlockParser::set_block_map_to_all_files(parser, sub_file_man)?;
@@ -263,10 +263,21 @@ impl BlockParser {
     }
 
     // note: FCPEG コードの構文木 → ブロックマップの変換
-    fn to_block_map(tree: &SyntaxTree) -> BlockMap {
+    fn to_block_map(tree: &SyntaxTree) -> Result<BlockMap, SyntaxParseError> {
         let mut block_map = BlockMap::new();
+
+        let root = tree.clone_child();
+
+        let block_nodes = root.get_node_list()?.get_node_list_child(0)?.filter(|each_elem| each_elem.is_reflectable());
+
+        for each_block_elem in &block_nodes {
+            let each_block_node = each_block_elem.get_node_list()?;
+            let block_name = each_block_node.get_node_list_child(0)?.to_string();
+            println!("{}", block_name);
+        }
+
         block_map.insert("".to_string(), Block::new("Main".to_string(), vec![]));
-        return block_map;
+        return Ok(block_map);
     }
 }
 

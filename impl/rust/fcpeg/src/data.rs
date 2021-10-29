@@ -3,6 +3,7 @@ use std::fmt::*;
 
 use crate::block::*;
 use crate::config::*;
+use crate::parser::*;
 use crate::rule::*;
 
 #[derive(Clone)]
@@ -71,10 +72,38 @@ impl SyntaxNodeElement {
         return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflection));
     }
 
-    pub fn is_hidden(&self) -> bool {
+    pub fn get_node_list(&self) -> std::result::Result<&SyntaxNodeList, SyntaxParseError> {
         return match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.is_hidden(),
-            SyntaxNodeElement::Leaf(leaf) => leaf.is_hidden(),
+            SyntaxNodeElement::NodeList(node_list) => Ok(node_list),
+            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("element not node list".to_string())),
+        };
+    }
+
+    pub fn get_leaf(&self) -> std::result::Result<&SyntaxLeaf, SyntaxParseError> {
+        return match self {
+            SyntaxNodeElement::Leaf(leaf) => Ok(leaf),
+            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("element not leaf".to_string())),
+        };
+    }
+
+    pub fn is_node_list(&self) -> bool {
+        return match self {
+            SyntaxNodeElement::NodeList(_) => true,
+            _ => false,
+        };
+    }
+
+    pub fn is_reflectable(&self) -> bool {
+        return match self {
+            SyntaxNodeElement::NodeList(node_list) => node_list.is_reflectable(),
+            SyntaxNodeElement::Leaf(leaf) => leaf.is_reflectable(),
+        };
+    }
+
+    pub fn get_ast_reflection(&self) -> ASTReflection {
+        return match self {
+            SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection.clone(),
+            SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection.clone(),
         };
     }
 
@@ -114,6 +143,10 @@ impl SyntaxTree {
     pub fn print(&self, ignore_hidden_elems: bool) {
         self.child.print(0, &mut BufWriter::new(stdout().lock()), ignore_hidden_elems)
     }
+
+    pub fn clone_child(&self) -> SyntaxNodeElement {
+        return self.child.clone();
+    }
 }
 
 #[derive(Clone)]
@@ -130,8 +163,50 @@ impl SyntaxNodeList {
         };
     }
 
-    pub fn is_hidden(&self) -> bool {
-        return !self.ast_reflection.is_reflectable();
+    pub fn filter(&self, f: fn(&SyntaxNodeElement) -> bool) -> Vec<Box<&SyntaxNodeElement>> {
+        let mut elems = Vec::<Box::<&SyntaxNodeElement>>::new();
+
+        for each_child in &self.elems {
+            if f(each_child) {
+                elems.push(Box::new(each_child));
+            }
+        }
+
+        return elems;
+    }
+
+    pub fn get_child(&self, index: usize) -> std::result::Result<&SyntaxNodeElement, SyntaxParseError> {
+        let mut elem_i = 0;
+        let mut reflectable_elem_i = 0;
+
+        for each_elem in &self.elems {
+            if each_elem.is_reflectable() {
+                if reflectable_elem_i == index {
+                    return match self.elems.get(elem_i) {
+                        Some(v) => Ok(&v),
+                        None => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+                    };
+                }
+
+                reflectable_elem_i += 1;
+            }
+
+            elem_i += 1;
+        }
+
+        return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("{}th reflectable element not matched", index + 1)));
+    }
+
+    pub fn get_node_list_child(&self, index: usize) -> std::result::Result<&SyntaxNodeList, SyntaxParseError> {
+        return self.get_child(index)?.get_node_list();
+    }
+
+    pub fn get_leaf_child(&self, index: usize) -> std::result::Result<&SyntaxLeaf, SyntaxParseError> {
+        return self.get_child(index)?.get_leaf();
+    }
+
+    pub fn is_reflectable(&self) -> bool {
+        return self.ast_reflection.is_reflectable();
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
@@ -143,23 +218,45 @@ impl SyntaxNodeList {
                     elem_name.clone()
                 }
             },
-            ASTReflection::Unreflectable() => "[hidden]".to_string(),
+            ASTReflection::Unreflectable() => {
+                if ignore_hidden_elems {
+                    return;
+                }
+
+                "[hidden]".to_string()
+            },
         };
 
         writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
 
         for each_elem in &self.elems {
-            if !ignore_hidden_elems && !each_elem.is_hidden() {
-                each_elem.print(nest + 1, writer, ignore_hidden_elems);
+            each_elem.print(nest + 1, writer, ignore_hidden_elems);
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut s = String::new();
+
+        for each_elem in &self.elems {
+            match each_elem {
+                SyntaxNodeElement::Leaf(leaf) => {
+                    match leaf.ast_reflection {
+                        ASTReflection::Reflectable(_) => s += leaf.value.as_ref(),
+                        _ => (),
+                    }
+                },
+                _ => (),
             }
         }
+
+        return s;
     }
 }
 
 #[derive(Clone)]
 pub struct SyntaxLeaf {
-    value: String,
-    ast_reflection: ASTReflection,
+    pub value: String,
+    pub ast_reflection: ASTReflection,
 }
 
 impl SyntaxLeaf {
@@ -170,12 +267,12 @@ impl SyntaxLeaf {
         };
     }
 
-    pub fn is_hidden(&self) -> bool {
-        return !self.ast_reflection.is_reflectable();
+    pub fn is_reflectable(&self) -> bool {
+        return self.ast_reflection.is_reflectable();
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
-        if ignore_hidden_elems {
+        if !self.is_reflectable() && ignore_hidden_elems {
             return;
         }
 

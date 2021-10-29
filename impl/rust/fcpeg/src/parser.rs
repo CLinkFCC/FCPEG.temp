@@ -1,3 +1,4 @@
+use crate::block::*;
 use crate::data::*;
 use crate::rule::*;
 
@@ -5,7 +6,9 @@ use rustnutlib::console::*;
 
 pub enum SyntaxParseError {
     Unknown(),
+    BlockParseErr(BlockParseError),
     InternalErr(String),
+    InvalidSyntaxTreeStruct(String),
     NoSucceededRule(String, usize, Vec<(usize, String)>),
     TooDeepRecursion(usize),
     TooLongRepeat(usize),
@@ -16,7 +19,9 @@ impl SyntaxParseError {
     pub fn get_log_data(&self) -> ConsoleLogData {
         match self {
             SyntaxParseError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown error", vec![], vec![]),
+            SyntaxParseError::BlockParseErr(err) => err.get_log_data(),
             SyntaxParseError::InternalErr(err_msg) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_msg), vec![], vec![]),
+            SyntaxParseError::InvalidSyntaxTreeStruct(cause) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid syntax tree structure ({})", cause), vec![], vec![]),
             SyntaxParseError::NoSucceededRule(rule_id, src_i, rule_stack) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), vec![format!("rule stack: {:?}", rule_stack)], vec![]),
             SyntaxParseError::TooDeepRecursion(max_recur_count) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too deep recursion over {}", max_recur_count), vec![], vec![]),
             SyntaxParseError::TooLongRepeat(max_loop_count) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too long repeat over {}", max_loop_count), vec![], vec![]),
