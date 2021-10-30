@@ -37,7 +37,8 @@
     + use Misc,
     + use Symbol,
 
-    PureChoice <- Seq (Symbol.Space# ":"# Symbol.Space# Seq)*,
+    % ":" を reflectable にする,
+    PureChoice <- Seq (Symbol.Space# ":" Symbol.Space# Seq)*,
     Choice <- "("# PureChoice ")"#,
     Seq <- SeqElem (Symbol.Space+# SeqElem)*,
     SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflection?,

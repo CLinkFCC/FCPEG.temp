@@ -163,6 +163,7 @@ impl SyntaxNodeList {
         };
     }
 
+    // note: 子要素をフィルタリングする
     pub fn filter(&self, f: fn(&SyntaxNodeElement) -> bool) -> Vec<Box<&SyntaxNodeElement>> {
         let mut elems = Vec::<Box::<&SyntaxNodeElement>>::new();
 
@@ -173,6 +174,27 @@ impl SyntaxNodeList {
         }
 
         return elems;
+    }
+
+    pub fn filter_unreflectable_out(&self) -> Vec<Box<&SyntaxNodeElement>> {
+        return self.filter(|each_elem| each_elem.is_reflectable());
+    }
+
+    // note: 子ノードを名前で検索する; 最初にマッチしたノードを返す
+    pub fn find_child_node(&self, search_name: String) -> std::result::Result<&SyntaxNodeList, SyntaxParseError> {
+        for each_elem in &self.elems {
+            match each_elem {
+                SyntaxNodeElement::NodeList(node_list) => {
+                    match &node_list.ast_reflection {
+                        ASTReflection::Reflectable(name) if *name == search_name => return Ok(node_list),
+                        _ => (),
+                    }
+                },
+                _ => (),
+            }
+        }
+
+        return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("node name '{}' not found", search_name)));
     }
 
     pub fn get_child(&self, index: usize) -> std::result::Result<&SyntaxNodeElement, SyntaxParseError> {
@@ -302,6 +324,16 @@ impl Block {
             name: name,
             cmds: cmds,
         };
+    }
+
+    pub fn print(&self) {
+        println!("[{}]{{", self.name);
+
+        for each_cmd in &self.cmds {
+            println!("    {}", each_cmd);
+        }
+
+        println!("}}");
     }
 }
 

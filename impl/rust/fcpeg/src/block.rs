@@ -257,7 +257,7 @@ impl BlockParser {
         let tree = parser.get_syntax_tree(fcpeg_file_man.fcpeg_file_content.clone())?;
 
         println!("print {}", fcpeg_file_man.fcpeg_file_content);
-        tree.print(false);
+        tree.print(true);
 
         return Ok(tree);
     }
@@ -268,16 +268,97 @@ impl BlockParser {
 
         let root = tree.clone_child();
 
-        let block_nodes = root.get_node_list()?.get_node_list_child(0)?.filter(|each_elem| each_elem.is_reflectable());
+        let block_nodes = root.get_node_list()?.get_node_list_child(0)?.filter_unreflectable_out();
 
         for each_block_elem in &block_nodes {
-            let each_block_node = each_block_elem.get_node_list()?;
-            let block_name = each_block_node.get_node_list_child(0)?.to_string();
-            println!("{}", block_name);
+            let each_block_node_list = each_block_elem.get_node_list()?;
+            let block_name = each_block_node_list.get_node_list_child(0)?.to_string();
+
+            let mut cmds = Vec::<BlockCommand>::new();
+            let cmd_elems = each_block_node_list.get_node_list_child(1)?.filter_unreflectable_out();
+
+            for each_cmd_elem in &cmd_elems {
+                let each_cmd_node_list = each_cmd_elem.get_node_list()?.get_node_list_child(0)?;
+                let new_cmd = BlockParser::to_block_cmd(each_cmd_node_list)?;
+                cmds.push(new_cmd);
+            }
+
+            block_map.insert(block_name.clone(), Block::new(block_name.clone(), cmds));
         }
 
         block_map.insert("".to_string(), Block::new("Main".to_string(), vec![]));
+
+        for (_, each_block) in &block_map {
+            each_block.print();
+            println!();
+        }
+
         return Ok(block_map);
+    }
+
+    fn to_block_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
+        return match &cmd_node_list.ast_reflection {
+            ASTReflection::Reflectable(node_name) => match node_name.as_str() {
+                "DefineCmd" => BlockParser::to_define_cmd(cmd_node_list),
+                _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid node name '{}'", node_name))),
+            },
+            ASTReflection::Unreflectable() => Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+        };
+    }
+
+    fn to_define_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
+        let rule_name = cmd_node_list.get_node_list_child(0)?.to_string();
+        let choice_node_list = cmd_node_list.get_node_list_child(1)?;
+        let mut choices = Vec::<Box::<RuleChoice>>::new();
+
+        // let seq_node_parent = cmd_node_list.get_node_list_child(1)?;
+        // let first_seq_node = seq_node_parent.get_node_list_child(0)?;
+
+        choices.push(Box::new(BlockParser::to_rule_choice(choice_node_list)?));
+
+        // todo: さらなる seq の解析
+
+        let rule = Rule::new(rule_name, vec![], choices);
+        return Ok(BlockCommand::Define(0, rule));
+    }
+
+    fn to_rule_elem(seq_node_list: &SyntaxNodeList) -> Result<RuleElementContainer, SyntaxParseError> {
+        // todo: 先読みなどの処理
+        let elem_node_list = seq_node_list.get_node_list_child(0)?.find_child_node(String::new())?.get_node_list_child(0)?;
+
+        let elem = match &elem_node_list.ast_reflection {
+            ASTReflection::Reflectable(name) => {
+                match name.as_str() {
+                    "Choice" => RuleElementContainer::RuleChoice(Box::new(BlockParser::to_rule_choice(elem_node_list.get_node_list_child(0)?)?)),
+                    "Expr" => RuleElementContainer::RuleExpression(Box::new(BlockParser::to_rule_expr(elem_node_list)?)),
+                    _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+                }
+            },
+            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+        };
+
+        return Ok(elem);
+    }
+
+    fn to_rule_choice(choice_node_list: &SyntaxNodeList) -> Result<RuleChoice, SyntaxParseError> {
+        let mut rule_elems = Vec::<RuleElementContainer>::new();
+        let first_seq_node_list = choice_node_list.get_node_list_child(0)?;
+        rule_elems.push(BlockParser::to_rule_elem(first_seq_node_list)?);
+
+        for each_seq_node_list in &choice_node_list.get_node_list_child(1)?.filter_unreflectable_out() {
+            rule_elems.push(BlockParser::to_rule_elem(each_seq_node_list.as_ref().get_node_list()?)?);
+        }
+
+        let mut choice = RuleChoice::new(RuleLookaheadKind::None, (1, 1), ASTReflection::Unreflectable(), false, (1, 1), true);
+        choice.elem_containers = rule_elems;
+        return Ok(choice);
+    }
+
+    fn to_rule_expr(seq_node_list: &SyntaxNodeList) -> Result<RuleExpression, SyntaxParseError> {
+        // let seq = seq_node_list
+        let value = String::new();
+        let expr = RuleExpression::new(0, RuleExpressionKind::String, RuleLookaheadKind::None, (1, 1), ASTReflection::Unreflectable(), value);
+        return Ok(expr);
     }
 }
 
