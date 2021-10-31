@@ -73,7 +73,7 @@ impl SyntaxParser {
         let start_rule_id = self.rule_map.start_rule_id.clone();
 
         if self.src_content.len() == 0 {
-            return Ok(SyntaxTree::from_node_list_args(vec![], ASTReflection::new_with_config(false, String::new())));
+            return Ok(SyntaxTree::from_node_list_args(vec![], ASTReflection::from_config(false, String::new())));
         }
 
         self.recursion_count += 1;
@@ -127,7 +127,7 @@ impl SyntaxParser {
                     match &ast_reflection {
                         ASTReflection::Reflectable(elem_name) => {
                             if *elem_name == String::new() {
-                                ast_reflection = ASTReflection::new_with_config(true, rule_id.clone())
+                                ast_reflection = ASTReflection::from_config(true, rule_id.clone())
                             }
                         },
                         _ => (),
@@ -259,7 +259,15 @@ impl SyntaxParser {
                                                 for each_result_sub_elem in v {
                                                     match each_result_sub_elem {
                                                         SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
-                                                        _ => new_sub_children.push(each_result_sub_elem),
+                                                        _ => {
+                                                            match each_result_sub_elem {
+                                                                SyntaxNodeElement::NodeList(result_node_list) if result_node_list.ast_reflection.is_expandable() => {
+                                                                    println!("expandable");
+                                                                    new_sub_children.append(&mut result_node_list.elems.clone());
+                                                                },
+                                                                _ => new_sub_children.push(each_result_sub_elem),
+                                                            }
+                                                        },
                                                     }
                                                 }
 
@@ -300,7 +308,15 @@ impl SyntaxParser {
 
                                                 match new_child {
                                                     SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
-                                                    _ => children.push(new_child),
+                                                    _ => {
+                                                        match new_child {
+                                                            SyntaxNodeElement::NodeList(new_node_list) if new_node_list.ast_reflection.is_expandable() => {
+                                                                    println!("expandable");
+                                                                    children.append(&mut new_node_list.elems.clone());
+                                                            },
+                                                            _ => children.push(new_child),
+                                                        }
+                                                    },
                                                 }
                                             } else {
                                                 children = v;
@@ -329,7 +345,15 @@ impl SyntaxParser {
 
                                     match new_child {
                                         SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
-                                        _ => children.push(new_child),
+                                        _ => {
+                                            match new_child {
+                                                SyntaxNodeElement::NodeList(new_node_list) if new_node_list.ast_reflection.is_expandable() => {
+                                                    println!("expandable");
+                                                    children.append(&mut new_node_list.elems.clone());
+                                                },
+                                                _ => children.push(new_child),
+                                            }
+                                        },
                                     }
                                 } else {
                                     children = v;
@@ -487,7 +511,7 @@ impl SyntaxParser {
 
                                         ASTReflection::Reflectable(conv_elem_name)
                                     },
-                                    ASTReflection::Unreflectable() => expr.ast_reflection.clone(),
+                                    _ => expr.ast_reflection.clone(),
                                 };
 
                                 SyntaxNodeElement::from_node_list_args(node_list.elems.clone(), sub_ast_reflection)

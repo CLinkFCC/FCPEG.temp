@@ -366,10 +366,7 @@ impl Display for RuleChoice {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
         let random_order_symbol = if self.is_random_order { "^" } else { "" };
         let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
-        let ast_reflection_text = match &self.ast_reflection {
-            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.clone()),
-            ASTReflection::Unreflectable() => String::new()
-        };
+        let ast_reflection_text = self.ast_reflection.to_symbol_string();
 
         return write!(f, "{}", format!("{}({}){}{}{}{}", self.lookahead_kind.to_symbol_string(), seq_text.join(separator), loop_text, random_order_symbol, random_order_count, ast_reflection_text));
     }
@@ -461,10 +458,7 @@ pub struct RuleExpression {
 impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
-        let ast_reflection_text = match &self.ast_reflection {
-            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.clone()),
-            ASTReflection::Unreflectable() => String::new()
-        };
+        let ast_reflection_text = self.ast_reflection.to_symbol_string();
 
         return write!(f, "{}{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text, ast_reflection_text);
     }
