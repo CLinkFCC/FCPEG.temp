@@ -76,6 +76,8 @@ impl FCPEG {
             println!("{}", rule_map);
         }
 
+        println!("rule map {}", rule_map);
+
         let mut parser = match parser::SyntaxParser::new(rule_map) {
             Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
             Ok(v) => v,

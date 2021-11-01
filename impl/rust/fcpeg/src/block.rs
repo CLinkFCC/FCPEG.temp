@@ -235,9 +235,29 @@ impl BlockParser {
 
         BlockParser::set_block_map_to_all_files(&mut parser, fcpeg_file_man)?;
 
-        let mut rule_map = RuleMap::new("Main".to_string());
-        rule_map.add_rules_from_fcpeg_file_man(fcpeg_file_man).unwrap();
+        let main_block_id = "Main";
+        let mut start_rule_id = Option::<String>::None;
 
+        match fcpeg_file_man.block_map.get(main_block_id) {
+            Some(block) => {
+                for each_cmd in &block.cmds {
+                    match each_cmd {
+                        BlockCommand::Start(_, file_alias_name, block_name, rule_name) => {
+                            start_rule_id = Some(format!("{}.{}.{}", file_alias_name, block_name, rule_name));
+                        },
+                        _ => (),
+                    }
+                }
+            },
+            None => return Err(SyntaxParseError::InternalErr(format!("unknown rule id '{}'", main_block_id))),
+        }
+
+        let mut rule_map = match start_rule_id {
+            Some(id) => RuleMap::new(id),
+            None => return Err(SyntaxParseError::InternalErr(format!("start declaration not found"))),
+        };
+
+        match rule_map.add_rules_from_fcpeg_file_man(fcpeg_file_man) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
         return Ok(rule_map);
     }
 
@@ -276,12 +296,16 @@ impl BlockParser {
             let block_name = each_block_node_list.get_node_list_child(0)?.to_string();
 
             let mut cmds = Vec::<BlockCommand>::new();
-            let cmd_elems = each_block_node_list.get_node_list_child(1)?.filter_unreflectable_out();
 
-            for each_cmd_elem in &cmd_elems {
-                let each_cmd_node_list = each_cmd_elem.get_node_list()?.get_node_list_child(0)?;
-                let new_cmd = BlockParser::to_block_cmd(each_cmd_node_list)?;
-                cmds.push(new_cmd);
+            match each_block_node_list.get_node_list_child(1) {
+                Ok(cmd_elems) => {
+                    for each_cmd_elem in &cmd_elems.filter_unreflectable_out() {
+                        let each_cmd_node_list = each_cmd_elem.get_node_list()?.get_node_list_child(0)?;
+                        let new_cmd = BlockParser::to_block_cmd(each_cmd_node_list)?;
+                        cmds.push(new_cmd);
+                    }
+                },
+                Err(_) => (),
             }
 
             block_map.insert(block_name.clone(), Block::new(block_name.clone(), cmds));
@@ -301,6 +325,8 @@ impl BlockParser {
         return match &cmd_node_list.ast_reflection {
             ASTReflection::Reflectable(node_name) => match node_name.as_str() {
                 "DefineCmd" => BlockParser::to_define_cmd(cmd_node_list),
+                "StartCmd" => BlockParser::to_start_cmd(cmd_node_list),
+                "UseCmd" => BlockParser::to_use_cmd(cmd_node_list),
                 _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid node name '{}'", node_name))),
             },
             _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
@@ -310,15 +336,43 @@ impl BlockParser {
     fn to_define_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
         let rule_name = cmd_node_list.get_node_list_child(0)?.to_string();
         let choice_node_list = cmd_node_list.get_node_list_child(1)?;
-        let mut choices = Vec::<Box::<RuleChoice>>::new();
 
         let new_choice = BlockParser::to_rule_choice_elem(choice_node_list)?;
-        choices.push(Box::new(new_choice));
+        let new_choice_elem = RuleElementContainer::RuleChoice(Box::new(new_choice.clone()));
 
-        // todo: さらなる seq の解析
-
-        let rule = Rule::new(rule_name, vec![], choices);
+        let mut root_choice = RuleChoice::new(RuleLookaheadKind::None, (1, 1), new_choice.ast_reflection.clone(), false, (1, 1), false);
+        root_choice.elem_containers = vec![new_choice_elem];
+        let rule = Rule::new(rule_name, vec![], vec![Box::new(root_choice)]);
         return Ok(BlockCommand::Define(0, rule));
+    }
+
+    fn to_start_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
+        let raw_id = BlockParser::to_chain_id(cmd_node_list.get_node_list_child(0)?)?;
+        let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
+
+        let cmd = match divided_raw_id.len() {
+            2 => BlockCommand::Start(0, String::new(), divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
+            3 => BlockCommand::Start(0, divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), divided_raw_id.get(2).unwrap().to_string()),
+            _ => return Err(SyntaxParseError::InternalErr("invalid chain ID length on start command".to_string())),
+        };
+
+        return Ok(cmd);
+    }
+
+    fn to_use_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
+        let raw_id = BlockParser::to_chain_id(cmd_node_list.get_node_list_child(0)?)?;
+        let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
+
+        let block_alias_id = match cmd_node_list.find_first_child_node(vec!["UseCmdBlockAlias"]) {
+            Some(v) => v.get_node_list_child(0)?.to_string(),
+            None => divided_raw_id.join("."),
+        };
+
+        return match divided_raw_id.len() {
+            1 => Ok(BlockCommand::Use(0, "".to_string(), divided_raw_id.get(0).unwrap().to_string(), block_alias_id)),
+            2 => Ok(BlockCommand::Use(0, divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), block_alias_id)),
+            _ => Err(SyntaxParseError::InternalErr("invalid chain ID length on use command".to_string())),
+        };
     }
 
     // note: Seq を解析する
@@ -455,7 +509,7 @@ impl BlockParser {
         let kind_and_value = match &expr_child_node.ast_reflection {
             ASTReflection::Reflectable(name) => {
                 match name.as_str() {
-                    "CharClass" => (RuleExpressionKind::ID, format!("[{}]", expr_child_node.to_string())),
+                    "CharClass" => (RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.to_string())),
                     "ID" => (RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_list_child(0)?)?),
                     "Str" => (RuleExpressionKind::String, expr_child_node.to_string()),
                     "Wildcard" => (RuleExpressionKind::Wildcard, ".".to_string()),
