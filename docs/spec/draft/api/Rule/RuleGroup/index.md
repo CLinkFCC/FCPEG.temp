@@ -1,22 +1,20 @@
-# API: RuleExpression 構造体
+# API: RuleGroup 構造体
 
 ## 概要
 
-FCPEG ルールの表現要素を表す。
+FCPEG ルールのグループ要素を表す。
 
 ## フィールド
 
-### position: [CharacterPosition](../../BlockLexer/CharacterPosition/index.md)
+### is_choice: bool
 
-トークンの位置。
+グループが選択要素であるか。
 
-### kind: [RuleExpressionKind](../RuleExpressionKind/index.md)
+(例) `(e1 e2)` であれば `false` / `(e1 : e2)` であれば `true`
 
-表現の種別。
+### sub_elems: Vec<[RuleElement](../RuleElement/index.md)>
 
-### value: string
-
-表現要素の文字列値。
+要素がもつサブ要素の一覧。
 
 ### ast_reflection: [ASTReflection](../ASTReflection/index.md)
 

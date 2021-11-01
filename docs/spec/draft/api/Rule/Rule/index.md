@@ -10,6 +10,6 @@ FCPEG ルールを表す。
 
 ルール名。
 
-### choices: Vec<[RuleChoice](../RuleChoice/index.md)>
+### group: [RuleGroup](../RuleGroup/index.md)
 
-選択一覧。
+グループ一覧。
