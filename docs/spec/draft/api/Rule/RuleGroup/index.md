@@ -16,7 +16,7 @@ FCPEG ルールのグループ要素を表す。
 
 要素がもつサブ要素の一覧。
 
-### ast_reflection: [ASTReflection](../ASTReflection/index.md)
+### ast_reflection_style: [ASTReflectionStyle](../ASTReflectionStyle/index.md)
 
 要素の AST への反映方法。
 

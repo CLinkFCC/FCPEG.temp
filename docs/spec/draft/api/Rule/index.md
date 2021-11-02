@@ -10,7 +10,7 @@
 
 ## 列挙体
 
-- [ASTReflection 列挙体](ASTReflection/index.md)
+- [ASTReflectionStyle 列挙体](ASTReflectionStyle/index.md)
 - [RuleElement 列挙体](RuleElement/index.md)
 - [RuleElementLookaheadKind 列挙体](RuleElementLookaheadKind/index.md)
 - [RuleElementLoop 列挙体](RuleElementLoop/index.md)

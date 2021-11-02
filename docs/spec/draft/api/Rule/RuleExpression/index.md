@@ -18,7 +18,7 @@ FCPEG ルールの表現要素を表す。
 
 表現要素の文字列値。
 
-### ast_reflection: [ASTReflection](../ASTReflection/index.md)
+### ast_reflection_style: [ASTReflectionStyle](../ASTReflectionStyle/index.md)
 
 要素の AST への反映方法。
 
