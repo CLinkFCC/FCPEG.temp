@@ -28,7 +28,7 @@ FCPEG ルールの表現要素を表す。
 
 ### loop: [RuleElementLoop](../RuleElementLoop/index.md)
 
-要素のループ情報。
+要素の繰り返し情報。
 
 ### random_order: [RuleElementRandomOrder](../RuleElementRandomOrder/index.md)
 

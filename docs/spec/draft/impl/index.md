@@ -1,6 +1,6 @@
 # 実装仕様書
 
-実装仕様書 = 設計書
+FCPEG パーサの実装に関する記述。
 
 - [ブロック解析器](block_analyzer/index.md)
 - PEG パーサ
