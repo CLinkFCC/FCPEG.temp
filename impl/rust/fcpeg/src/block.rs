@@ -116,6 +116,7 @@ macro_rules! expr {
                     "&" | "!" => expr.lookahead_kind = RuleLookaheadKind::to_lookahead_kind($option),
                     "?" | "*" | "+" => expr.loop_count = RuleCountConverter::loop_symbol_to_count($option),
                     "#" => expr.ast_reflection = ASTReflection::Unreflectable,
+                    "##" => expr.ast_reflection = ASTReflection::Expandable,
                     _ => panic!(),
                 }
             )*
@@ -426,13 +427,19 @@ impl BlockParser {
                 None => (1, 1),
             };
 
-            // note: ASTReflection ノード
+            // note: ASTReflectionStyle ノード
             // todo: 構成ファイルによって切り替える
-            let ast_reflection = match each_seq_elem_node.find_first_child_node(vec!["ASTReflection"]) {
+            let ast_reflection = match each_seq_elem_node.find_first_child_node(vec!["ASTReflectionStyle"]) {
                 Some(v) => {
-                    match v.get_node_list_child(0) {
-                        Ok(v) => ASTReflection::from_config(true, v.to_string()),
-                        Err(_) => ASTReflection::from_config(false, String::new()),
+                    match v.get_leaf_child(0) {
+                        Ok(v) => {
+                            if v.value == "##" {
+                                ASTReflection::Expandable
+                            } else {
+                                ASTReflection::Reflectable(v.value.clone())
+                            }
+                        },
+                        Err(_) => ASTReflection::from_config(true, String::new()),
                     }
                 },
                 None => ASTReflection::from_config(false, String::new()),
@@ -823,7 +830,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: EscSeq <- "\\" ("\\" : "0" : "\"" : "n")##,
+        // code: SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
         let seq_elem_rule = rule!{
             "SeqElem",
             choice!{
@@ -845,7 +852,7 @@ impl FCPEGBlock {
                 },
                 expr!(ID, "Loop", "?"),
                 expr!(ID, "RandomOrder", "?"),
-                expr!(ID, "ASTReflection", "?"),
+                expr!(ID, "ASTReflectionStyle", "?"),
             },
         };
 
@@ -956,13 +963,23 @@ impl FCPEGBlock {
             },
         };
 
-        // code: ASTReflection <- "#"# Misc.SingleID?,
+        // code: ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,
         let ast_reflection_rule = rule!{
-            "ASTReflection",
+            "ASTReflectionStyle",
             choice!{
                 vec![],
-                expr!(String, "#", "#"),
-                expr!(ID, "Misc.SingleID", "?"),
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(String, "##"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(String, "#", "#"),
+                        expr!(ID, "Misc.SingleID", "?", "##"),
+                    },
+                },
             },
         };
 

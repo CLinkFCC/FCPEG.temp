@@ -433,10 +433,12 @@ impl SyntaxParser {
             }
 
             match self.is_each_expr_matched(expr)? {
-                Some(node_elem) => {
-                    match node_elem {
-                        SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
-                        _ => children.push(node_elem),
+                Some(node) => {
+                    for each_node in node {
+                        match each_node {
+                            SyntaxNodeElement::NodeList(node_list) if node_list.elems.len() == 0 => (),
+                            _ => children.push(each_node),
+                        }
                     }
 
                     loop_count += 1;
@@ -462,7 +464,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_expr_matched(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<SyntaxNodeElement>, SyntaxParseError> {
+    fn is_each_expr_matched(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
         if self.src_i >= self.src_content.len() {
             return Ok(None);
         }
@@ -483,7 +485,7 @@ impl SyntaxParser {
                 if pattern.is_match(&tar_char) {
                     let new_leaf = SyntaxNodeElement::from_leaf_args(tar_char, expr.ast_reflection.clone());
                     self.src_i += 1;
-                    return Ok(Some(new_leaf));
+                    return Ok(Some(vec![new_leaf]));
                 } else {
                     return Ok(None);
                 }
@@ -499,7 +501,7 @@ impl SyntaxParser {
                     Some(node_elem) => {
                         self.recursion_count -= 1;
 
-                        let conv_node_elem = match &node_elem {
+                        let conv_node_elems = match &node_elem {
                             SyntaxNodeElement::NodeList(node_list) => {
                                 let sub_ast_reflection = match &expr.ast_reflection {
                                     ASTReflection::Reflectable(elem_name) => {
@@ -514,12 +516,21 @@ impl SyntaxParser {
                                     _ => expr.ast_reflection.clone(),
                                 };
 
-                                SyntaxNodeElement::from_node_list_args(node_list.elems.clone(), sub_ast_reflection)
+                                let node = SyntaxNodeElement::from_node_list_args(node_list.elems.clone(), sub_ast_reflection);
+
+                                if expr.ast_reflection.is_expandable() {
+                                    match node {
+                                        SyntaxNodeElement::NodeList(node) => node.elems,
+                                        _ => vec![node],
+                                    }
+                                } else {
+                                    vec![node]
+                                }
                             },
-                            SyntaxNodeElement::Leaf(_) => node_elem,
+                            SyntaxNodeElement::Leaf(_) => vec![node_elem],
                         };
 
-                        return Ok(Some(conv_node_elem));
+                        return Ok(Some(conv_node_elems));
                     },
                     None => {
                         self.recursion_count -= 1;
@@ -535,7 +546,7 @@ impl SyntaxParser {
                 if self.src_content[self.src_i..self.src_i + expr.value.len()] == expr.value {
                     let new_leaf = SyntaxNodeElement::from_leaf_args(expr.value.clone(), expr.ast_reflection.clone());
                     self.src_i += expr.value.len();
-                    return Ok(Some(new_leaf));
+                    return Ok(Some(vec![new_leaf]));
                 } else {
                     return Ok(None);
                 }
@@ -548,7 +559,7 @@ impl SyntaxParser {
                 let expr_value = self.src_content[self.src_i..self.src_i + 1].to_string();
                 let new_leaf = SyntaxNodeElement::from_leaf_args(expr_value, expr.ast_reflection.clone());
                 self.src_i += 1;
-                return Ok(Some(new_leaf));
+                return Ok(Some(vec![new_leaf]));
             },
         }
     }
