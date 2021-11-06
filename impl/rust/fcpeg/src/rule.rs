@@ -4,10 +4,10 @@ use std::option::*;
 
 use crate::block::*;
 use crate::data::*;
-use crate::fileman::*;
 
 use regex::*;
 
+#[derive(Clone)]
 pub struct RuleMap {
     pub rule_map: HashMap<String, Rule>,
     pub regex_map: HashMap::<String, Regex>,
@@ -53,9 +53,9 @@ impl RuleMap {
     }
 
     // ここでは規則 ID の存在チェックは行われない
-    pub fn get_from_root_fcpeg_file_man(fcpeg_file_man: FCPEGFileMan) -> std::result::Result<RuleMap, BlockParseError> {
-        println!("{}", fcpeg_file_man.block_map.len());
-        let main_block = match fcpeg_file_man.block_map.get("Main") {
+    pub fn get_from_root_fcpeg_file_man(file_alias_name: &String, block_map: &mut BlockMap) -> std::result::Result<RuleMap, BlockParseError> {
+        println!("{}", block_map.len());
+        let main_block = match block_map.get("Main") {
             Some(v) => v,
             None => return Err(BlockParseError::MainBlockNotFound()),
         };
@@ -110,14 +110,14 @@ impl RuleMap {
         }
 
         let mut rule_map = RuleMap::new(start_rule_id);
-        rule_map.add_rules_from_fcpeg_file_man(&fcpeg_file_man)?;
+        rule_map.format_block_map(file_alias_name, block_map)?;
 
         return Ok(rule_map);
     }
 
-    pub fn add_rules_from_fcpeg_file_man(&mut self, fcpeg_file_man: &FCPEGFileMan) -> std::result::Result<(), BlockParseError> {
-        for each_block in fcpeg_file_man.block_map.values() {
-            if each_block.name == "Main" {
+    pub fn format_block_map(&mut self, file_alias_name: &String, block_map: &mut BlockMap) -> std::result::Result<(), BlockParseError> {
+        for (block_name, each_block) in block_map {
+            if block_name == "Main" {
                 continue;
             }
 
@@ -144,13 +144,13 @@ impl RuleMap {
                 match each_cmd {
                     BlockCommand::Define(_line, rule) => {
                         let mut each_rule = rule.clone();
-                        each_rule.name = format!("{}.{}.{}", fcpeg_file_man.file_alias_name, each_block.name, each_rule.name);
+                        each_rule.name = format!("{}.{}.{}", file_alias_name, each_block.name, each_rule.name);
 
                         for each_choice in each_rule.choices.iter_mut() {
-                            self.proc_define_cmd(each_choice, &each_rule.name, &each_block.name, fcpeg_file_man, &block_alias_map)?;
+                            self.proc_define_cmd(each_choice, &each_rule.name, &each_block.name, file_alias_name, &block_alias_map)?;
                         }
 
-                        let rule_id = RuleMap::get_rule_id(fcpeg_file_man.file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
+                        let rule_id = RuleMap::get_rule_id(file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
                         self.insert_rule(rule_id, each_rule);
                     },
                     _ => (),
@@ -158,25 +158,21 @@ impl RuleMap {
             }
         }
 
-        for each_file_man in fcpeg_file_man.sub_file_aliase_map.values() {
-            self.add_rules_from_fcpeg_file_man(each_file_man)?;
-        }
-
         return Ok(());
     }
 
-    pub fn proc_define_cmd(&mut self, choice: &mut RuleChoice, rule_id: &String, block_name: &String, fcpeg_file_man: &FCPEGFileMan, block_alias_map: &HashMap<String, String>) -> std::result::Result<(), BlockParseError> {
+    pub fn proc_define_cmd(&mut self, choice: &mut RuleChoice, rule_id: &String, block_name: &String, file_alias_name: &String, block_alias_map: &HashMap<String, String>) -> std::result::Result<(), BlockParseError> {
         for each_elem in choice.elem_containers.iter_mut() {
             match each_elem {
                 RuleElementContainer::RuleChoice(each_choice) => {
-                    self.proc_define_cmd(each_choice, rule_id, block_name, fcpeg_file_man, block_alias_map)?;
+                    self.proc_define_cmd(each_choice, rule_id, block_name, file_alias_name, block_alias_map)?;
                 },
                 RuleElementContainer::RuleExpression(each_expr) => {
                     if each_expr.kind == RuleExpressionKind::ID {
                         let id_tokens: Vec<&str> = each_expr.value.split(".").collect();
 
                         if id_tokens.len() == 1 {
-                            each_expr.value = format!("{}.{}.{}", fcpeg_file_man.file_alias_name, block_name, each_expr.value);
+                            each_expr.value = format!("{}.{}.{}", file_alias_name, block_name, each_expr.value);
                             continue;
                         }
 

@@ -227,30 +227,39 @@ pub struct BlockParser {}
 
 impl BlockParser {
     // note: FileMan から最終的な RuleMap を取得する
-    pub fn get_rule_map(fcpeg_file_man: &mut FCPEGFileMan) -> Result<RuleMap, SyntaxParseError> {
-        let mut tmp_file_man = FCPEGFileMan::new("".to_string(), "".to_string());
-        tmp_file_man.block_map = FCPEGBlock::get_block_map();
-        let mut fcpeg_rule_map = RuleMap::new(".Syntax.FCPEG".to_string());
-        match fcpeg_rule_map.add_rules_from_fcpeg_file_man(&tmp_file_man) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
-        let mut parser = SyntaxParser::new(fcpeg_rule_map)?;
+    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> Result<RuleMap, SyntaxParseError> {
+        let mut block_map = FCPEGBlock::get_block_map();
+        let mut rule_map = RuleMap::new(".Syntax.FCPEG".to_string());
+        match rule_map.format_block_map(&String::new(), &mut block_map) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
+        let mut parser = SyntaxParser::new(rule_map.clone())?;
+        // note: HashMap<エイリアス名, ブロックマップ>
+        let mut block_maps = HashMap::<String, BlockMap>::new();
 
-        BlockParser::set_block_map_to_all_files(&mut parser, fcpeg_file_man)?;
+        for (alias_name, fcpeg_file) in fcpeg_file_map.iter() {
+            let tree = BlockParser::to_syntax_tree(&mut parser, fcpeg_file.get_file_content())?;
+            block_maps.insert(alias_name.clone(), BlockParser::to_block_map(&tree)?);
+        }
 
         let main_block_id = "Main";
         let mut start_rule_id = Option::<String>::None;
 
-        match fcpeg_file_man.block_map.get(main_block_id) {
-            Some(block) => {
-                for each_cmd in &block.cmds {
-                    match each_cmd {
-                        BlockCommand::Start(_, file_alias_name, block_name, rule_name) => {
-                            start_rule_id = Some(format!("{}.{}.{}", file_alias_name, block_name, rule_name));
-                        },
-                        _ => (),
-                    }
+        match block_maps.get(&String::new()) {
+            Some(main_map) => {
+                match main_map.get(main_block_id) {
+                    Some(block) => {
+                        for each_cmd in &block.cmds {
+                            match each_cmd {
+                                BlockCommand::Start(_, file_alias_name, block_name, rule_name) => {
+                                    start_rule_id = Some(format!("{}.{}.{}", file_alias_name, block_name, rule_name));
+                                },
+                                _ => (),
+                            }
+                        }
+                    },
+                    None => return Err(SyntaxParseError::InternalErr(format!("unknown rule id '{}'", main_block_id))),
                 }
             },
-            None => return Err(SyntaxParseError::InternalErr(format!("unknown rule id '{}'", main_block_id))),
+            None => return Err(SyntaxParseError::InternalErr("main file alias not found".to_string())),
         }
 
         let mut rule_map = match start_rule_id {
@@ -258,27 +267,18 @@ impl BlockParser {
             None => return Err(SyntaxParseError::InternalErr(format!("start declaration not found"))),
         };
 
-        match rule_map.add_rules_from_fcpeg_file_man(fcpeg_file_man) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
+        for (file_alias_name, mut each_block_map) in block_maps.iter_mut() {
+            match rule_map.format_block_map(&file_alias_name, &mut each_block_map) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
+        }
+
         return Ok(rule_map);
     }
 
-    // note: 全ファイルに BlockMap を設定する
-    fn set_block_map_to_all_files(parser: &mut SyntaxParser, fcpeg_file_man: &mut FCPEGFileMan) -> Result<(), SyntaxParseError> {
-        let tree = BlockParser::to_syntax_tree(parser, fcpeg_file_man)?;
-        fcpeg_file_man.block_map = BlockParser::to_block_map(&tree)?;
-
-        for sub_file_man in fcpeg_file_man.sub_file_aliase_map.values_mut() {
-            BlockParser::set_block_map_to_all_files(parser, sub_file_man)?;
-        }
-
-        return Ok(());
-    }
-
     // note: ブロックマップとファイルを元に 1 ファイルの FCPEG コードの構文木を取得する
-    fn to_syntax_tree(parser: &mut SyntaxParser, fcpeg_file_man: &FCPEGFileMan) -> Result<SyntaxTree, SyntaxParseError> {
-        let tree = parser.get_syntax_tree(fcpeg_file_man.fcpeg_file_content.clone())?;
+    fn to_syntax_tree(parser: &mut SyntaxParser, fcpeg_file_content: &String) -> Result<SyntaxTree, SyntaxParseError> {
+        let tree = parser.get_syntax_tree(fcpeg_file_content)?;
 
-        println!("print {}", fcpeg_file_man.fcpeg_file_content);
+        println!("print {}", fcpeg_file_content);
         tree.print(true);
 
         return Ok(tree);

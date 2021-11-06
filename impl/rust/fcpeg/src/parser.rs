@@ -53,13 +53,15 @@ impl SyntaxParser {
         });
     }
 
-    pub fn get_syntax_tree(&mut self, mut src_content: String) -> std::result::Result<SyntaxTree, SyntaxParseError> {
+    pub fn get_syntax_tree(&mut self, src_content: &String) -> std::result::Result<SyntaxTree, SyntaxParseError> {
+        let mut tmp_src_content = src_content.clone();
+
         // todo: 高速化: replace() と比べてどちらが速いか検証する
         // note: 余分な改行コード 0x0d を排除する
         loop {
-            match src_content.find(0x0d as char) {
+            match tmp_src_content.find(0x0d as char) {
                 Some(v) => {
-                    src_content.remove(v);
+                    tmp_src_content.remove(v);
                 },
                 None => break,
             }
@@ -67,7 +69,7 @@ impl SyntaxParser {
 
         // フィールドを初期化
         self.src_i = 0;
-        self.src_content = src_content;
+        self.src_content = tmp_src_content;
         self.recursion_count = 1;
 
         let start_rule_id = self.rule_map.start_rule_id.clone();
@@ -95,6 +97,7 @@ impl SyntaxParser {
     }
 
     fn is_rule_successful(&mut self, rule_id: &String) -> std::result::Result<std::option::Option<SyntaxNodeElement>, SyntaxParseError> {
+        // todo: 削除
         println!("rule {}", rule_id);
 
         let rule = match self.rule_map.get_rule(rule_id) {
