@@ -145,11 +145,7 @@ impl RuleMap {
                     BlockCommand::Define(_line, rule) => {
                         let mut each_rule = rule.clone();
                         each_rule.name = format!("{}.{}.{}", file_alias_name, each_block.name, each_rule.name);
-
-                        for each_choice in each_rule.choices.iter_mut() {
-                            self.proc_define_cmd(each_choice, &each_rule.name, &each_block.name, file_alias_name, &block_alias_map)?;
-                        }
-
+                        self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &block_alias_map)?;
                         let rule_id = RuleMap::get_rule_id(file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
                         self.insert_rule(rule_id, each_rule);
                     },
@@ -161,13 +157,13 @@ impl RuleMap {
         return Ok(());
     }
 
-    pub fn proc_define_cmd(&mut self, choice: &mut RuleChoice, rule_id: &String, block_name: &String, file_alias_name: &String, block_alias_map: &HashMap<String, String>) -> std::result::Result<(), BlockParseError> {
-        for each_elem in choice.elem_containers.iter_mut() {
+    pub fn proc_define_cmd(&mut self, group: &mut RuleGroup, rule_id: &String, block_name: &String, file_alias_name: &String, block_alias_map: &HashMap<String, String>) -> std::result::Result<(), BlockParseError> {
+        for each_elem in group.sub_elems.iter_mut() {
             match each_elem {
-                RuleElementContainer::RuleChoice(each_choice) => {
-                    self.proc_define_cmd(each_choice, rule_id, block_name, file_alias_name, block_alias_map)?;
+                RuleElement::Group(each_group) => {
+                    self.proc_define_cmd(each_group, rule_id, block_name, file_alias_name, block_alias_map)?;
                 },
-                RuleElementContainer::RuleExpression(each_expr) => {
+                RuleElement::Expression(each_expr) => {
                     if each_expr.kind == RuleExpressionKind::ID {
                         let id_tokens: Vec<&str> = each_expr.value.split(".").collect();
 
@@ -224,167 +220,200 @@ impl RuleMap {
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
-pub enum RuleLookaheadKind {
+pub enum RuleElementLookaheadKind {
     None,
     Positive,
     Negative,
 }
 
-impl RuleLookaheadKind {
-    // ret: 文字がマッチしなければ RuleLookaheadKind::None
-    pub fn to_lookahead_kind(value: &str) -> RuleLookaheadKind {
+impl RuleElementLookaheadKind {
+    // ret: 文字がマッチしなければ RuleElementLookaheadKind::None
+    pub fn new(value: &str) -> RuleElementLookaheadKind {
         return match value {
-            "&" => RuleLookaheadKind::Positive,
-            "!" => RuleLookaheadKind::Negative,
-            _ => RuleLookaheadKind::None,
+            "&" => RuleElementLookaheadKind::Positive,
+            "!" => RuleElementLookaheadKind::Negative,
+            _ => RuleElementLookaheadKind::None,
         }
     }
 
-    pub fn to_symbol_string(&self) -> String {
-        return match self {
-            RuleLookaheadKind::None => String::new(),
-            RuleLookaheadKind::Positive => "&".to_string(),
-            RuleLookaheadKind::Negative => "!".to_string(),
-        }
+    pub fn is_none(&self) -> bool {
+        return *self == RuleElementLookaheadKind::None;
     }
 }
 
-pub struct RuleCountConverter {}
+impl Display for RuleElementLookaheadKind {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let s = match self {
+            RuleElementLookaheadKind::None => "",
+            RuleElementLookaheadKind::Positive => "&",
+            RuleElementLookaheadKind::Negative => "!",
+        };
 
-impl RuleCountConverter {
-    pub fn count_to_string(count: &(i32, i32), is_loop_count: bool, prefix: &str, separator: &str, suffix: &str) -> String {
-        if *count == (1, 1) {
-            return String::new();
-        }
-
-        if is_loop_count {
-            match *count {
-                (0, -1) => return "*".to_string(),
-                (1, -1) => return "+".to_string(),
-                (0, 1) => return "?".to_string(),
-                _ => (),
-            }
-        }
-
-        let min_count = if count.0 == 0 { String::new() } else { count.0.to_string() };
-        let max_count = if count.1 == -1 { String::new() } else { count.1.to_string() };
-        return format!("{}{}{}{}{}", prefix, min_count, separator, max_count, suffix);
-    }
-
-    pub fn loop_symbol_to_count(value: &str) -> (i32, i32) {
-        return match value {
-            "*" => (0, -1),
-            "+" => (1, -1),
-            "?" => (0, 1),
-            _ => (1, 1),
-        }
+        return write!(f, "{}", s);
     }
 }
 
 #[derive(Clone)]
 pub struct Rule {
     pub name: String,
-    pub args: Vec<String>,
-    // note: choice は単体でよさそう
-    pub choices: Vec<Box<RuleChoice>>,
+    pub macro_args: Vec<String>,
+    pub group: Box<RuleGroup>,
 }
 
 impl Display for Rule {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        let mut choice_text = Vec::<String>::new();
-
-        for each_choice in &self.choices {
-            choice_text.push(each_choice.to_string());
-        }
-
-        let args_text = if self.args.len() == 0 {
+        let macro_args_text = if self.macro_args.len() == 0 {
             String::new()
         } else {
-            format!("({})", self.args.join(", "))
+            format!("({})", self.macro_args.join(", "))
         };
 
-        return write!(f, "{}{} <- {}", self.name, args_text, choice_text.join(" : "))
+        return write!(f, "{}{} <- {}", self.name, macro_args_text, self.group);
     }
 }
 
 impl Rule {
-    pub fn new(name: String, args: Vec<String>, choices: Vec<Box<RuleChoice>>) -> Rule {
+    pub fn new(name: String, macro_args: Vec<String>, group: Box<RuleGroup>) -> Rule {
         return Rule {
             name: name,
-            args: args,
-            choices: choices,
+            macro_args: macro_args,
+            group: group,
         };
     }
 }
 
-#[derive(Clone)]
-pub enum RuleElementContainer {
-    RuleChoice(Box<RuleChoice>),
-    RuleExpression(Box<RuleExpression>),
+#[derive(Clone, PartialEq, PartialOrd)]
+pub enum Infinitable<T: Clone + PartialEq + PartialOrd> {
+    Normal(T),
+    Infinite,
 }
 
-impl Display for RuleElementContainer {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        return match self {
-            RuleElementContainer::RuleChoice(choice) => write!(f, "{}", choice),
-            RuleElementContainer::RuleExpression(expr) => write!(f, "{}", expr),
-        }
+impl<T: Clone + PartialEq + PartialOrd> Infinitable<T> {
+    pub fn is_infinite(&self) -> bool {
+        return *self == Infinitable::<T>::Infinite;
     }
 }
 
-#[derive(Clone)]
-pub struct RuleChoice {
-    pub elem_containers: Vec<RuleElementContainer>,
-    pub lookahead_kind: RuleLookaheadKind,
-    pub loop_count: (i32, i32),
-    pub ast_reflection: ASTReflection,
-    pub is_random_order: bool,
-    pub occurrence_count: (i32, i32),
-    pub has_choices: bool,
+#[derive(Clone, PartialEq, PartialOrd)]
+pub struct RuleElementLoopCount {
+    pub min: usize,
+    pub max: Infinitable<usize>,
 }
 
-impl Display for RuleChoice {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        let mut seq_text = Vec::<String>::new();
+impl RuleElementLoopCount {
+    pub fn new(min: usize, max: Infinitable<usize>) -> RuleElementLoopCount {
+        return RuleElementLoopCount {
+            min: min,
+            max: max,
+        };
+    }
 
-        for each_container in &self.elem_containers {
-            match each_container {
-                RuleElementContainer::RuleChoice(each_choice) => {
-                    seq_text.push(each_choice.to_string());
-                },
-                RuleElementContainer::RuleExpression(each_expr) => {
-                    seq_text.push(format!("{}", each_expr));
-                },
+    pub fn from_symbol(value: &str) -> RuleElementLoopCount {
+        return match value {
+            "?" => RuleElementLoopCount::new(0, Infinitable::Normal(1)),
+            "*" => RuleElementLoopCount::new(0, Infinitable::Infinite),
+            "+" => RuleElementLoopCount::new(1, Infinitable::Infinite),
+            _ => RuleElementLoopCount::new(1, Infinitable::Normal(1)),
+        }
+    }
+
+    pub fn get_single_loop() -> RuleElementLoopCount {
+        return RuleElementLoopCount::new(1, Infinitable::Normal(1));
+    }
+
+    pub fn is_single_loop(&self) -> bool {
+        return self.min == 1 && self.max == Infinitable::Normal(1);
+    }
+
+    pub fn to_string(&self, is_loop_count: bool, prefix: &str, separator: &str, suffix: &str) -> String {
+        if self.is_single_loop() {
+            return String::new();
+        }
+
+        if is_loop_count {
+            match self.to_tuple() {
+                (0, 1) => return "?".to_string(),
+                (0, -1) => return "*".to_string(),
+                (1, -1) => return "+".to_string(),
+                _ => (),
             }
         }
 
-        let separator = if self.has_choices { if self.is_random_order { ", " } else { " : " } } else { " " };
-        let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
-        let random_order_symbol = if self.is_random_order { "^" } else { "" };
-        let random_order_count = RuleCountConverter::count_to_string(&self.occurrence_count, false, "[", "-", "]");
-        let ast_reflection_text = self.ast_reflection.to_symbol_string();
+        let min_count = if self.min == 0 { String::new() } else { self.min.to_string() };
+        let max_count = match self.max { Infinitable::Normal(max_num) => max_num.to_string(), Infinitable::Infinite => String::new(), };
+        return format!("{}{}{}{}{}", prefix, min_count, separator, max_count, suffix);
+    }
 
-        return write!(f, "{}", format!("{}({}){}{}{}{}", self.lookahead_kind.to_symbol_string(), seq_text.join(separator), loop_text, random_order_symbol, random_order_count, ast_reflection_text));
+    pub fn to_tuple(&self) -> (usize, i32) {
+        let max_num = match self.max {
+            Infinitable::Normal(num) => num as i32,
+            Infinitable::Infinite => -1,
+        };
+
+        return (self.min, max_num)
     }
 }
 
-impl RuleChoice {
-    pub fn new(lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: ASTReflection, is_random_order: bool, occurrence_count: (i32, i32), has_choices: bool) -> RuleChoice {
-        return RuleChoice {
-            elem_containers: vec![],
-            lookahead_kind: lookahead_kind,
-            loop_count: loop_count,
-            ast_reflection: ast_reflection,
-            is_random_order: is_random_order,
-            occurrence_count: occurrence_count,
-            has_choices: has_choices,
+#[derive(Clone, PartialEq, PartialOrd)]
+pub enum RuleElementOrder {
+    Random(RuleElementLoopCount),
+    Sequential,
+}
+
+impl RuleElementOrder {
+    pub fn is_random(&self) -> bool {
+        return *self != RuleElementOrder::Sequential;
+    }
+}
+
+#[derive(Clone)]
+pub enum RuleElement {
+    Group(Box<RuleGroup>),
+    Expression(Box<RuleExpression>),
+}
+
+impl Display for RuleElement {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        return match self {
+            RuleElement::Group(group) => write!(f, "{}", group),
+            RuleElement::Expression(expr) => write!(f, "{}", expr),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, PartialOrd)]
+pub enum RuleGroupKind {
+    Choice,
+    Sequence,
+}
+
+#[derive(Clone)]
+pub struct RuleGroup {
+    pub kind: RuleGroupKind,
+    pub sub_elems: Vec<RuleElement>,
+    pub ast_reflection_style: ASTReflectionStyle,
+    pub lookahead_kind: RuleElementLookaheadKind,
+    pub loop_count: RuleElementLoopCount,
+    pub elem_order: RuleElementOrder,
+}
+
+impl RuleGroup {
+    pub fn new(kind: RuleGroupKind) -> RuleGroup {
+        return RuleGroup {
+            kind: kind,
+            sub_elems: vec![],
+            lookahead_kind: RuleElementLookaheadKind::None,
+            loop_count: RuleElementLoopCount::get_single_loop(),
+            ast_reflection_style: ASTReflectionStyle::Reflection(String::new()),
+            elem_order: RuleElementOrder::Sequential,
         };
     }
 
+    // todo: 関数の役割を検証
     pub fn has_choices(&self) -> bool {
-        for each_elem in &self.elem_containers {
+        for each_elem in &self.sub_elems {
             match each_elem {
-                RuleElementContainer::RuleChoice(_v) => return true,
+                RuleElement::Group(_) => return true,
                 _ => (),
             }
         }
@@ -392,15 +421,15 @@ impl RuleChoice {
         return false;
     }
 
-    pub fn is_hierarchy_omission_needed(choices: &Vec<Box<RuleChoice>>, is_random_order: bool) -> Option<Box<RuleChoice>> {
+    pub fn is_hierarchy_omission_needed(choices: &Vec<Box<RuleGroup>>, is_random_order: bool) -> Option<Box<RuleGroup>> {
         match choices.get(0) {
             Some(v) => {
-                if choices.len() == 1 && v.lookahead_kind == RuleLookaheadKind::None && v.loop_count == (1, 1) && v.occurrence_count == (1, 1) {
+                if choices.len() == 1 && v.lookahead_kind == RuleElementLookaheadKind::None && v.loop_count.to_tuple() == (1, 1) && match &v.elem_order { RuleElementOrder::Random(loop_count) => loop_count.to_tuple() == (1, 1), RuleElementOrder::Sequential => false, } {
                     if is_random_order {
-                        match v.elem_containers.get(0) {
+                        match v.sub_elems.get(0) {
                             Some(v2) => {
                                 match v2 {
-                                    RuleElementContainer::RuleChoice(v3) => {
+                                    RuleElement::Group(v3) => {
                                         if v3.has_choices() {
                                             return Some(v.clone());
                                         }
@@ -422,6 +451,37 @@ impl RuleChoice {
     }
 }
 
+impl Display for RuleGroup {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let mut seq_text = Vec::<String>::new();
+
+        for each_elem in &self.sub_elems {
+            match each_elem {
+                RuleElement::Group(each_group) => {
+                    seq_text.push(each_group.to_string());
+                },
+                RuleElement::Expression(each_expr) => {
+                    seq_text.push(format!("{}", each_expr));
+                },
+            }
+        }
+
+        let separator = match self.kind {
+            RuleGroupKind::Choice => {
+                match self.elem_order {
+                    RuleElementOrder::Random(_) => ", ",
+                    RuleElementOrder::Sequential => " : ",
+                }
+            },
+            RuleGroupKind::Sequence => " ",
+        };
+        let loop_text = self.loop_count.to_string(true, "{", ",", "}");
+        let order_text = match &self.elem_order { RuleElementOrder::Random(loop_count) => loop_count.to_string(false, "^[", "-", "]"), RuleElementOrder::Sequential => String::new(), };
+
+        return write!(f, "{}", format!("{}({}){}{}{}", self.lookahead_kind, seq_text.join(separator), loop_text, order_text, self.ast_reflection_style));
+    }
+}
+
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum RuleExpressionKind {
     CharClass,
@@ -430,45 +490,39 @@ pub enum RuleExpressionKind {
     Wildcard,
 }
 
-impl RuleExpressionKind {
-    pub fn to_token_string(&self, value: &str) -> String {
-        return match self {
-            RuleExpressionKind::CharClass => value.to_string(),
-            RuleExpressionKind::ID => value.to_string(),
-            RuleExpressionKind::String => format!("\"{}\"", value),
-            RuleExpressionKind::Wildcard => ".".to_string(),
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct RuleExpression {
     pub line: usize,
     pub kind: RuleExpressionKind,
-    pub lookahead_kind: RuleLookaheadKind,
-    pub loop_count: (i32, i32),
-    pub ast_reflection: ASTReflection,
     pub value: String,
+    pub ast_reflection_style: ASTReflectionStyle,
+    pub lookahead_kind: RuleElementLookaheadKind,
+    pub loop_count: RuleElementLoopCount,
+}
+
+impl RuleExpression {
+    pub fn new(line: usize, kind: RuleExpressionKind, value: String) -> RuleExpression {
+        return RuleExpression {
+            line: line,
+            kind: kind,
+            value: value,
+            ast_reflection_style: ASTReflectionStyle::NoReflection,
+            lookahead_kind: RuleElementLookaheadKind::None,
+            loop_count: RuleElementLoopCount::get_single_loop(),
+        }
+    }
 }
 
 impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        let loop_text = RuleCountConverter::count_to_string(&self.loop_count, true, "{", ",", "}");
-        let ast_reflection_text = self.ast_reflection.to_symbol_string();
+        let loop_text = self.loop_count.to_string(true, "{", ",", "}");
+        let value_text = match self.kind {
+            RuleExpressionKind::CharClass => self.value.clone(),
+            RuleExpressionKind::ID => self.value.clone(),
+            RuleExpressionKind::String => format!("\"{}\"", self.value),
+            RuleExpressionKind::Wildcard => ".".to_string(),
+        };
 
-        return write!(f, "{}{}{}{}", self.lookahead_kind.to_symbol_string(), self.kind.to_token_string(&self.value), loop_text, ast_reflection_text);
-    }
-}
-
-impl RuleExpression {
-    pub fn new(line: usize, kind: RuleExpressionKind, lookahead_kind: RuleLookaheadKind, loop_count: (i32, i32), ast_reflection: ASTReflection, value: String) -> RuleExpression {
-        return RuleExpression {
-            line: line,
-            kind: kind,
-            lookahead_kind: lookahead_kind,
-            loop_count: loop_count,
-            ast_reflection: ast_reflection,
-            value: value,
-        }
+        return write!(f, "{}{}{}{}", self.lookahead_kind, value_text, loop_text, self.ast_reflection_style);
     }
 }

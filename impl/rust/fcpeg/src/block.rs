@@ -32,14 +32,18 @@ macro_rules! use_block {
 macro_rules! rule {
     ($rule_name:expr, $($choice:expr), *,) => {
         {
-            let choices = vec![$(
+            let sub_elems = vec![$(
                 match $choice {
-                    RuleElementContainer::RuleChoice(v) => v,
+                    RuleElement::Group(_) => $choice,
                     _ => panic!(),
                 }
             )*];
 
-            let rule = Rule::new($rule_name.to_string(), vec![], choices);
+            let mut root_group = RuleGroup::new(RuleGroupKind::Choice);
+            root_group.sub_elems = sub_elems;
+            root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
+
+            let rule = Rule::new($rule_name.to_string(), vec![], Box::new(root_group));
             BlockCommand::Define(0, rule)
         }
     };
@@ -52,121 +56,56 @@ macro_rules! start_cmd {
 }
 
 macro_rules! choice {
-    () => {
-        RuleChoice {
-            elem_containers: vec![],
-            lookahead_kind: RuleLookaheadKind::None,
-            loop_count: (1, 1),
-            ast_reflection: ASTReflection::Unreflectable,
-            is_random_order: false,
-            occurrence_count: (1, 1),
-            has_choices: false,
-        }
-    };
-
     ($options:expr, $($sub_elem:expr), *,) => {
         {
-            let mut choice = choice!();
-            choice.elem_containers = vec![$($sub_elem,)*];
-            choice.ast_reflection = ASTReflection::Reflectable("".to_string());
+            let mut group = RuleGroup::new(RuleGroupKind::Sequence);
+            group.sub_elems = vec![$($sub_elem,)*];
+            group.ast_reflection_style = ASTReflectionStyle::Reflection("".to_string());
 
             for opt in $options {
                 match opt {
-                    "&" | "!" => choice.lookahead_kind = RuleLookaheadKind::to_lookahead_kind(opt),
-                    "?" | "*" | "+" => choice.loop_count = RuleCountConverter::loop_symbol_to_count(opt),
-                    "#" => choice.ast_reflection = ASTReflection::Unreflectable,
-                    "##" => choice.ast_reflection = ASTReflection::Expandable,
-                    ":" => choice.has_choices = true,
+                    "&" | "!" => group.lookahead_kind = RuleElementLookaheadKind::new(opt),
+                    "?" | "*" | "+" => group.loop_count = RuleElementLoopCount::from_symbol(opt),
+                    "#" => group.ast_reflection_style = ASTReflectionStyle::NoReflection,
+                    "##" => group.ast_reflection_style = ASTReflectionStyle::Expansion,
+                    ":" => group.kind = RuleGroupKind::Choice,
                     _ => panic!(),
                 }
             }
 
-            // $(choice.$field_name = $field_value;)*
-            RuleElementContainer::RuleChoice(Box::new(choice))
+            RuleElement::Group(Box::new(group))
         }
     };
 }
 
 macro_rules! expr {
-    ($kind:ident) => {
-        RuleExpression {
-            line: 0,
-            kind: RuleExpressionKind::$kind,
-            lookahead_kind: RuleLookaheadKind::None,
-            loop_count: (1, 1),
-            ast_reflection: ASTReflection::Unreflectable,
-            value: "".to_string(),
-        }
-    };
-
     ($kind:ident, $value:expr $(, $option:expr) *) => {
         {
-            let mut expr = expr!($kind);
-            expr.value = $value.to_string();
+            let mut expr = RuleExpression::new(0, RuleExpressionKind::$kind, $value.to_string());
 
             let leaf_name = match RuleExpressionKind::$kind {
                 RuleExpressionKind::ID => $value.to_string(),
                 _ => "".to_string(),
             };
 
-            expr.ast_reflection = ASTReflection::Reflectable(leaf_name);
+            expr.ast_reflection_style = ASTReflectionStyle::Reflection(leaf_name);
 
             $(
                 match $option {
-                    "&" | "!" => expr.lookahead_kind = RuleLookaheadKind::to_lookahead_kind($option),
-                    "?" | "*" | "+" => expr.loop_count = RuleCountConverter::loop_symbol_to_count($option),
-                    "#" => expr.ast_reflection = ASTReflection::Unreflectable,
-                    "##" => expr.ast_reflection = ASTReflection::Expandable,
+                    "&" | "!" => expr.lookahead_kind = RuleElementLookaheadKind::new($option),
+                    "?" | "*" | "+" => expr.loop_count = RuleElementLoopCount::from_symbol($option),
+                    "#" => expr.ast_reflection_style = ASTReflectionStyle::NoReflection,
+                    "##" => expr.ast_reflection_style = ASTReflectionStyle::Expansion,
                     _ => panic!(),
                 }
             )*
 
-            RuleElementContainer::RuleExpression(Box::new(expr))
+            RuleElement::Expression(Box::new(expr))
         }
     };
 }
 
 pub type BlockMap = HashMap<String, Block>;
-
-#[derive(PartialOrd, PartialEq, Debug, Clone)]
-pub enum BlockTokenKind {
-    ID,
-    Number,
-    Space,
-    String,
-    StringInBracket,
-    Symbol,
-}
-
-impl std::fmt::Display for BlockTokenKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            BlockTokenKind::ID => return write!(f, "ID"),
-            BlockTokenKind::Number => return write!(f, "Number"),
-            BlockTokenKind::Space => return write!(f, "Space"),
-            BlockTokenKind::String => return write!(f, "String"),
-            BlockTokenKind::StringInBracket => return write!(f, "StringInBracket"),
-            BlockTokenKind::Symbol => return write!(f, "Symbol"),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct BlockToken {
-    pub line: usize,
-    pub kind: BlockTokenKind,
-    pub value: String,
-}
-
-impl BlockToken {
-    pub fn new(line: usize, kind: BlockTokenKind, value: String) -> BlockToken {
-        return BlockToken {
-            line: line,
-            kind: kind,
-            value: value,
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum BlockParseError {
@@ -323,8 +262,8 @@ impl BlockParser {
     }
 
     fn to_block_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        return match &cmd_node_list.ast_reflection {
-            ASTReflection::Reflectable(node_name) => match node_name.as_str() {
+        return match &cmd_node_list.ast_reflection_style {
+            ASTReflectionStyle::Reflection(node_name) => match node_name.as_str() {
                 "DefineCmd" => BlockParser::to_define_cmd(cmd_node_list),
                 "StartCmd" => BlockParser::to_start_cmd(cmd_node_list),
                 "UseCmd" => BlockParser::to_use_cmd(cmd_node_list),
@@ -339,11 +278,12 @@ impl BlockParser {
         let choice_node_list = cmd_node_list.get_node_list_child(1)?;
 
         let new_choice = BlockParser::to_rule_choice_elem(choice_node_list)?;
-        let new_choice_elem = RuleElementContainer::RuleChoice(Box::new(new_choice.clone()));
+        // let new_choice_elem = RuleElement::Group(Box::new(new_choice.clone()));
 
-        let mut root_choice = RuleChoice::new(RuleLookaheadKind::None, (1, 1), new_choice.ast_reflection.clone(), false, (1, 1), false);
-        root_choice.elem_containers = vec![new_choice_elem];
-        let rule = Rule::new(rule_name, vec![], vec![Box::new(root_choice)]);
+        // let mut root_group = RuleGroup::new(RuleGroupKind::Choice);
+        // root_group.sub_elems = vec![new_choice_elem];
+        // root_group.ast_reflection_style = new_choice.ast_reflection_style.clone();
+        let rule = Rule::new(rule_name, vec![], Box::new(new_choice));
         return Ok(BlockCommand::Define(0, rule));
     }
 
@@ -377,9 +317,9 @@ impl BlockParser {
     }
 
     // note: Seq を解析する
-    fn to_seq_elem(seq_node: &SyntaxNodeList) -> Result<RuleElementContainer, SyntaxParseError> {
+    fn to_seq_elem(seq_node: &SyntaxNodeList) -> Result<RuleElement, SyntaxParseError> {
         // todo: 先読みなどの処理
-        let mut children = Vec::<RuleElementContainer>::new();
+        let mut children = Vec::<RuleElement>::new();
 
         // note: SeqElem ノードをループ
         for each_seq_elem_elem in &seq_node.filter_unreflectable_out() {
@@ -389,12 +329,12 @@ impl BlockParser {
             let lookahead_kind = match each_seq_elem_node.find_first_child_node(vec!["Lookahead"]) {
                 Some(v) => {
                     match v.get_leaf_child(0)?.value.as_str() {
-                        "&" => RuleLookaheadKind::Positive,
-                        "!" => RuleLookaheadKind::Negative,
+                        "&" => RuleElementLookaheadKind::Positive,
+                        "!" => RuleElementLookaheadKind::Negative,
                         _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("unknown lookahead kind"))),
                     }
                 },
-                None => RuleLookaheadKind::None,
+                None => RuleElementLookaheadKind::None,
             };
 
             // note: Loop ノード
@@ -402,47 +342,45 @@ impl BlockParser {
                 Some(v) => {
                     match v.get_child(0)? {
                         SyntaxNodeElement::NodeList(node) => {
-                            let min_num = match node.get_node_list_child(0)?.get_leaf_child(0)?.value.parse::<i32>() {
+                            let min_num = match node.get_node_list_child(0)?.get_leaf_child(0)?.value.parse::<usize>() {
                                 Ok(v) => v,
                                 Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid minimum loop value"))),
                             };
 
-                            let max_num = match node.get_node_list_child(1)?.get_leaf_child(0)?.value.parse::<i32>() {
+                            let max_num = match node.get_node_list_child(1)?.get_leaf_child(0)?.value.parse::<usize>() {
                                 Ok(v) => v,
                                 Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid maximum loop value"))),
                             };
 
-                            (min_num, max_num)
+                            RuleElementLoopCount::new(min_num, Infinitable::Normal(max_num))
                         },
                         SyntaxNodeElement::Leaf(leaf) => {
                             match leaf.value.as_str() {
-                                "?" => (0, 1),
-                                "*" => (0, -1),
-                                "+" => (1, -1),
+                                "?" | "*" | "+" => RuleElementLoopCount::from_symbol(&leaf.value),
                                 _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("unknown lookahead kind"))),
                             }
                         }
                     }
                 },
-                None => (1, 1),
+                None => RuleElementLoopCount::get_single_loop(),
             };
 
             // note: ASTReflectionStyle ノード
             // todo: 構成ファイルによって切り替える
-            let ast_reflection = match each_seq_elem_node.find_first_child_node(vec!["ASTReflectionStyle"]) {
+            let ast_reflection_style = match each_seq_elem_node.find_first_child_node(vec!["ASTReflectionStyle"]) {
                 Some(v) => {
                     match v.get_leaf_child(0) {
                         Ok(v) => {
                             if v.value == "##" {
-                                ASTReflection::Expandable
+                                ASTReflectionStyle::Expansion
                             } else {
-                                ASTReflection::Reflectable(v.value.clone())
+                                ASTReflectionStyle::Reflection(v.value.clone())
                             }
                         },
-                        Err(_) => ASTReflection::from_config(true, String::new()),
+                        Err(_) => ASTReflectionStyle::from_config(true, String::new()),
                     }
                 },
-                None => ASTReflection::from_config(false, String::new()),
+                None => ASTReflectionStyle::from_config(false, String::new()),
             };
 
             // Choice または Expr ノード
@@ -451,23 +389,23 @@ impl BlockParser {
                 None => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
             };
 
-            match &choice_or_expr_node.ast_reflection {
-                ASTReflection::Reflectable(name) => {
+            match &choice_or_expr_node.ast_reflection_style {
+                ASTReflectionStyle::Reflection(name) => {
                     let new_elem = match name.as_str() {
                         "Choice" => {
                             let mut new_choice = BlockParser::to_rule_choice_elem(choice_or_expr_node.get_node_list_child(0)?)?;
                             new_choice.lookahead_kind = lookahead_kind;
                             new_choice.loop_count = loop_count;
-                            new_choice.ast_reflection = ast_reflection;
-                            RuleElementContainer::RuleChoice(Box::new(new_choice))
+                            new_choice.ast_reflection_style = ast_reflection_style;
+                            RuleElement::Group(Box::new(new_choice))
                         },
                         "Expr" => {
                             let mut new_expr = BlockParser::to_rule_expr_elem(choice_or_expr_node)?;
                             new_expr.lookahead_kind = lookahead_kind;
                             new_expr.loop_count = loop_count;
-                            new_expr.ast_reflection = ast_reflection;
-                            RuleElementContainer::RuleExpression(Box::new(new_expr))
-                        }
+                            new_expr.ast_reflection_style = ast_reflection_style;
+                            RuleElement::Expression(Box::new(new_expr))
+                        },
                         _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid node name '{}'", name))),
                     };
 
@@ -477,44 +415,43 @@ impl BlockParser {
             };
         }
 
-        let mut choice = RuleChoice::new(RuleLookaheadKind::None, (1, 1), ASTReflection::Unreflectable, false, (1, 1), false);
-        choice.elem_containers = children;
-        return Ok(RuleElementContainer::RuleChoice(Box::new(choice)));
+        let mut seq = RuleGroup::new(RuleGroupKind::Sequence);
+        seq.sub_elems = children;
+        return Ok(RuleElement::Group(Box::new(seq)));
     }
 
     // note: Rule.PureChoice ノードの解析
-    fn to_rule_choice_elem(choice_node: &SyntaxNodeList) -> Result<RuleChoice, SyntaxParseError> {
-        let mut children = Vec::<RuleElementContainer>::new();
-        let mut has_choices = false;
+    fn to_rule_choice_elem(choice_node: &SyntaxNodeList) -> Result<RuleGroup, SyntaxParseError> {
+        let mut children = Vec::<RuleElement>::new();
+        let mut group_kind = RuleGroupKind::Sequence;
 
         // Seq ノードをループ
         for seq_elem in &choice_node.filter_unreflectable_out() {
             match &seq_elem.as_ref() {
                 SyntaxNodeElement::NodeList(node) => {
                     match &seq_elem.as_ref().get_ast_reflection() {
-                        ASTReflection::Reflectable(name) => if name == "Seq" {
+                        ASTReflectionStyle::Reflection(name) => if name == "Seq" {
                             let new_child = BlockParser::to_seq_elem(node)?;
                             children.push(new_child);
                         },
                         _ => (),
                     }
                 },
-                SyntaxNodeElement::Leaf(leaf) => if leaf.value == ":" {
-                    has_choices = true;
-                },
+                SyntaxNodeElement::Leaf(leaf) if leaf.value == ":" => group_kind = RuleGroupKind::Choice,
+                _ => (),
             }
         }
 
-        let mut choice = RuleChoice::new(RuleLookaheadKind::None, (1, 1), ASTReflection::Unreflectable, false, (1, 1), has_choices);
-        choice.elem_containers = children;
-        return Ok(choice);
+        let mut group = RuleGroup::new(group_kind);
+        group.sub_elems = children;
+        return Ok(group);
     }
 
     fn to_rule_expr_elem(expr_node_list: &SyntaxNodeList) -> Result<RuleExpression, SyntaxParseError> {
         let expr_child_node = expr_node_list.get_node_list_child(0)?;
 
-        let kind_and_value = match &expr_child_node.ast_reflection {
-            ASTReflection::Reflectable(name) => {
+        let (kind, value) = match &expr_child_node.ast_reflection_style {
+            ASTReflectionStyle::Reflection(name) => {
                 match name.as_str() {
                     "CharClass" => (RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.to_string())),
                     "ID" => (RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_list_child(0)?)?),
@@ -526,7 +463,7 @@ impl BlockParser {
             _ => return Err(SyntaxParseError::InternalErr("invalid operation".to_string())),
         };
 
-        let expr = RuleExpression::new(0, kind_and_value.0, RuleLookaheadKind::None, (1, 1), ASTReflection::Unreflectable, kind_and_value.1);
+        let expr = RuleExpression::new(0, kind, value);
         return Ok(expr);
     }
 
@@ -676,25 +613,22 @@ impl FCPEGBlock {
         let cmd_rule = rule!{
             "Cmd",
             choice!{
-                vec![],
+                vec![":"],
                 choice!{
-                    vec![":"],
-                    choice!{
-                        vec![],
-                        expr!(ID, "Comment"),
-                    },
-                    choice!{
-                        vec![],
-                        expr!(ID, "DefineCmd"),
-                    },
-                    choice!{
-                        vec![],
-                        expr!(ID, "StartCmd"),
-                    },
-                    choice!{
-                        vec![],
-                        expr!(ID, "UseCmd"),
-                    },
+                    vec![],
+                    expr!(ID, "Comment"),
+                },
+                choice!{
+                    vec![],
+                    expr!(ID, "DefineCmd"),
+                },
+                choice!{
+                    vec![],
+                    expr!(ID, "StartCmd"),
+                },
+                choice!{
+                    vec![],
+                    expr!(ID, "UseCmd"),
                 },
             },
         };

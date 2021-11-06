@@ -1,72 +1,57 @@
-use std::io::*;
 use std::fmt::*;
+use std::io::*;
+use std::io::Write;
 
-use crate::block::*;
 use crate::config::*;
 use crate::parser::*;
 use crate::rule::*;
 
-#[derive(Clone)]
-pub enum Pragma {
-    Unknown,
-    Define(String, Vec<crate::block::BlockToken>, Vec<String>),
-    Start(Vec<BlockToken>),
-    Use(Vec<BlockToken>),
-}
-
-impl Display for Pragma {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        return match self {
-            Pragma::Unknown => write!(f, "unknown"),
-            Pragma::Define(_, _, _) => write!(f, "define"),
-            Pragma::Start(_) => write!(f, "start"),
-            Pragma::Use(_) => write!(f, "use"),
-        };
-    }
-}
-
 #[derive(Clone, PartialEq)]
-pub enum ASTReflection {
+pub enum ASTReflectionStyle {
     // note: AST に反映される
-    Reflectable(String),
+    Reflection(String),
     // note: AST に反映されない
-    Unreflectable,
-    Expandable,
+    NoReflection,
+    Expansion,
 }
 
-impl ASTReflection {
-    pub fn from_config(is_reflectable: bool, elem_name: String) -> ASTReflection {
+impl ASTReflectionStyle {
+    pub fn from_config(is_reflectable: bool, elem_name: String) -> ASTReflectionStyle {
         unsafe {
             return if is_reflectable {
                 if CONFIG_DATA.reverse_ast_reflection {
-                    ASTReflection::Reflectable(elem_name)
+                    ASTReflectionStyle::Reflection(elem_name)
                 } else {
-                    ASTReflection::Unreflectable
+                    ASTReflectionStyle::NoReflection
                 }
             } else {
                 if CONFIG_DATA.reverse_ast_reflection {
-                    ASTReflection::Unreflectable
+                    ASTReflectionStyle::NoReflection
                 } else{
-                    ASTReflection::Reflectable(elem_name)
+                    ASTReflectionStyle::Reflection(elem_name)
                 }
             }
         }
     }
 
     pub fn is_reflectable(&self) -> bool {
-        return *self != ASTReflection::Unreflectable;
+        return *self != ASTReflectionStyle::NoReflection;
     }
 
     pub fn is_expandable(&self) -> bool {
-        return *self == ASTReflection::Expandable;
+        return *self == ASTReflectionStyle::Expansion;
     }
+}
 
-    pub fn to_symbol_string(&self) -> String {
-        return match self {
-            ASTReflection::Reflectable(elem_name) => format!("#{}", elem_name.clone()),
-            ASTReflection::Unreflectable => String::new(),
-            ASTReflection::Expandable => "|".to_string(),
+impl Display for ASTReflectionStyle {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let s = match &self {
+            ASTReflectionStyle::Reflection(elem_name) => format!("#{}", elem_name.clone()),
+            ASTReflectionStyle::NoReflection => "".to_string(),
+            ASTReflectionStyle::Expansion => "|".to_string(),
         };
+
+        return write!(f, "{}", s);
     }
 }
 
@@ -77,11 +62,11 @@ pub enum SyntaxNodeElement {
 }
 
 impl SyntaxNodeElement {
-    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> SyntaxNodeElement {
+    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflectionStyle) -> SyntaxNodeElement {
         return SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflection));
     }
 
-    pub fn from_leaf_args(value: String, ast_reflection: ASTReflection) -> SyntaxNodeElement {
+    pub fn from_leaf_args(value: String, ast_reflection: ASTReflectionStyle) -> SyntaxNodeElement {
         return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflection));
     }
 
@@ -113,17 +98,17 @@ impl SyntaxNodeElement {
         };
     }
 
-    pub fn get_ast_reflection(&self) -> ASTReflection {
+    pub fn get_ast_reflection(&self) -> ASTReflectionStyle {
         return match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection.clone(),
-            SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection.clone(),
+            SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection_style.clone(),
+            SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection_style.clone(),
         };
     }
 
-    pub fn set_ast_reflection(&mut self, ast_reflection: ASTReflection) {
+    pub fn set_ast_reflection(&mut self, ast_reflection_style: ASTReflectionStyle) {
         match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection = ast_reflection,
-            SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection = ast_reflection,
+            SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection_style = ast_reflection_style,
+            SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection_style = ast_reflection_style,
         }
     }
 
@@ -147,7 +132,7 @@ impl SyntaxTree {
         };
     }
 
-    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> SyntaxTree {
+    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflectionStyle) -> SyntaxTree {
         return SyntaxTree {
             child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflection)),
         };
@@ -164,15 +149,15 @@ impl SyntaxTree {
 
 #[derive(Clone)]
 pub struct SyntaxNodeList {
-    pub elems: Vec<SyntaxNodeElement>,
-    pub ast_reflection: ASTReflection,
+    pub sub_elems: Vec<SyntaxNodeElement>,
+    pub ast_reflection_style: ASTReflectionStyle,
 }
 
 impl SyntaxNodeList {
-    pub fn new(elems: Vec<SyntaxNodeElement>, ast_reflection: ASTReflection) -> SyntaxNodeList {
+    pub fn new(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNodeList {
         return SyntaxNodeList {
-            elems: elems,
-            ast_reflection: ast_reflection,
+            sub_elems: sub_elems,
+            ast_reflection_style: ast_reflection_style,
         };
     }
 
@@ -180,9 +165,9 @@ impl SyntaxNodeList {
     pub fn filter(&self, f: fn(&SyntaxNodeElement) -> bool) -> Vec<Box<&SyntaxNodeElement>> {
         let mut elems = Vec::<Box::<&SyntaxNodeElement>>::new();
 
-        for each_child in &self.elems {
-            if f(each_child) {
-                elems.push(Box::new(each_child));
+        for each_elem in &self.sub_elems {
+            if f(each_elem) {
+                elems.push(Box::new(each_elem));
             }
         }
 
@@ -195,11 +180,11 @@ impl SyntaxNodeList {
 
     // note: 子ノードを名前で検索する; 最初にマッチしたノードを返す
     pub fn find_first_child_node(&self, patterns: Vec<&str>) -> Option<&SyntaxNodeList> {
-        for each_elem in &self.elems {
+        for each_elem in &self.sub_elems {
             match each_elem {
                 SyntaxNodeElement::NodeList(each_node) => {
-                    match &each_node.ast_reflection {
-                        ASTReflection::Reflectable(name) if patterns.iter().any(|s| s == name) => return Some(each_node),
+                    match &each_node.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => return Some(each_node),
                         _ => (),
                     }
                 },
@@ -214,11 +199,11 @@ impl SyntaxNodeList {
     pub fn find_child_nodes(&self, patterns: Vec<&str>) -> Vec<&SyntaxNodeList> {
         let mut nodes = Vec::<&SyntaxNodeList>::new();
 
-        for each_elem in &self.elems {
+        for each_elem in &self.sub_elems {
             match each_elem {
                 SyntaxNodeElement::NodeList(each_node) => {
-                    match &each_node.ast_reflection {
-                        ASTReflection::Reflectable(name) if patterns.iter().any(|s| s == name) => nodes.push(each_node),
+                    match &each_node.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => nodes.push(each_node),
                         _ => (),
                     }
                 },
@@ -233,10 +218,10 @@ impl SyntaxNodeList {
         let mut elem_i = 0;
         let mut reflectable_elem_i = 0;
 
-        for each_elem in &self.elems {
+        for each_elem in &self.sub_elems {
             if each_elem.is_reflectable() {
                 if reflectable_elem_i == index {
-                    return match self.elems.get(elem_i) {
+                    return match self.sub_elems.get(elem_i) {
                         Some(v) => Ok(&v),
                         None => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
                     };
@@ -260,7 +245,7 @@ impl SyntaxNodeList {
     }
 
     pub fn is_reflectable(&self) -> bool {
-        return self.ast_reflection.is_reflectable();
+        return self.ast_reflection_style.is_reflectable();
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
@@ -268,21 +253,21 @@ impl SyntaxNodeList {
             return;
         }
 
-        let display_name = match &self.ast_reflection {
-            ASTReflection::Reflectable(elem_name) => {
+        let display_name = match &self.ast_reflection_style {
+            ASTReflectionStyle::Reflection(elem_name) => {
                 if elem_name == "" {
                     "[noname]".to_string()
                 } else {
                     elem_name.clone()
                 }
             },
-            ASTReflection::Unreflectable => "[hidden]".to_string(),
-            ASTReflection::Expandable => "[expandable]".to_string(),
+            ASTReflectionStyle::NoReflection => "[hidden]".to_string(),
+            ASTReflectionStyle::Expansion => "[expandable]".to_string(),
         };
 
         writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
 
-        for each_elem in &self.elems {
+        for each_elem in &self.sub_elems {
             each_elem.print(nest + 1, writer, ignore_hidden_elems);
         }
     }
@@ -290,11 +275,11 @@ impl SyntaxNodeList {
     pub fn to_string(&self) -> String {
         let mut s = String::new();
 
-        for each_elem in &self.elems {
+        for each_elem in &self.sub_elems {
             match each_elem {
                 SyntaxNodeElement::Leaf(leaf) => {
-                    match leaf.ast_reflection {
-                        ASTReflection::Reflectable(_) => s += leaf.value.as_ref(),
+                    match leaf.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
                         _ => (),
                     }
                 },
@@ -309,19 +294,19 @@ impl SyntaxNodeList {
 #[derive(Clone)]
 pub struct SyntaxLeaf {
     pub value: String,
-    pub ast_reflection: ASTReflection,
+    pub ast_reflection_style: ASTReflectionStyle,
 }
 
 impl SyntaxLeaf {
-    pub fn new(value: String, ast_reflection: ASTReflection) -> SyntaxLeaf {
+    pub fn new(value: String, ast_reflection_style: ASTReflectionStyle) -> SyntaxLeaf {
         return SyntaxLeaf {
             value: value,
-            ast_reflection: ast_reflection,
+            ast_reflection_style: ast_reflection_style,
         };
     }
 
     pub fn is_reflectable(&self) -> bool {
-        return self.ast_reflection.is_reflectable();
+        return self.ast_reflection_style.is_reflectable();
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
@@ -334,10 +319,10 @@ impl SyntaxLeaf {
             .replace("\n", "\\n")
             .replace("\t", "\\t");
 
-        let ast_reflection_text = match &self.ast_reflection {
-            ASTReflection::Reflectable(elem_name) => format!("({})", elem_name.clone()),
-            ASTReflection::Unreflectable => "[hidden]".to_string(),
-            ASTReflection::Expandable => "[expandable]".to_string(),
+        let ast_reflection_text = match &self.ast_reflection_style {
+            ASTReflectionStyle::Reflection(elem_name) => format!("({})", elem_name.clone()),
+            ASTReflectionStyle::NoReflection => "[hidden]".to_string(),
+            ASTReflectionStyle::Expansion => "[expandable]".to_string(),
         };
 
         writeln!(writer, "|{}- \"{}\" {}", "   |".repeat(nest), value, ast_reflection_text).unwrap();
