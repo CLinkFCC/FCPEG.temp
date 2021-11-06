@@ -41,7 +41,7 @@
     Choice <- "("# PureChoice ")"#,
     Seq <- SeqElem (Symbol.Space+# SeqElem)*##,
     % (Choice : Expr) に命名する,
-    SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflection?,
+    SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
     Expr <- ID : Str : CharClass : Wildcard,
 
     Lookahead <- "!" : "&",
@@ -49,7 +49,7 @@
     LoopRange <- "{"# Num? ","# Num? "}"#,
     RandomOrder <- "^"# RandomOrderRange?,
     RandomOrderRange <- "["# Num? ","# Num? "]"#,
-    ASTReflection <- "#"# Misc.SingleID?,
+    ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,
 
     Num <- [0-9]+,
     ID <- Misc.ChainID,
