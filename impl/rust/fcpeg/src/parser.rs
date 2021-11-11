@@ -231,11 +231,23 @@ impl SyntaxParser {
     fn is_each_choice_matched(&mut self, group: &std::boxed::Box<RuleGroup>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
         let mut children = Vec::<SyntaxNodeElement>::new();
 
+        println!("\na {} {}\n", group.kind, group);
+
+        match group.kind {
+            RuleGroupKind::Choice => {
+                
+            },
+            RuleGroupKind::Sequence => {
+                
+            },
+        }
+
         for each_elem in &group.sub_elems {
             let start_src_i = self.src_i;
 
             match each_elem {
                 RuleElement::Group(each_group) => {
+                    println!("order  {}", each_group.elem_order);
                     match &each_group.elem_order {
                         RuleElementOrder::Random(_) => {
                             let mut new_sub_children = Vec::<SyntaxNodeElement>::new();
@@ -291,17 +303,20 @@ impl SyntaxParser {
                             }
                         },
                         RuleElementOrder::Sequential => {
+                            println!("kind    {}", each_group.kind);
                             match each_group.kind {
                                 RuleGroupKind::Choice => {
+                                    println!("choiceeeeeeeeeeeeeee");
                                     let mut is_successful = false;
 
                                     for each_sub_elem in &each_group.sub_elems {
                                         match each_sub_elem {
-                                            RuleElement::Group(each_sub_choice) => {
-                                                match self.is_choice_successful(&each_group.elem_order, each_sub_choice)? {
+                                            RuleElement::Group(each_sub_group) => {
+                                                println!("aiueo");
+                                                match self.is_choice_successful(&each_group.elem_order, each_sub_group)? {
                                                     Some(v) => {
                                                         if group.sub_elems.len() != 1 {
-                                                            let new_child = SyntaxNodeElement::from_node_list_args(v, each_sub_choice.ast_reflection_style.clone());
+                                                            let new_child = SyntaxNodeElement::from_node_list_args(v, each_sub_group.ast_reflection_style.clone());
 
                                                             match new_child {
                                                                 SyntaxNodeElement::NodeList(node_list) if node_list.sub_elems.len() == 0 => (),
@@ -326,7 +341,7 @@ impl SyntaxParser {
                                                     },
                                                 }
                                             },
-                                            _ => (),
+                                            _ => println!("aaaaaaaaaaaaaa"),
                                         }
                                     }
 
@@ -345,7 +360,6 @@ impl SyntaxParser {
                                                     _ => {
                                                         match new_child {
                                                             SyntaxNodeElement::NodeList(new_node_list) if new_node_list.ast_reflection_style.is_expandable() => {
-                                                                println!("expandable");
                                                                 children.append(&mut new_node_list.sub_elems.clone());
                                                             },
                                                             _ => children.push(new_child),
@@ -363,7 +377,7 @@ impl SyntaxParser {
                                             return Ok(None);
                                         },
                                     }
-                                }
+                                },
                             }
                         },
                     }

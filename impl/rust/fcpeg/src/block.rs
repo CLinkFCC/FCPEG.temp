@@ -442,9 +442,14 @@ impl BlockParser {
             }
         }
 
-        let mut group = RuleGroup::new(group_kind);
+        
+        let mut group = RuleGroup::new(group_kind.clone());
         group.sub_elems = children;
-        return Ok(group);
+
+        let mut tmp_root_group = RuleGroup::new(RuleGroupKind::Sequence);
+        tmp_root_group.sub_elems = vec![RuleElement::Group(Box::new(group))];
+
+        return Ok(tmp_root_group);
     }
 
     fn to_rule_expr_elem(expr_node_list: &SyntaxNodeList) -> Result<RuleExpression, SyntaxParseError> {

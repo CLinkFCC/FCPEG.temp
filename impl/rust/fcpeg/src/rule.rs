@@ -366,6 +366,15 @@ impl RuleElementOrder {
     }
 }
 
+impl Display for RuleElementOrder {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        return match self {
+            RuleElementOrder::Random(loop_count) => write!(f, "Random({})", loop_count.to_string(true, "{", ",", "}")),
+            RuleElementOrder::Sequential => write!(f, "Sequential"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum RuleElement {
     Group(Box<RuleGroup>),
@@ -385,6 +394,17 @@ impl Display for RuleElement {
 pub enum RuleGroupKind {
     Choice,
     Sequence,
+}
+
+impl Display for RuleGroupKind {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let s = match self {
+            RuleGroupKind::Choice => "Choice",
+            RuleGroupKind::Sequence => "Sequence",
+        };
+
+        return write!(f, "{}", s);
+    }
 }
 
 #[derive(Clone)]
