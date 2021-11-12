@@ -229,19 +229,19 @@ impl BlockParser {
 
         let root = tree.clone_child();
 
-        let block_nodes = root.get_node_list()?.get_node_list_child(0)?.filter_unreflectable_out();
+        let block_nodes = root.get_node()?.get_node_child(0)?.filter_unreflectable_out();
 
         for each_block_elem in &block_nodes {
-            let each_block_node_list = each_block_elem.get_node_list()?;
-            let block_name = each_block_node_list.get_node_list_child(0)?.to_string();
+            let each_block_node = each_block_elem.get_node()?;
+            let block_name = each_block_node.get_node_child(0)?.to_string();
 
             let mut cmds = Vec::<BlockCommand>::new();
 
-            match each_block_node_list.get_node_list_child(1) {
+            match each_block_node.get_node_child(1) {
                 Ok(cmd_elems) => {
                     for each_cmd_elem in &cmd_elems.filter_unreflectable_out() {
-                        let each_cmd_node_list = each_cmd_elem.get_node_list()?.get_node_list_child(0)?;
-                        let new_cmd = BlockParser::to_block_cmd(each_cmd_node_list)?;
+                        let each_cmd_node = each_cmd_elem.get_node()?.get_node_child(0)?;
+                        let new_cmd = BlockParser::to_block_cmd(each_cmd_node)?;
                         cmds.push(new_cmd);
                     }
                 },
@@ -261,23 +261,23 @@ impl BlockParser {
         return Ok(block_map);
     }
 
-    fn to_block_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        return match &cmd_node_list.ast_reflection_style {
+    fn to_block_cmd(cmd_node: &SyntaxNode) -> Result<BlockCommand, SyntaxParseError> {
+        return match &cmd_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(node_name) => match node_name.as_str() {
-                "DefineCmd" => BlockParser::to_define_cmd(cmd_node_list),
-                "StartCmd" => BlockParser::to_start_cmd(cmd_node_list),
-                "UseCmd" => BlockParser::to_use_cmd(cmd_node_list),
+                "DefineCmd" => BlockParser::to_define_cmd(cmd_node),
+                "StartCmd" => BlockParser::to_start_cmd(cmd_node),
+                "UseCmd" => BlockParser::to_use_cmd(cmd_node),
                 _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid node name '{}'", node_name))),
             },
             _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
         };
     }
 
-    fn to_define_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        let rule_name = cmd_node_list.get_node_list_child(0)?.to_string();
-        let choice_node_list = cmd_node_list.get_node_list_child(1)?;
+    fn to_define_cmd(cmd_node: &SyntaxNode) -> Result<BlockCommand, SyntaxParseError> {
+        let rule_name = cmd_node.get_node_child(0)?.to_string();
+        let choice_node = cmd_node.get_node_child(1)?;
 
-        let new_choice = BlockParser::to_rule_choice_elem(choice_node_list)?;
+        let new_choice = BlockParser::to_rule_choice_elem(choice_node)?;
         // let new_choice_elem = RuleElement::Group(Box::new(new_choice.clone()));
 
         // let mut root_group = RuleGroup::new(RuleGroupKind::Choice);
@@ -287,8 +287,8 @@ impl BlockParser {
         return Ok(BlockCommand::Define(0, rule));
     }
 
-    fn to_start_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        let raw_id = BlockParser::to_chain_id(cmd_node_list.get_node_list_child(0)?)?;
+    fn to_start_cmd(cmd_node: &SyntaxNode) -> Result<BlockCommand, SyntaxParseError> {
+        let raw_id = BlockParser::to_chain_id(cmd_node.get_node_child(0)?)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
         let cmd = match divided_raw_id.len() {
@@ -300,12 +300,12 @@ impl BlockParser {
         return Ok(cmd);
     }
 
-    fn to_use_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        let raw_id = BlockParser::to_chain_id(cmd_node_list.get_node_list_child(0)?)?;
+    fn to_use_cmd(cmd_node: &SyntaxNode) -> Result<BlockCommand, SyntaxParseError> {
+        let raw_id = BlockParser::to_chain_id(cmd_node.get_node_child(0)?)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
-        let block_alias_id = match cmd_node_list.find_first_child_node(vec!["UseCmdBlockAlias"]) {
-            Some(v) => v.get_node_list_child(0)?.to_string(),
+        let block_alias_id = match cmd_node.find_first_child_node(vec!["UseCmdBlockAlias"]) {
+            Some(v) => v.get_node_child(0)?.to_string(),
             None => divided_raw_id.join("."),
         };
 
@@ -317,13 +317,13 @@ impl BlockParser {
     }
 
     // note: Seq を解析する
-    fn to_seq_elem(seq_node: &SyntaxNodeList) -> Result<RuleElement, SyntaxParseError> {
+    fn to_seq_elem(seq_node: &SyntaxNode) -> Result<RuleElement, SyntaxParseError> {
         // todo: 先読みなどの処理
         let mut children = Vec::<RuleElement>::new();
 
         // note: SeqElem ノードをループ
         for each_seq_elem_elem in &seq_node.filter_unreflectable_out() {
-            let each_seq_elem_node = each_seq_elem_elem.get_node_list()?;
+            let each_seq_elem_node = each_seq_elem_elem.get_node()?;
 
             // note: Lookahead ノード
             let lookahead_kind = match each_seq_elem_node.find_first_child_node(vec!["Lookahead"]) {
@@ -341,13 +341,13 @@ impl BlockParser {
             let loop_count = match each_seq_elem_node.find_first_child_node(vec!["Loop"]) {
                 Some(v) => {
                     match v.get_child(0)? {
-                        SyntaxNodeElement::NodeList(node) => {
-                            let min_num = match node.get_node_list_child(0)?.get_leaf_child(0)?.value.parse::<usize>() {
+                        SyntaxNodeElement::Node(node) => {
+                            let min_num = match node.get_node_child(0)?.get_leaf_child(0)?.value.parse::<usize>() {
                                 Ok(v) => v,
                                 Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid minimum loop value"))),
                             };
 
-                            let max_num = match node.get_node_list_child(1)?.get_leaf_child(0)?.value.parse::<usize>() {
+                            let max_num = match node.get_node_child(1)?.get_leaf_child(0)?.value.parse::<usize>() {
                                 Ok(v) => v,
                                 Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid maximum loop value"))),
                             };
@@ -393,7 +393,7 @@ impl BlockParser {
                 ASTReflectionStyle::Reflection(name) => {
                     let new_elem = match name.as_str() {
                         "Choice" => {
-                            let mut new_choice = BlockParser::to_rule_choice_elem(choice_or_expr_node.get_node_list_child(0)?)?;
+                            let mut new_choice = BlockParser::to_rule_choice_elem(choice_or_expr_node.get_node_child(0)?)?;
                             new_choice.lookahead_kind = lookahead_kind;
                             new_choice.loop_count = loop_count;
                             new_choice.ast_reflection_style = ast_reflection_style;
@@ -421,14 +421,14 @@ impl BlockParser {
     }
 
     // note: Rule.PureChoice ノードの解析
-    fn to_rule_choice_elem(choice_node: &SyntaxNodeList) -> Result<RuleGroup, SyntaxParseError> {
+    fn to_rule_choice_elem(choice_node: &SyntaxNode) -> Result<RuleGroup, SyntaxParseError> {
         let mut children = Vec::<RuleElement>::new();
         let mut group_kind = RuleGroupKind::Sequence;
 
         // Seq ノードをループ
         for seq_elem in &choice_node.filter_unreflectable_out() {
             match &seq_elem.as_ref() {
-                SyntaxNodeElement::NodeList(node) => {
+                SyntaxNodeElement::Node(node) => {
                     match &seq_elem.as_ref().get_ast_reflection() {
                         ASTReflectionStyle::Reflection(name) => if name == "Seq" {
                             let new_child = BlockParser::to_seq_elem(node)?;
@@ -452,14 +452,14 @@ impl BlockParser {
         return Ok(tmp_root_group);
     }
 
-    fn to_rule_expr_elem(expr_node_list: &SyntaxNodeList) -> Result<RuleExpression, SyntaxParseError> {
-        let expr_child_node = expr_node_list.get_node_list_child(0)?;
+    fn to_rule_expr_elem(expr_node: &SyntaxNode) -> Result<RuleExpression, SyntaxParseError> {
+        let expr_child_node = expr_node.get_node_child(0)?;
 
         let (kind, value) = match &expr_child_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(name) => {
                 match name.as_str() {
                     "CharClass" => (RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.to_string())),
-                    "ID" => (RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_list_child(0)?)?),
+                    "ID" => (RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_child(0)?)?),
                     "Str" => (RuleExpressionKind::String, BlockParser::to_string_value(expr_child_node)?),
                     "Wildcard" => (RuleExpressionKind::Wildcard, ".".to_string()),
                     _ => return Err(SyntaxParseError::InternalErr(format!("unknown expression name '{}'", name))),
@@ -472,12 +472,12 @@ impl BlockParser {
         return Ok(expr);
     }
 
-    fn to_string_value(str_node_list: &SyntaxNodeList) -> Result<String, SyntaxParseError> {
+    fn to_string_value(str_node: &SyntaxNode) -> Result<String, SyntaxParseError> {
         let mut s = String::new();
 
-        for each_elem in &str_node_list.sub_elems {
+        for each_elem in &str_node.sub_elems {
             match each_elem {
-                SyntaxNodeElement::NodeList(node) => {
+                SyntaxNodeElement::Node(node) => {
                     match node.ast_reflection_style {
                         ASTReflectionStyle::Reflection(_) => {
                             s += match node.get_leaf_child(0)?.value.as_str() {
@@ -504,11 +504,11 @@ impl BlockParser {
         return Ok(s);
     }
 
-    fn to_chain_id(chain_id_node: &SyntaxNodeList) -> Result<String, SyntaxParseError> {
+    fn to_chain_id(chain_id_node: &SyntaxNode) -> Result<String, SyntaxParseError> {
         let mut ids = Vec::<String>::new();
 
         for chain_id_elem in &chain_id_node.filter_unreflectable_out() {
-            ids.push(chain_id_elem.get_node_list()?.to_string());
+            ids.push(chain_id_elem.get_node()?.to_string());
         }
 
         return Ok(ids.join("."));

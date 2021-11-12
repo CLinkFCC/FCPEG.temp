@@ -57,22 +57,22 @@ impl Display for ASTReflectionStyle {
 
 #[derive(Clone)]
 pub enum SyntaxNodeElement {
-    NodeList(SyntaxNodeList),
+    Node(SyntaxNode),
     Leaf(SyntaxLeaf),
 }
 
 impl SyntaxNodeElement {
-    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflectionStyle) -> SyntaxNodeElement {
-        return SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflection));
+    pub fn from_node_args(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNodeElement {
+        return SyntaxNodeElement::Node(SyntaxNode::new(sub_elems, ast_reflection_style));
     }
 
     pub fn from_leaf_args(value: String, ast_reflection: ASTReflectionStyle) -> SyntaxNodeElement {
         return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflection));
     }
 
-    pub fn get_node_list(&self) -> std::result::Result<&SyntaxNodeList, SyntaxParseError> {
+    pub fn get_node(&self) -> std::result::Result<&SyntaxNode, SyntaxParseError> {
         return match self {
-            SyntaxNodeElement::NodeList(node_list) => Ok(node_list),
+            SyntaxNodeElement::Node(node) => Ok(node),
             _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("element not node list".to_string())),
         };
     }
@@ -84,37 +84,37 @@ impl SyntaxNodeElement {
         };
     }
 
-    pub fn is_node_list(&self) -> bool {
+    pub fn is_node(&self) -> bool {
         return match self {
-            SyntaxNodeElement::NodeList(_) => true,
+            SyntaxNodeElement::Node(_) => true,
             _ => false,
         };
     }
 
     pub fn is_reflectable(&self) -> bool {
         return match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.is_reflectable(),
+            SyntaxNodeElement::Node(node) => node.is_reflectable(),
             SyntaxNodeElement::Leaf(leaf) => leaf.is_reflectable(),
         };
     }
 
     pub fn get_ast_reflection(&self) -> ASTReflectionStyle {
         return match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection_style.clone(),
+            SyntaxNodeElement::Node(node) => node.ast_reflection_style.clone(),
             SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection_style.clone(),
         };
     }
 
     pub fn set_ast_reflection(&mut self, ast_reflection_style: ASTReflectionStyle) {
         match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.ast_reflection_style = ast_reflection_style,
+            SyntaxNodeElement::Node(node) => node.ast_reflection_style = ast_reflection_style,
             SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection_style = ast_reflection_style,
         }
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
         match self {
-            SyntaxNodeElement::NodeList(node_list) => node_list.print(nest, writer, ignore_hidden_elems),
+            SyntaxNodeElement::Node(node) => node.print(nest, writer, ignore_hidden_elems),
             SyntaxNodeElement::Leaf(leaf) => leaf.print(nest, writer, ignore_hidden_elems),
         }
     }
@@ -126,15 +126,15 @@ pub struct SyntaxTree {
 }
 
 impl SyntaxTree {
-    pub fn from_node_list(node_list: SyntaxNodeElement) -> SyntaxTree {
+    pub fn from_node(node: SyntaxNodeElement) -> SyntaxTree {
         return SyntaxTree {
-            child: node_list,
+            child: node,
         };
     }
 
-    pub fn from_node_list_args(subnodes: Vec<SyntaxNodeElement>, ast_reflection: ASTReflectionStyle) -> SyntaxTree {
+    pub fn from_node_args(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxTree {
         return SyntaxTree {
-            child: SyntaxNodeElement::NodeList(SyntaxNodeList::new(subnodes, ast_reflection)),
+            child: SyntaxNodeElement::Node(SyntaxNode::new(sub_elems, ast_reflection_style)),
         };
     }
 
@@ -148,14 +148,14 @@ impl SyntaxTree {
 }
 
 #[derive(Clone)]
-pub struct SyntaxNodeList {
+pub struct SyntaxNode {
     pub sub_elems: Vec<SyntaxNodeElement>,
     pub ast_reflection_style: ASTReflectionStyle,
 }
 
-impl SyntaxNodeList {
-    pub fn new(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNodeList {
-        return SyntaxNodeList {
+impl SyntaxNode {
+    pub fn new(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNode {
+        return SyntaxNode {
             sub_elems: sub_elems,
             ast_reflection_style: ast_reflection_style,
         };
@@ -179,12 +179,12 @@ impl SyntaxNodeList {
     }
 
     // note: 子ノードを名前で検索する; 最初にマッチしたノードを返す
-    pub fn find_first_child_node(&self, patterns: Vec<&str>) -> Option<&SyntaxNodeList> {
+    pub fn find_first_child_node(&self, patterns: Vec<&str>) -> Option<&SyntaxNode> {
         for each_elem in &self.sub_elems {
             match each_elem {
-                SyntaxNodeElement::NodeList(each_node) => {
-                    match &each_node.ast_reflection_style {
-                        ASTReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => return Some(each_node),
+                SyntaxNodeElement::Node(node) => {
+                    match &node.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => return Some(node),
                         _ => (),
                     }
                 },
@@ -196,14 +196,14 @@ impl SyntaxNodeList {
     }
 
     // note: 子ノードを名前で検索する
-    pub fn find_child_nodes(&self, patterns: Vec<&str>) -> Vec<&SyntaxNodeList> {
-        let mut nodes = Vec::<&SyntaxNodeList>::new();
+    pub fn find_child_nodes(&self, patterns: Vec<&str>) -> Vec<&SyntaxNode> {
+        let mut nodes = Vec::<&SyntaxNode>::new();
 
         for each_elem in &self.sub_elems {
             match each_elem {
-                SyntaxNodeElement::NodeList(each_node) => {
-                    match &each_node.ast_reflection_style {
-                        ASTReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => nodes.push(each_node),
+                SyntaxNodeElement::Node(node) => {
+                    match &node.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => nodes.push(node),
                         _ => (),
                     }
                 },
@@ -236,8 +236,8 @@ impl SyntaxNodeList {
         return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("{}th reflectable element not matched", index + 1)));
     }
 
-    pub fn get_node_list_child(&self, index: usize) -> std::result::Result<&SyntaxNodeList, SyntaxParseError> {
-        return self.get_child(index)?.get_node_list();
+    pub fn get_node_child(&self, index: usize) -> std::result::Result<&SyntaxNode, SyntaxParseError> {
+        return self.get_child(index)?.get_node();
     }
 
     pub fn get_leaf_child(&self, index: usize) -> std::result::Result<&SyntaxLeaf, SyntaxParseError> {

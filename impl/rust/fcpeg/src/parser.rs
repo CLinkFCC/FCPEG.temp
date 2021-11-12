@@ -77,7 +77,7 @@ impl SyntaxParser {
         let start_rule_id = self.rule_map.start_rule_id.clone();
 
         if self.src_content.len() == 0 {
-            return Ok(SyntaxTree::from_node_list_args(vec![], ASTReflectionStyle::from_config(false, String::new())));
+            return Ok(SyntaxTree::from_node_args(vec![], ASTReflectionStyle::from_config(false, String::new())));
         }
 
         self.recursion_count += 1;
@@ -95,7 +95,7 @@ impl SyntaxParser {
         }
 
         self.recursion_count -= 1;
-        return Ok(SyntaxTree::from_node_list(root_node));
+        return Ok(SyntaxTree::from_node(root_node));
     }
 
     fn is_rule_successful(&mut self, rule_id: &String) -> std::result::Result<std::option::Option<SyntaxNodeElement>, SyntaxParseError> {
@@ -128,7 +128,7 @@ impl SyntaxParser {
                 };
 
                 self.rule_stack.pop().unwrap();
-                let new_node = SyntaxNodeElement::from_node_list_args(v, ast_reflection_style);
+                let new_node = SyntaxNodeElement::from_node_args(v, ast_reflection_style);
                 Ok(Some(new_node))
             },
             None => Ok(None),
@@ -195,8 +195,8 @@ impl SyntaxParser {
                 Some(node_elems) => {
                     for each_elem in node_elems {
                         match &each_elem {
-                            SyntaxNodeElement::NodeList(node_list) => {
-                                if node_list.sub_elems.len() != 0 {
+                            SyntaxNodeElement::Node(node) => {
+                                if node.sub_elems.len() != 0 {
                                     children.push(each_elem);
                                 }
                             },
@@ -251,11 +251,11 @@ impl SyntaxParser {
                                                 Some(v) => {
                                                     for each_result_sub_elem in v {
                                                         match each_result_sub_elem {
-                                                            SyntaxNodeElement::NodeList(node_list) if node_list.sub_elems.len() == 0 => (),
+                                                            SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
                                                             _ => {
                                                                 match each_result_sub_elem {
-                                                                    SyntaxNodeElement::NodeList(result_node_list) if result_node_list.ast_reflection_style.is_expandable() => {
-                                                                        new_sub_children.append(&mut result_node_list.sub_elems.clone());
+                                                                    SyntaxNodeElement::Node(result_node) if result_node.ast_reflection_style.is_expandable() => {
+                                                                        new_sub_children.append(&mut result_node.sub_elems.clone());
                                                                     },
                                                                     _ => new_sub_children.push(each_result_sub_elem),
                                                                 }
@@ -281,10 +281,10 @@ impl SyntaxParser {
                                 return Ok(None);
                             }
 
-                            let new_child = SyntaxNodeElement::from_node_list_args(new_sub_children, each_group.ast_reflection_style.clone());
+                            let new_child = SyntaxNodeElement::from_node_args(new_sub_children, each_group.ast_reflection_style.clone());
 
                             match new_child {
-                                SyntaxNodeElement::NodeList(node_list) if node_list.sub_elems.len() == 0 => (),
+                                SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
                                 _ => children.push(new_child),
                             }
                         },
@@ -299,14 +299,14 @@ impl SyntaxParser {
                                                 match self.is_choice_successful(&each_group.elem_order, each_sub_group)? {
                                                     Some(v) => {
                                                         if group.sub_elems.len() != 1 {
-                                                            let new_child = SyntaxNodeElement::from_node_list_args(v, each_sub_group.ast_reflection_style.clone());
+                                                            let new_child = SyntaxNodeElement::from_node_args(v, each_sub_group.ast_reflection_style.clone());
 
                                                             match new_child {
-                                                                SyntaxNodeElement::NodeList(node_list) if node_list.sub_elems.len() == 0 => (),
+                                                                SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
                                                                 _ => {
                                                                     match new_child {
-                                                                        SyntaxNodeElement::NodeList(new_node_list) if new_node_list.ast_reflection_style.is_expandable() => {
-                                                                            children.append(&mut new_node_list.sub_elems.clone());
+                                                                        SyntaxNodeElement::Node(new_node) if new_node.ast_reflection_style.is_expandable() => {
+                                                                            children.append(&mut new_node.sub_elems.clone());
                                                                         },
                                                                         _ => children.push(new_child),
                                                                     }
@@ -336,14 +336,14 @@ impl SyntaxParser {
                                     match self.is_choice_successful(&each_group.elem_order, each_group)? {
                                         Some(v) => {
                                             if group.sub_elems.len() != 1 {
-                                                let new_child = SyntaxNodeElement::from_node_list_args(v, each_group.ast_reflection_style.clone());
+                                                let new_child = SyntaxNodeElement::from_node_args(v, each_group.ast_reflection_style.clone());
 
                                                 match new_child {
-                                                    SyntaxNodeElement::NodeList(node_list) if node_list.sub_elems.len() == 0 => (),
+                                                    SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
                                                     _ => {
                                                         match new_child {
-                                                            SyntaxNodeElement::NodeList(new_node_list) if new_node_list.ast_reflection_style.is_expandable() => {
-                                                                children.append(&mut new_node_list.sub_elems.clone());
+                                                            SyntaxNodeElement::Node(new_node) if new_node.ast_reflection_style.is_expandable() => {
+                                                                children.append(&mut new_node.sub_elems.clone());
                                                             },
                                                             _ => children.push(new_child),
                                                         }
@@ -370,7 +370,7 @@ impl SyntaxParser {
                         Some(node_elems) => {
                             for each_elem in node_elems {
                                 match each_elem {
-                                    SyntaxNodeElement::NodeList(node_list) if node_list.sub_elems.len() == 0 => (),
+                                    SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
                                     _ => children.push(each_elem),
                                 }
                             }
@@ -430,7 +430,7 @@ impl SyntaxParser {
                 Some(node) => {
                     for each_node in node {
                         match each_node {
-                            SyntaxNodeElement::NodeList(node_list) if node_list.sub_elems.len() == 0 => (),
+                            SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
                             _ => children.push(each_node),
                         }
                     }
@@ -496,7 +496,7 @@ impl SyntaxParser {
                         self.recursion_count += 1;
 
                         let conv_node_elems = match &node_elem {
-                            SyntaxNodeElement::NodeList(node_list) => {
+                            SyntaxNodeElement::Node(node) => {
                                 let sub_ast_reflection = match &expr.ast_reflection_style {
                                     ASTReflectionStyle::Reflection(elem_name) => {
                                         let conv_elem_name = if elem_name == "" {
@@ -510,11 +510,11 @@ impl SyntaxParser {
                                     _ => expr.ast_reflection_style.clone(),
                                 };
 
-                                let node = SyntaxNodeElement::from_node_list_args(node_list.sub_elems.clone(), sub_ast_reflection);
+                                let node = SyntaxNodeElement::from_node_args(node.sub_elems.clone(), sub_ast_reflection);
 
                                 if expr.ast_reflection_style.is_expandable() {
                                     match node {
-                                        SyntaxNodeElement::NodeList(node) => node.sub_elems,
+                                        SyntaxNodeElement::Node(node) => node.sub_elems,
                                         _ => vec![node],
                                     }
                                 } else {
