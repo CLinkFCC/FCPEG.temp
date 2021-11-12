@@ -510,6 +510,19 @@ pub enum RuleExpressionKind {
     Wildcard,
 }
 
+impl Display for RuleExpressionKind {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let s = match self {
+            RuleExpressionKind::CharClass => "CharClass",
+            RuleExpressionKind::ID => "ID",
+            RuleExpressionKind::String => "String",
+            RuleExpressionKind::Wildcard => "Wildcard",
+        };
+
+        write!(f, "{}", s)
+    }
+}
+
 #[derive(Clone)]
 pub struct RuleExpression {
     pub line: usize,

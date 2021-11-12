@@ -7,6 +7,7 @@ use rustnutlib::console::*;
 pub enum SyntaxParseError {
     Unknown(),
     BlockParseErr(BlockParseError),
+    EmptyStringInExpression(),
     InternalErr(String),
     InvalidSyntaxTreeStruct(String),
     NoSucceededRule(String, usize, Vec<(usize, String)>),
@@ -19,6 +20,7 @@ impl SyntaxParseError {
     pub fn get_log_data(&self) -> ConsoleLogData {
         match self {
             SyntaxParseError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown error", vec![], vec![]),
+            SyntaxParseError::EmptyStringInExpression() => ConsoleLogData::new(ConsoleLogKind::Error, "empty string in expression", vec![], vec![]),
             SyntaxParseError::BlockParseErr(err) => err.get_log_data(),
             SyntaxParseError::InternalErr(err_msg) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_msg), vec![], vec![]),
             SyntaxParseError::InvalidSyntaxTreeStruct(cause) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid syntax tree structure ({})", cause), vec![], vec![]),
@@ -47,7 +49,7 @@ impl SyntaxParser {
             src_i: 0,
             src_content: String::new(),
             recursion_count: 1,
-            max_recursion_count: 128,
+            max_recursion_count: 65536,
             max_loop_count: 65536,
             rule_stack: vec![],
         });
@@ -97,9 +99,6 @@ impl SyntaxParser {
     }
 
     fn is_rule_successful(&mut self, rule_id: &String) -> std::result::Result<std::option::Option<SyntaxNodeElement>, SyntaxParseError> {
-        // todo: 削除
-        println!("rule {}", rule_id);
-
         let rule = match self.rule_map.get_rule(rule_id) {
             Some(v) => v.clone(),
             None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
@@ -231,23 +230,11 @@ impl SyntaxParser {
     fn is_each_choice_matched(&mut self, group: &std::boxed::Box<RuleGroup>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
         let mut children = Vec::<SyntaxNodeElement>::new();
 
-        println!("\na {} {}\n", group.kind, group);
-
-        match group.kind {
-            RuleGroupKind::Choice => {
-                
-            },
-            RuleGroupKind::Sequence => {
-                
-            },
-        }
-
         for each_elem in &group.sub_elems {
             let start_src_i = self.src_i;
 
             match each_elem {
                 RuleElement::Group(each_group) => {
-                    println!("order  {}", each_group.elem_order);
                     match &each_group.elem_order {
                         RuleElementOrder::Random(_) => {
                             let mut new_sub_children = Vec::<SyntaxNodeElement>::new();
@@ -268,7 +255,6 @@ impl SyntaxParser {
                                                             _ => {
                                                                 match each_result_sub_elem {
                                                                     SyntaxNodeElement::NodeList(result_node_list) if result_node_list.ast_reflection_style.is_expandable() => {
-                                                                        println!("expandable");
                                                                         new_sub_children.append(&mut result_node_list.sub_elems.clone());
                                                                     },
                                                                     _ => new_sub_children.push(each_result_sub_elem),
@@ -303,16 +289,13 @@ impl SyntaxParser {
                             }
                         },
                         RuleElementOrder::Sequential => {
-                            println!("kind    {}", each_group.kind);
                             match each_group.kind {
                                 RuleGroupKind::Choice => {
-                                    println!("choiceeeeeeeeeeeeeee");
                                     let mut is_successful = false;
 
                                     for each_sub_elem in &each_group.sub_elems {
                                         match each_sub_elem {
                                             RuleElement::Group(each_sub_group) => {
-                                                println!("aiueo");
                                                 match self.is_choice_successful(&each_group.elem_order, each_sub_group)? {
                                                     Some(v) => {
                                                         if group.sub_elems.len() != 1 {
@@ -341,7 +324,7 @@ impl SyntaxParser {
                                                     },
                                                 }
                                             },
-                                            _ => println!("aaaaaaaaaaaaaa"),
+                                            _ => (),
                                         }
                                     }
 
@@ -436,10 +419,10 @@ impl SyntaxParser {
         }
 
         let mut children = Vec::<SyntaxNodeElement>::new();
-        let mut loop_count = 0;
+        let mut loop_count = 0usize;
 
         while self.src_i < self.src_content.len() {
-            if loop_count > self.max_loop_count as i32 {
+            if loop_count > self.max_loop_count {
                 return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
             }
 
@@ -454,21 +437,21 @@ impl SyntaxParser {
 
                     loop_count += 1;
 
-                    if max_count != -1 && loop_count == max_count {
+                    if max_count != -1 && loop_count as i32 == max_count {
                         return Ok(Some(children));
                     }
                 },
                 None => {
-                    if loop_count >= min_count as i32 && (max_count == -1 || loop_count <= max_count) {
-                        return Ok(Some(children));
+                    return if loop_count >= min_count && (max_count == -1 || loop_count as i32 <= max_count) {
+                        Ok(Some(children))
                     } else {
-                        return Ok(None);
+                        Ok(None)
                     }
                 },
             }
         }
 
-        return if loop_count >= min_count as i32 && (max_count == -1 || loop_count <= max_count) {
+        return if loop_count >= min_count && (max_count == -1 || loop_count as i32 <= max_count) {
             Ok(Some(children))
         } else {
             Ok(None)
@@ -510,7 +493,7 @@ impl SyntaxParser {
 
                 match self.is_rule_successful(&expr.value.clone())? {
                     Some(node_elem) => {
-                        self.recursion_count -= 1;
+                        self.recursion_count += 1;
 
                         let conv_node_elems = match &node_elem {
                             SyntaxNodeElement::NodeList(node_list) => {
@@ -550,6 +533,10 @@ impl SyntaxParser {
                 };
             },
             RuleExpressionKind::String => {
+                if expr.value.len() == 0 {
+                    return Err(SyntaxParseError::EmptyStringInExpression());
+                }
+
                 if self.src_content.len() < self.src_i + expr.value.len() {
                     return Ok(None);
                 }

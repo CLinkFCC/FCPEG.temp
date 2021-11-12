@@ -460,7 +460,7 @@ impl BlockParser {
                 match name.as_str() {
                     "CharClass" => (RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.to_string())),
                     "ID" => (RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_list_child(0)?)?),
-                    "Str" => (RuleExpressionKind::String, expr_child_node.to_string()),
+                    "Str" => (RuleExpressionKind::String, BlockParser::to_string_value(expr_child_node)?),
                     "Wildcard" => (RuleExpressionKind::Wildcard, ".".to_string()),
                     _ => return Err(SyntaxParseError::InternalErr(format!("unknown expression name '{}'", name))),
                 }
@@ -470,6 +470,38 @@ impl BlockParser {
 
         let expr = RuleExpression::new(0, kind, value);
         return Ok(expr);
+    }
+
+    fn to_string_value(str_node_list: &SyntaxNodeList) -> Result<String, SyntaxParseError> {
+        let mut s = String::new();
+
+        for each_elem in &str_node_list.sub_elems {
+            match each_elem {
+                SyntaxNodeElement::NodeList(node) => {
+                    match node.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(_) => {
+                            s += match node.get_leaf_child(0)?.value.as_str() {
+                                "\\" => "\\",
+                                "\"" => "\"",
+                                "0" => "\0",
+                                "n" => "\n",
+                                "t" => "\t",
+                                _ => return Err(SyntaxParseError::InternalErr("unknown escape sequence character".to_string())),
+                            };
+                        },
+                        _ => (),
+                    }
+                },
+                SyntaxNodeElement::Leaf(leaf) => {
+                    match leaf.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
+                        _ => (),
+                    }
+                },
+            }
+        }
+
+        return Ok(s);
     }
 
     fn to_chain_id(chain_id_node: &SyntaxNodeList) -> Result<String, SyntaxParseError> {
@@ -940,14 +972,14 @@ impl FCPEGBlock {
             },
         };
 
-        // code: EscSeq <- "\\" ("\\" : "0" : "\"" : "n"),
+        // code: EscSeq <- "\\"# ("\\" : "\"" : "0" : "n" : "t")##,
         let esc_seq_rule = rule!{
             "EscSeq",
             choice!{
                 vec![],
-                expr!(String, "\\"),
+                expr!(String, "\\", "#"),
                 choice!{
-                    vec![],
+                    vec!["##"],
                     choice!{
                         vec![":"],
                         choice!{
@@ -956,15 +988,19 @@ impl FCPEGBlock {
                         },
                         choice!{
                             vec![],
-                            expr!(String, "0"),
-                        },
-                        choice!{
-                            vec![],
                             expr!(String, "\""),
                         },
                         choice!{
                             vec![],
+                            expr!(String, "0"),
+                        },
+                        choice!{
+                            vec![],
                             expr!(String, "n"),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, "t"),
                         },
                     },
                 },
