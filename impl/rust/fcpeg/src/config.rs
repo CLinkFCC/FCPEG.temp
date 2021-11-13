@@ -24,12 +24,6 @@ pub enum ConfigFileError {
     UnknownRegexMode(String),
 }
 
-impl Display for ConfigFileError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        return write!(f, "[ConfigFileError]");
-    }
-}
-
 impl ConfigFileError {
     pub fn get_log_data(&self) -> ConsoleLogData {
         match self {
@@ -45,21 +39,17 @@ impl ConfigFileError {
     }
 }
 
+impl Display for ConfigFileError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        return write!(f, "[ConfigFileError]");
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub enum RegexMode {
     Default,
     Onise,
     Posix,
-}
-
-impl Display for RegexMode {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        return match self {
-            RegexMode::Default => write!(f, "Default"),
-            RegexMode::Onise => write!(f, "Onise"),
-            RegexMode::Posix => write!(f, "POSIX"),
-        };
-    }
 }
 
 impl RegexMode {
@@ -70,6 +60,16 @@ impl RegexMode {
             "posix" => Some(RegexMode::Posix),
             _ => None,
         }
+    }
+}
+
+impl Display for RegexMode {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        return match self {
+            RegexMode::Default => write!(f, "Default"),
+            RegexMode::Onise => write!(f, "Onise"),
+            RegexMode::Posix => write!(f, "POSIX"),
+        };
     }
 }
 

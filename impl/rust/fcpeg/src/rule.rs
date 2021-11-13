@@ -14,22 +14,6 @@ pub struct RuleMap {
     pub start_rule_id: String,
 }
 
-impl Display for RuleMap {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        let mut rule_text_lines = Vec::<String>::new();
-
-        for each_rule in self.rule_map.values() {
-            rule_text_lines.push(each_rule.to_string());
-        }
-
-        for each_key in self.regex_map.keys() {
-            rule_text_lines.push(format!("reg {}", each_key));
-        }
-
-        return writeln!(f, "{}", rule_text_lines.join("\n"));
-    }
-}
-
 impl RuleMap {
     pub fn new(start_rule_id: String) -> RuleMap {
         return RuleMap {
@@ -219,6 +203,22 @@ impl RuleMap {
     }
 }
 
+impl Display for RuleMap {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let mut rule_text_lines = Vec::<String>::new();
+
+        for each_rule in self.rule_map.values() {
+            rule_text_lines.push(each_rule.to_string());
+        }
+
+        for each_key in self.regex_map.keys() {
+            rule_text_lines.push(format!("reg {}", each_key));
+        }
+
+        return writeln!(f, "{}", rule_text_lines.join("\n"));
+    }
+}
+
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum RuleElementLookaheadKind {
     None,
@@ -260,6 +260,16 @@ pub struct Rule {
     pub group: Box<RuleGroup>,
 }
 
+impl Rule {
+    pub fn new(name: String, macro_args: Vec<String>, group: Box<RuleGroup>) -> Rule {
+        return Rule {
+            name: name,
+            macro_args: macro_args,
+            group: group,
+        };
+    }
+}
+
 impl Display for Rule {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let macro_args_text = if self.macro_args.len() == 0 {
@@ -269,16 +279,6 @@ impl Display for Rule {
         };
 
         return write!(f, "{}{} <- {}", self.name, macro_args_text, self.group);
-    }
-}
-
-impl Rule {
-    pub fn new(name: String, macro_args: Vec<String>, group: Box<RuleGroup>) -> Rule {
-        return Rule {
-            name: name,
-            macro_args: macro_args,
-            group: group,
-        };
     }
 }
 

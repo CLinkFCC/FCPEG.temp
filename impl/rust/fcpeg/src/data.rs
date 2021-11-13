@@ -363,7 +363,7 @@ pub enum BlockCommand {
     Use(usize, String, String, String),
 }
 
-impl std::fmt::Display for BlockCommand {
+impl Display for BlockCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             BlockCommand::Define(line, rule) => return write!(f, "{}| rule {}", line, rule),
