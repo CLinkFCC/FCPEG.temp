@@ -107,6 +107,8 @@ macro_rules! expr {
 
 pub type BlockMap = HashMap<String, Block>;
 
+pub type BlockParseResult<T> = Result<T, BlockParseError>;
+
 #[derive(Debug)]
 pub enum BlockParseError {
     Unknown(),
@@ -166,7 +168,7 @@ pub struct BlockParser {}
 
 impl BlockParser {
     // note: FileMan から最終的な RuleMap を取得する
-    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> Result<RuleMap, SyntaxParseError> {
+    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> SyntaxParseResult<RuleMap> {
         let mut block_map = FCPEGBlock::get_block_map();
         let mut rule_map = RuleMap::new(".Syntax.FCPEG".to_string());
         match rule_map.format_block_map(&String::new(), &mut block_map) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
@@ -214,7 +216,7 @@ impl BlockParser {
     }
 
     // note: ブロックマップとファイルを元に 1 ファイルの FCPEG コードの構文木を取得する
-    fn to_syntax_tree(parser: &mut SyntaxParser, fcpeg_file_content: &String) -> Result<SyntaxTree, SyntaxParseError> {
+    fn to_syntax_tree(parser: &mut SyntaxParser, fcpeg_file_content: &String) -> SyntaxParseResult<SyntaxTree> {
         let tree = parser.get_syntax_tree(fcpeg_file_content)?;
 
         println!("print {}", fcpeg_file_content);
@@ -224,7 +226,7 @@ impl BlockParser {
     }
 
     // note: FCPEG コードの構文木 → ブロックマップの変換
-    fn to_block_map(tree: &SyntaxTree) -> Result<BlockMap, SyntaxParseError> {
+    fn to_block_map(tree: &SyntaxTree) -> SyntaxParseResult<BlockMap> {
         let mut block_map = BlockMap::new();
         let root = tree.clone_child();
         let block_nodes = root.get_node()?.get_node_child_at(0)?.get_reflectable_children();
@@ -259,7 +261,7 @@ impl BlockParser {
         return Ok(block_map);
     }
 
-    fn to_block_cmd(cmd_node: &SyntaxNode) -> Result<BlockCommand, SyntaxParseError> {
+    fn to_block_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
         return match &cmd_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(node_name) => match node_name.as_str() {
                 "DefineCmd" => BlockParser::to_define_cmd(cmd_node),
@@ -271,7 +273,7 @@ impl BlockParser {
         };
     }
 
-    fn to_define_cmd(cmd_node: &SyntaxNode) -> Result<BlockCommand, SyntaxParseError> {
+    fn to_define_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
         let rule_name = cmd_node.get_node_child_at(0)?.join_child_leaf_values();
         let choice_node = cmd_node.get_node_child_at(1)?;
 
@@ -285,7 +287,7 @@ impl BlockParser {
         return Ok(BlockCommand::Define(0, rule));
     }
 
-    fn to_start_cmd(cmd_node: &SyntaxNode) -> Result<BlockCommand, SyntaxParseError> {
+    fn to_start_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
         let raw_id = BlockParser::to_chain_id(cmd_node.get_node_child_at(0)?)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
@@ -298,7 +300,7 @@ impl BlockParser {
         return Ok(cmd);
     }
 
-    fn to_use_cmd(cmd_node: &SyntaxNode) -> Result<BlockCommand, SyntaxParseError> {
+    fn to_use_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
         let raw_id = BlockParser::to_chain_id(cmd_node.get_node_child_at(0)?)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
@@ -315,7 +317,7 @@ impl BlockParser {
     }
 
     // note: Seq を解析する
-    fn to_seq_elem(seq_node: &SyntaxNode) -> Result<RuleElement, SyntaxParseError> {
+    fn to_seq_elem(seq_node: &SyntaxNode) -> SyntaxParseResult<RuleElement> {
         // todo: 先読みなどの処理
         let mut children = Vec::<RuleElement>::new();
 
@@ -419,7 +421,7 @@ impl BlockParser {
     }
 
     // note: Rule.PureChoice ノードの解析
-    fn to_rule_choice_elem(choice_node: &SyntaxNode) -> Result<RuleGroup, SyntaxParseError> {
+    fn to_rule_choice_elem(choice_node: &SyntaxNode) -> SyntaxParseResult<RuleGroup> {
         let mut children = Vec::<RuleElement>::new();
         let mut group_kind = RuleGroupKind::Sequence;
 
@@ -450,7 +452,7 @@ impl BlockParser {
         return Ok(tmp_root_group);
     }
 
-    fn to_rule_expr_elem(expr_node: &SyntaxNode) -> Result<RuleExpression, SyntaxParseError> {
+    fn to_rule_expr_elem(expr_node: &SyntaxNode) -> SyntaxParseResult<RuleExpression> {
         let expr_child_node = expr_node.get_node_child_at(0)?;
 
         let (kind, value) = match &expr_child_node.ast_reflection_style {
@@ -470,7 +472,7 @@ impl BlockParser {
         return Ok(expr);
     }
 
-    fn to_string_value(str_node: &SyntaxNode) -> Result<String, SyntaxParseError> {
+    fn to_string_value(str_node: &SyntaxNode) -> SyntaxParseResult<String> {
         let mut s = String::new();
 
         for each_elem in &str_node.sub_elems {
@@ -502,7 +504,7 @@ impl BlockParser {
         return Ok(s);
     }
 
-    fn to_chain_id(chain_id_node: &SyntaxNode) -> Result<String, SyntaxParseError> {
+    fn to_chain_id(chain_id_node: &SyntaxNode) -> SyntaxParseResult<String> {
         let mut ids = Vec::<String>::new();
 
         for chain_id_elem in &chain_id_node.get_reflectable_children() {

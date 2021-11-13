@@ -8,15 +8,19 @@ pub mod rule;
 use std::result::*;
 
 use crate::block::*;
+use crate::data::*;
 use crate::file::*;
+use crate::parser::*;
 
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
 
+pub type FCPEGResult<T> = Result<T, FCPEGError>;
+
 pub enum FCPEGError {
     BlockParseErr(BlockParseError),
     FCPEGFileErr(FCPEGFileError),
-    SyntaxParseErr(parser::SyntaxParseError),
+    SyntaxParseErr(SyntaxParseError),
 }
 
 impl FCPEGError {
@@ -32,7 +36,7 @@ impl FCPEGError {
 pub struct FCPEG {}
 
 impl FCPEG {
-    pub fn parse_from_paths(fcpeg_file_path: &String, input_file_paths: &Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {
+    pub fn parse_from_paths(fcpeg_file_path: &String, input_file_paths: &Vec<String>) -> FCPEGResult<Vec<SyntaxTree>> {
         let mut input_srcs = Vec::<String>::new();
 
         for each_path in input_file_paths {
@@ -47,7 +51,7 @@ impl FCPEG {
         return FCPEG::parse_from_srcs(fcpeg_file_path.clone(), input_srcs);
     }
 
-    pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {
+    pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> FCPEGResult<Vec<SyntaxTree>> {
         let mut fcpeg_file_map = match FCPEGFileMap::load(fcpeg_file_path) {
             Ok(v) => v,
             Err(e) => return Err(FCPEGError::FCPEGFileErr(e)),
@@ -65,12 +69,12 @@ impl FCPEG {
 
         println!("rule map {}", rule_map);
 
-        let mut parser = match parser::SyntaxParser::new(rule_map) {
+        let mut parser = match SyntaxParser::new(rule_map) {
             Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
             Ok(v) => v,
         };
 
-        let mut trees = Vec::<data::SyntaxTree>::new();
+        let mut trees = Vec::<SyntaxTree>::new();
 
         for each_src in input_srcs {
             let new_tree = match parser.get_syntax_tree(&each_src) {

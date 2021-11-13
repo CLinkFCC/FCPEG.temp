@@ -5,6 +5,8 @@ use crate::config::*;
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
 
+pub type FCPEGFileResult<T> = Result<T, FCPEGFileError>;
+
 pub enum FCPEGFileError {
     Unknown(),
     FileErr(FileManError),
@@ -26,7 +28,7 @@ pub struct FCPEGFileMap {
 }
 
 impl FCPEGFileMap {
-    pub fn load(main_file_path: String) -> Result<FCPEGFileMap, FCPEGFileError> {
+    pub fn load(main_file_path: String) -> FCPEGFileResult<FCPEGFileMap> {
         // note: ルートファイルのエイリアス名は空文字; 除外エイリアスなし
         let file_map = match FCPEGFile::load(String::new(), main_file_path, &mut vec![]) {
             Ok(v) => v,
@@ -54,7 +56,7 @@ pub struct FCPEGFile {
 }
 
 impl FCPEGFile {
-    pub fn load(alias_name: String, file_path: String, filtered_alias_name: &mut Vec<String>) -> Result<HashMap<String, FCPEGFile>, FCPEGFileError> {
+    pub fn load(alias_name: String, file_path: String, filtered_alias_name: &mut Vec<String>) -> FCPEGFileResult<HashMap<String, FCPEGFile>> {
         let file_content = match FileMan::read_all(&file_path) {
             Err(e) => return Err(FCPEGFileError::FileErr(e)),
             Ok(v) => v,

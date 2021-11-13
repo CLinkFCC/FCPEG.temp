@@ -37,7 +37,7 @@ impl RuleMap {
     }
 
     // ここでは規則 ID の存在チェックは行われない
-    pub fn get_from_root_fcpeg_file_man(file_alias_name: &String, block_map: &mut BlockMap) -> std::result::Result<RuleMap, BlockParseError> {
+    pub fn get_from_root_fcpeg_file_man(file_alias_name: &String, block_map: &mut BlockMap) -> BlockParseResult<RuleMap> {
         println!("{}", block_map.len());
         let main_block = match block_map.get("Main") {
             Some(v) => v,
@@ -99,7 +99,7 @@ impl RuleMap {
         return Ok(rule_map);
     }
 
-    pub fn format_block_map(&mut self, file_alias_name: &String, block_map: &mut BlockMap) -> std::result::Result<(), BlockParseError> {
+    pub fn format_block_map(&mut self, file_alias_name: &String, block_map: &mut BlockMap) -> BlockParseResult<()> {
         for (block_name, each_block) in block_map {
             if block_name == "Main" {
                 continue;
@@ -141,7 +141,7 @@ impl RuleMap {
         return Ok(());
     }
 
-    pub fn proc_define_cmd(&mut self, group: &mut RuleGroup, rule_id: &String, block_name: &String, file_alias_name: &String, block_alias_map: &HashMap<String, String>) -> std::result::Result<(), BlockParseError> {
+    pub fn proc_define_cmd(&mut self, group: &mut RuleGroup, rule_id: &String, block_name: &String, file_alias_name: &String, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
         for each_elem in group.sub_elems.iter_mut() {
             match each_elem {
                 RuleElement::Group(each_group) => {

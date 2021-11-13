@@ -70,14 +70,14 @@ impl SyntaxNodeElement {
         return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflection));
     }
 
-    pub fn get_node(&self) -> std::result::Result<&SyntaxNode, SyntaxParseError> {
+    pub fn get_node(&self) -> SyntaxParseResult<&SyntaxNode> {
         return match self {
             SyntaxNodeElement::Node(node) => Ok(node),
             _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("element not node list".to_string())),
         };
     }
 
-    pub fn get_leaf(&self) -> std::result::Result<&SyntaxLeaf, SyntaxParseError> {
+    pub fn get_leaf(&self) -> SyntaxParseResult<&SyntaxLeaf> {
         return match self {
             SyntaxNodeElement::Leaf(leaf) => Ok(leaf),
             _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("element not leaf".to_string())),
@@ -215,7 +215,7 @@ impl SyntaxNode {
         return nodes;
     }
 
-    pub fn get_child_at(&self, index: usize) -> std::result::Result<&SyntaxNodeElement, SyntaxParseError> {
+    pub fn get_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxNodeElement> {
         let mut elem_i = 0;
         let mut reflectable_elem_i = 0;
 
@@ -237,11 +237,11 @@ impl SyntaxNode {
         return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("{}th reflectable element not matched", index + 1)));
     }
 
-    pub fn get_node_child_at(&self, index: usize) -> std::result::Result<&SyntaxNode, SyntaxParseError> {
+    pub fn get_node_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxNode> {
         return self.get_child_at(index)?.get_node();
     }
 
-    pub fn get_leaf_child_at(&self, index: usize) -> std::result::Result<&SyntaxLeaf, SyntaxParseError> {
+    pub fn get_leaf_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxLeaf> {
         return self.get_child_at(index)?.get_leaf();
     }
 

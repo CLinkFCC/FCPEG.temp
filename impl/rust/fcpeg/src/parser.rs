@@ -4,6 +4,8 @@ use crate::rule::*;
 
 use rustnutlib::console::*;
 
+pub type SyntaxParseResult<T> = Result<T, SyntaxParseError>;
+
 pub enum SyntaxParseError {
     Unknown(),
     BlockParseErr(BlockParseError),
@@ -43,7 +45,7 @@ pub struct SyntaxParser {
 }
 
 impl SyntaxParser {
-    pub fn new(rule_map: RuleMap) -> std::result::Result<SyntaxParser, SyntaxParseError> {
+    pub fn new(rule_map: RuleMap) -> SyntaxParseResult<SyntaxParser> {
         return Ok(SyntaxParser {
             rule_map: rule_map,
             src_i: 0,
@@ -55,7 +57,7 @@ impl SyntaxParser {
         });
     }
 
-    pub fn get_syntax_tree(&mut self, src_content: &String) -> std::result::Result<SyntaxTree, SyntaxParseError> {
+    pub fn get_syntax_tree(&mut self, src_content: &String) -> SyntaxParseResult<SyntaxTree> {
         let mut tmp_src_content = src_content.clone();
 
         // todo: 高速化: replace() と比べてどちらが速いか検証する
@@ -98,7 +100,7 @@ impl SyntaxParser {
         return Ok(SyntaxTree::from_node(root_node));
     }
 
-    fn is_rule_successful(&mut self, rule_id: &String) -> std::result::Result<std::option::Option<SyntaxNodeElement>, SyntaxParseError> {
+    fn is_rule_successful(&mut self, rule_id: &String) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
         let rule = match self.rule_map.get_rule(rule_id) {
             Some(v) => v.clone(),
             None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
@@ -135,11 +137,11 @@ impl SyntaxParser {
         }
     }
 
-    fn is_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return self.is_lookahead_choice_successful(parent_elem_order, group);
     }
 
-    fn is_lookahead_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_lookahead_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return if group.lookahead_kind.is_none() {
             self.is_loop_choice_successful(parent_elem_order, group)
         } else {
@@ -157,7 +159,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_loop_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_loop_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = match parent_elem_order {
             RuleElementOrder::Random(tmp_occurrence_count) => {
                 let (mut tmp_min_count, mut tmp_max_count) = tmp_occurrence_count.to_tuple();
@@ -227,7 +229,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_choice_matched(&mut self, group: &std::boxed::Box<RuleGroup>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_each_choice_matched(&mut self, group: &std::boxed::Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let mut children = Vec::<SyntaxNodeElement>::new();
 
         for each_elem in &group.sub_elems {
@@ -389,11 +391,11 @@ impl SyntaxParser {
         return Ok(Some(children));
     }
 
-    fn is_expr_successful(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_expr_successful(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return self.is_lookahead_expr_successful(expr);
     }
 
-    fn is_lookahead_expr_successful(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_lookahead_expr_successful(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return if expr.lookahead_kind.is_none() {
             self.is_loop_expr_successful(expr)
         } else {
@@ -411,7 +413,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_loop_expr_successful(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_loop_expr_successful(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = expr.loop_count.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
@@ -458,7 +460,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_expr_matched(&mut self, expr: &Box<RuleExpression>) -> std::result::Result<std::option::Option<Vec<SyntaxNodeElement>>, SyntaxParseError> {
+    fn is_each_expr_matched(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         if self.src_i >= self.src_content.len() {
             return Ok(None);
         }

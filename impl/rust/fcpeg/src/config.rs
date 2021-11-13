@@ -12,6 +12,8 @@ pub static mut CONFIG_DATA: Lazy<ConfigData> = Lazy::new(|| ConfigData::new());
 type PropertyMap = HashMap<String, (Vec<String>, PropertySubMap)>;
 type PropertySubMap = HashMap::<String, Vec<String>>;
 
+pub type ConfigFileResult<T> = std::result::Result<T, ConfigFileError>;
+
 #[derive(Debug)]
 pub enum ConfigFileError {
     Unknown(),
@@ -102,7 +104,7 @@ impl ConfigFile {
         }
     }
 
-    pub fn load(&mut self, src_path: String) -> std::result::Result<(), ConfigFileError> {
+    pub fn load(&mut self, src_path: String) -> ConfigFileResult<()> {
         let lines = match FileMan::read_lines(&src_path) {
             Err(e) => return Err(ConfigFileError::FileManError(e)),
             Ok(v) => v,
@@ -163,7 +165,7 @@ impl ConfigFile {
         return Ok(());
     }
 
-    fn get_prop_map(lines: &Vec<String>) -> std::result::Result<PropertyMap, ConfigFileError> {
+    fn get_prop_map(lines: &Vec<String>) -> ConfigFileResult<PropertyMap> {
         let mut prop_map = PropertyMap::new();
 
         // ネスト用の一時的なプロップ名
