@@ -162,7 +162,7 @@ impl SyntaxNode {
     }
 
     // note: 子要素をフィルタリングする
-    pub fn filter(&self, f: fn(&SyntaxNodeElement) -> bool) -> Vec<Box<&SyntaxNodeElement>> {
+    pub fn filter_children(&self, f: fn(&SyntaxNodeElement) -> bool) -> Vec<Box<&SyntaxNodeElement>> {
         let mut elems = Vec::<Box::<&SyntaxNodeElement>>::new();
 
         for each_elem in &self.sub_elems {
@@ -174,8 +174,9 @@ impl SyntaxNode {
         return elems;
     }
 
-    pub fn filter_unreflectable_out(&self) -> Vec<Box<&SyntaxNodeElement>> {
-        return self.filter(|each_elem| each_elem.is_reflectable());
+    // note: Reflectable な子要素のみを取得する
+    pub fn get_reflectable_children(&self) -> Vec<Box<&SyntaxNodeElement>> {
+        return self.filter_children(|each_elem| each_elem.is_reflectable());
     }
 
     // note: 子ノードを名前で検索する; 最初にマッチしたノードを返す
@@ -214,7 +215,7 @@ impl SyntaxNode {
         return nodes;
     }
 
-    pub fn get_child(&self, index: usize) -> std::result::Result<&SyntaxNodeElement, SyntaxParseError> {
+    pub fn get_child_at(&self, index: usize) -> std::result::Result<&SyntaxNodeElement, SyntaxParseError> {
         let mut elem_i = 0;
         let mut reflectable_elem_i = 0;
 
@@ -236,16 +237,35 @@ impl SyntaxNode {
         return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("{}th reflectable element not matched", index + 1)));
     }
 
-    pub fn get_node_child(&self, index: usize) -> std::result::Result<&SyntaxNode, SyntaxParseError> {
-        return self.get_child(index)?.get_node();
+    pub fn get_node_child_at(&self, index: usize) -> std::result::Result<&SyntaxNode, SyntaxParseError> {
+        return self.get_child_at(index)?.get_node();
     }
 
-    pub fn get_leaf_child(&self, index: usize) -> std::result::Result<&SyntaxLeaf, SyntaxParseError> {
-        return self.get_child(index)?.get_leaf();
+    pub fn get_leaf_child_at(&self, index: usize) -> std::result::Result<&SyntaxLeaf, SyntaxParseError> {
+        return self.get_child_at(index)?.get_leaf();
     }
 
     pub fn is_reflectable(&self) -> bool {
         return self.ast_reflection_style.is_reflectable();
+    }
+
+    // note: Reflectable な子ノードの値をすべて結合して返す
+    pub fn join_child_leaf_values(&self) -> String {
+        let mut s = String::new();
+
+        for each_elem in &self.sub_elems {
+            match each_elem {
+                SyntaxNodeElement::Leaf(leaf) => {
+                    match leaf.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
+                        _ => (),
+                    }
+                },
+                _ => (),
+            }
+        }
+
+        return s;
     }
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
@@ -270,24 +290,6 @@ impl SyntaxNode {
         for each_elem in &self.sub_elems {
             each_elem.print(nest + 1, writer, ignore_hidden_elems);
         }
-    }
-
-    pub fn to_string(&self) -> String {
-        let mut s = String::new();
-
-        for each_elem in &self.sub_elems {
-            match each_elem {
-                SyntaxNodeElement::Leaf(leaf) => {
-                    match leaf.ast_reflection_style {
-                        ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
-                        _ => (),
-                    }
-                },
-                _ => (),
-            }
-        }
-
-        return s;
     }
 }
 
