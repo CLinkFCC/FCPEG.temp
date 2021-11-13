@@ -358,6 +358,7 @@ impl Block {
 
 #[derive(Clone)]
 pub enum BlockCommand {
+    Comment(usize, String),
     Define(usize, Rule),
     Start(usize, String, String, String),
     Use(usize, String, String, String),
@@ -366,6 +367,7 @@ pub enum BlockCommand {
 impl Display for BlockCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            BlockCommand::Comment(line, value) => return write!(f, "{}| %{},", line, value),
             BlockCommand::Define(line, rule) => return write!(f, "{}| rule {}", line, rule),
             BlockCommand::Start(line, file_alias_name, block_name, rule_name) => return write!(f, "{}| start rule '{}.{}.{}'", line, file_alias_name, block_name, rule_name),
             BlockCommand::Use(line, file_alias_name, block_name, block_alias_name) => return write!(f, "{}| use block '{}.{}' as '{}'", line, file_alias_name, block_name, block_alias_name),

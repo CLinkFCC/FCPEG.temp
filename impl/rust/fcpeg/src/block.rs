@@ -264,6 +264,7 @@ impl BlockParser {
     fn to_block_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
         return match &cmd_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(node_name) => match node_name.as_str() {
+                "CommentCmd" => BlockParser::to_comment_cmd(cmd_node),
                 "DefineCmd" => BlockParser::to_define_cmd(cmd_node),
                 "StartCmd" => BlockParser::to_start_cmd(cmd_node),
                 "UseCmd" => BlockParser::to_use_cmd(cmd_node),
@@ -271,6 +272,10 @@ impl BlockParser {
             },
             _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
         };
+    }
+
+    fn to_comment_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
+        return Ok(BlockCommand::Comment(0, cmd_node.join_child_leaf_values()));
     }
 
     fn to_define_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
@@ -646,14 +651,14 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Cmd <- Comment : DefineCmd : StartCmd : UseCmd,
+        // code: Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
         let cmd_rule = rule!{
             "Cmd",
             choice!{
                 vec![":"],
                 choice!{
                     vec![],
-                    expr!(ID, "Comment"),
+                    expr!(ID, "CommentCmd"),
                 },
                 choice!{
                     vec![],
@@ -670,14 +675,14 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Comment <- "%"# (!"," !Symbol.LineEnd .)* ","#,
+        // code: CommentCmd <- "%"# (!"," !Symbol.LineEnd .)*## ","#,
         let comment_rule = rule!{
-            "Comment",
+            "CommentCmd",
             choice!{
                 vec![],
                 expr!(String, "%", "#"),
                 choice!{
-                    vec!["*"],
+                    vec!["*", "##"],
                     choice!{
                         vec![],
                         expr!(String, ",", "!"),
