@@ -9,7 +9,6 @@ pub type SyntaxParseResult<T> = Result<T, SyntaxParseError>;
 pub enum SyntaxParseError {
     Unknown(),
     BlockParseErr(BlockParseError),
-    EmptyStringInExpression(),
     InternalErr(String),
     InvalidSyntaxTreeStruct(String),
     NoSucceededRule(String, usize, Vec<(usize, String)>),
@@ -22,7 +21,6 @@ impl SyntaxParseError {
     pub fn get_log_data(&self) -> ConsoleLogData {
         match self {
             SyntaxParseError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown error", vec![], vec![]),
-            SyntaxParseError::EmptyStringInExpression() => ConsoleLogData::new(ConsoleLogKind::Error, "empty string in expression", vec![], vec![]),
             SyntaxParseError::BlockParseErr(err) => err.get_log_data(),
             SyntaxParseError::InternalErr(err_msg) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_msg), vec![], vec![]),
             SyntaxParseError::InvalidSyntaxTreeStruct(cause) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid syntax tree structure ({})", cause), vec![], vec![]),
@@ -535,10 +533,6 @@ impl SyntaxParser {
                 };
             },
             RuleExpressionKind::String => {
-                if expr.value.chars().count() == 0 {
-                    return Err(SyntaxParseError::EmptyStringInExpression());
-                }
-
                 if self.src_content.chars().count() < self.src_i + expr.value.chars().count() {
                     return Ok(None);
                 }

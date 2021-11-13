@@ -347,17 +347,27 @@ impl BlockParser {
                 Some(v) => {
                     match v.get_child_at(0)? {
                         SyntaxNodeElement::Node(node) => {
-                            let min_num = match node.get_node_child_at(0)?.get_leaf_child_at(0)?.value.parse::<usize>() {
-                                Ok(v) => v,
-                                Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid minimum loop value"))),
+                            let min_str = node.get_leaf_child_at(0)?.value.clone();
+                            let min_num = if min_str != "" {
+                                match min_str.parse::<usize>() {
+                                    Ok(v) => v,
+                                    Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid minimum loop value"))),
+                                }
+                            } else {
+                                0usize
                             };
 
-                            let max_num = match node.get_node_child_at(1)?.get_leaf_child_at(0)?.value.parse::<usize>() {
-                                Ok(v) => v,
-                                Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid maximum loop value"))),
+                            let max_str = node.get_leaf_child_at(1)?.value.clone();
+                            let max_num = if max_str != "" {
+                                match max_str.parse::<usize>() {
+                                    Ok(v) => Infinitable::Normal(v),
+                                    Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid maximum loop value"))),
+                                }
+                            } else {
+                                Infinitable::Infinite
                             };
 
-                            RuleElementLoopCount::new(min_num, Infinitable::Normal(max_num))
+                            RuleElementLoopCount::new(min_num, max_num)
                         },
                         SyntaxNodeElement::Leaf(leaf) => {
                             match leaf.value.as_str() {
@@ -905,15 +915,35 @@ impl FCPEGBlock {
             },
         };
 
-        // code: LoopRange <- "{"# Num? ","# Num? "}"#,
+        // code: LoopRange <- "{"# (Num : "")## ","# (Num : "")## "}"#,
         let loop_range_rule = rule!{
             "LoopRange",
             choice!{
                 vec![],
                 expr!(String, "{", "#"),
-                expr!(ID, "Num", "?"),
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec!["##"],
+                        expr!(ID, "Num", "##"),
+                    },
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ""),
+                    },
+                },
                 expr!(String, ",", "#"),
-                expr!(ID, "Num", "?"),
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec!["##"],
+                        expr!(ID, "Num", "##"),
+                    },
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ""),
+                    },
+                },
                 expr!(String, "}", "#"),
             },
         };
@@ -1012,14 +1042,14 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))+## "\""#,
+        // code: Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))*## "\""#,
         let str_rule = rule!{
             "Str",
             choice!{
                 vec![],
                 expr!(String, "\"", "#"),
                 choice!{
-                    vec!["+", "##"],
+                    vec!["*", "##"],
                     choice!{
                         vec![":"],
                         choice!{

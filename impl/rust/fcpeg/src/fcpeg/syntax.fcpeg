@@ -46,7 +46,7 @@
 
     Lookahead <- "!" : "&",
     Loop <- "?" : "*" : "+" : LoopRange,
-    LoopRange <- "{"# Num? ","# Num? "}"#,
+    LoopRange <- "{"# (Num : "")## ","# (Num : "")## "}"#,
     RandomOrder <- "^"# RandomOrderRange?,
     RandomOrderRange <- "["# Num? ","# Num? "]"#,
     ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,
