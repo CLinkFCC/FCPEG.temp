@@ -120,6 +120,7 @@ pub enum BlockParseError {
     ExpectedToken(usize, String),
     InternalErr(String),
     InvalidCharClassFormat(usize, String),
+    InvalidLoopCount(usize, String),
     InvalidToken(usize, String),
     MainBlockNotFound(),
     NoChoiceOrExpressionContent(usize),
@@ -147,6 +148,7 @@ impl BlockParseError {
             BlockParseError::ExpectedToken(line, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("expected token {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
             BlockParseError::InternalErr(err_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_name), vec![], vec![]),
             BlockParseError::InvalidCharClassFormat(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid character class format '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::InvalidLoopCount(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid loop count: {}", value), vec![format!("line:\t{}", line + 1)], vec![]),
             BlockParseError::InvalidToken(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid token '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
             BlockParseError::MainBlockNotFound() => ConsoleLogData::new(ConsoleLogKind::Error, "main block not found", vec![], vec![]),
             BlockParseError::NoChoiceOrExpressionContent(line) => ConsoleLogData::new(ConsoleLogKind::Error, "no choice or expression content", vec![format!("line:\t{}", line + 1)], vec![]),
@@ -350,8 +352,14 @@ impl BlockParser {
                             let min_str = node.get_leaf_child_at(0)?.value.clone();
                             let min_num = if min_str != "" {
                                 match min_str.parse::<usize>() {
-                                    Ok(v) => v,
-                                    Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid minimum loop value"))),
+                                    Ok(v) => {
+                                        if v == 0 {
+                                            return Err(SyntaxParseError::BlockParseErr(BlockParseError::InvalidLoopCount(0, "zero specified at minimum count".to_string())));
+                                        }
+
+                                        v
+                                    },
+                                    Err(_) => return Err(SyntaxParseError::BlockParseErr(BlockParseError::InvalidLoopCount(0, "invalid minimum loop value".to_string()))),
                                 }
                             } else {
                                 0usize
@@ -361,7 +369,7 @@ impl BlockParser {
                             let max_num = if max_str != "" {
                                 match max_str.parse::<usize>() {
                                     Ok(v) => Infinitable::Normal(v),
-                                    Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid maximum loop value"))),
+                                    Err(_) => return Err(SyntaxParseError::BlockParseErr(BlockParseError::InvalidLoopCount(0, "invalid maximum loop value".to_string()))),
                                 }
                             } else {
                                 Infinitable::Infinite
