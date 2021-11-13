@@ -3,59 +3,83 @@ use std::option::*;
 use std::thread::*;
 use std::time::*;
 
+use argh::FromArgs;
+
 use fcpeg::*;
 
-use rustnutlib::cmd::*;
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
 
 fn main() {
-    run_command();
+    let cmd: MainCommand = argh::from_env();
+
+    match cmd.subcmd {
+        Subcommand::Parse(subcmd) => proc_parse_subcmd(&subcmd),
+    }
 }
 
-fn run_command() {
-    let mut cmd_proc_map = CommandMap::new();
-    cmd_proc_map.insert("parse".to_string(), cmd_parse);
-    rustnutlib::cmd::run_command("parse", cmd_proc_map);
+/// cmd command
+#[derive(FromArgs, PartialEq, Debug)]
+struct MainCommand {
+    #[argh(subcommand)]
+    subcmd: Subcommand,
 }
 
-fn cmd_parse(_cmd_name: String, cmd_args: HashMap::<String, Vec<String>>, cons: &mut Console) {
-    if cmd_args.get("-h").is_some() {
-        show_parse_cmd_help(cons);
+/// subcommand of cmd command
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand)]
+enum Subcommand {
+    Parse(ParseSubcommand),
+}
+
+/// parse subcommand
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "parse")]
+struct ParseSubcommand {
+    /// file path of fcpeg source
+    #[argh(option, short = 'f')]
+    fcpeg: String,
+
+    /// file path of input source
+    #[argh(option, short = 'i')]
+    input: String,
+
+    /// whether to show help or not
+    #[argh(option, default = "false")]
+    man: bool,
+
+    /// whether to output syntax tree or not
+    #[argh(option, default = "false")]
+    mon: bool,
+
+    /// whether to output syntax tree or not
+    #[argh(option, short = 'o', default = "false")]
+    output: bool,
+
+    /// whether to output syntax tree or not
+    #[argh(option, short = 't', default = "false")]
+    time: bool,
+}
+
+fn proc_parse_subcmd(subcmd: &ParseSubcommand) {
+    let mut cons = Console::new();
+
+    // note: マニュアルメッセージ
+    if subcmd.man {
+        show_parse_cmd_help(&mut cons);
         return;
     }
 
-    let fcpeg_file_path = match cmd_args.get("-f") {
-        Some(v) => {
-            if v.len() != 1 {
-                cons.log(ConsoleLogData::new(ConsoleLogKind::Error, "too few/many arguments with '-f'", vec![], vec![]), false);
-                return;
-            }
-
-            v.get(0).unwrap().clone()
-        },
-        None => {
-            cons.log(ConsoleLogData::new(ConsoleLogKind::Error, "command argument '-f' not found", vec![], vec![]), false);
-            return;
-        },
-    };
-
-    let fcpeg_src_paths = match cmd_args.get("-i") {
-        Some(v) => v.clone(),
-        None => vec![],
-    };
-
-    // output オプション
-    let output_tree = cmd_args.contains_key("-o");
-    // monitor オプション
-    let is_monitored = cmd_args.contains_key("-mon");
-    // time オプション
-    let count_duration = cmd_args.contains_key("-t");
+    let fcpeg_file_path = &subcmd.fcpeg;
+    let input_src_paths = subcmd.input.split(";").collect::<Vec<&str>>().iter().map(|s| s.to_string()).collect::<Vec<String>>();
+    let output_tree = subcmd.output;
+    let is_monitored = subcmd.mon;
+    let count_duration = subcmd.time;
 
     if is_monitored {
-        parse_with_monitoring(&fcpeg_file_path, &fcpeg_src_paths, cons, 1, None, output_tree, count_duration);
+        parse_with_monitoring(fcpeg_file_path, &input_src_paths, &mut cons, 1, None, output_tree, count_duration);
     } else {
-        parse(&fcpeg_file_path, &fcpeg_src_paths, cons, output_tree, count_duration);
+        parse(fcpeg_file_path, &input_src_paths, &mut cons, output_tree, count_duration);
     }
 }
 
