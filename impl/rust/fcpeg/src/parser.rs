@@ -78,7 +78,7 @@ impl SyntaxParser {
 
         let start_rule_id = self.rule_map.start_rule_id.clone();
 
-        if self.src_content.len() == 0 {
+        if self.src_content.chars().count() == 0 {
             return Ok(SyntaxTree::from_node_args(vec![], ASTReflectionStyle::from_config(false, String::new())));
         }
 
@@ -92,7 +92,7 @@ impl SyntaxParser {
         // ルートは常に Reflectable
         root_node.set_ast_reflection(ASTReflectionStyle::Reflection(start_rule_id.clone()));
 
-        if self.src_i < self.src_content.len() {
+        if self.src_i < self.src_content.chars().count() {
             return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i, self.rule_stack.clone()));
         }
 
@@ -188,7 +188,7 @@ impl SyntaxParser {
         let mut children = Vec::<SyntaxNodeElement>::new();
         let mut loop_count = 0i32;
 
-        while self.src_i < self.src_content.len() {
+        while self.src_i < self.src_content.chars().count() {
             if loop_count > self.max_loop_count as i32 {
                 return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
             }
@@ -423,7 +423,7 @@ impl SyntaxParser {
         let mut children = Vec::<SyntaxNodeElement>::new();
         let mut loop_count = 0usize;
 
-        while self.src_i < self.src_content.len() {
+        while self.src_i < self.src_content.chars().count() {
             if loop_count > self.max_loop_count {
                 return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
             }
@@ -461,13 +461,13 @@ impl SyntaxParser {
     }
 
     fn is_each_expr_matched(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        if self.src_i >= self.src_content.len() {
+        if self.src_i >= self.src_content.chars().count() {
             return Ok(None);
         }
 
         match expr.kind {
             RuleExpressionKind::CharClass => {
-                if self.src_content.len() < self.src_i + 1 {
+                if self.src_content.chars().count() < self.src_i + 1 {
                     return Ok(None);
                 }
 
@@ -476,7 +476,7 @@ impl SyntaxParser {
                     None => return Err(SyntaxParseError::InternalErr("regex pattern of character class not found".to_string())),
                 };
 
-                let tar_char = self.src_content[self.src_i..self.src_i + 1].to_string();
+                let tar_char = self.substring_src_content(self.src_i, 1);
 
                 if pattern.is_match(&tar_char) {
                     let new_leaf = SyntaxNodeElement::from_leaf_args(tar_char, expr.ast_reflection_style.clone());
@@ -535,32 +535,36 @@ impl SyntaxParser {
                 };
             },
             RuleExpressionKind::String => {
-                if expr.value.len() == 0 {
+                if expr.value.chars().count() == 0 {
                     return Err(SyntaxParseError::EmptyStringInExpression());
                 }
 
-                if self.src_content.len() < self.src_i + expr.value.len() {
+                if self.src_content.chars().count() < self.src_i + expr.value.chars().count() {
                     return Ok(None);
                 }
 
-                if self.src_content[self.src_i..self.src_i + expr.value.len()] == expr.value {
+                if self.substring_src_content(self.src_i, expr.value.chars().count()) == expr.value {
                     let new_leaf = SyntaxNodeElement::from_leaf_args(expr.value.clone(), expr.ast_reflection_style.clone());
-                    self.src_i += expr.value.len();
+                    self.src_i += expr.value.chars().count();
                     return Ok(Some(vec![new_leaf]));
                 } else {
                     return Ok(None);
                 }
             },
             RuleExpressionKind::Wildcard => {
-                if self.src_content.len() < self.src_i + 1 {
+                if self.src_content.chars().count() < self.src_i + 1 {
                     return Ok(None);
                 }
 
-                let expr_value = self.src_content[self.src_i..self.src_i + 1].to_string();
+                let expr_value = self.substring_src_content(self.src_i, 1);
                 let new_leaf = SyntaxNodeElement::from_leaf_args(expr_value, expr.ast_reflection_style.clone());
                 self.src_i += 1;
                 return Ok(Some(vec![new_leaf]));
             },
         }
+    }
+
+    fn substring_src_content(&self, start_i: usize, len: usize) -> String {
+        return self.src_content.chars().skip(start_i).take(len).collect::<String>();
     }
 }
