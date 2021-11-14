@@ -2,6 +2,7 @@ use crate::block::*;
 use crate::data::*;
 use crate::rule::*;
 
+use rustnutlib::*;
 use rustnutlib::console::*;
 
 pub type SyntaxParseResult<T> = Result<T, SyntaxParseError>;
@@ -17,18 +18,18 @@ pub enum SyntaxParseError {
     UnknownRuleID(String),
 }
 
-impl SyntaxParseError {
-    pub fn get_log_data(&self) -> ConsoleLogData {
-        match self {
-            SyntaxParseError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown error", vec![], vec![]),
-            SyntaxParseError::BlockParseErr(err) => err.get_log_data(),
-            SyntaxParseError::InternalErr(err_msg) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_msg), vec![], vec![]),
-            SyntaxParseError::InvalidSyntaxTreeStruct(cause) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid syntax tree structure ({})", cause), vec![], vec![]),
-            SyntaxParseError::NoSucceededRule(rule_id, src_i, rule_stack) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), vec![format!("rule stack: {:?}", rule_stack)], vec![]),
-            SyntaxParseError::TooDeepRecursion(max_recur_count) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too deep recursion over {}", max_recur_count), vec![], vec![]),
-            SyntaxParseError::TooLongRepeat(max_loop_count) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too long repeat over {}", max_loop_count), vec![], vec![]),
-            SyntaxParseError::UnknownRuleID(rule_id) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown rule id '{}'", rule_id), vec![], vec![]),
-        }
+impl ConsoleLogger for SyntaxParseError {
+    fn get_log(&self) -> ConsoleLog {
+        return match self {
+            SyntaxParseError::Unknown() => log!(Error, "unknown error"),
+            SyntaxParseError::BlockParseErr(err) => err.get_log(),
+            SyntaxParseError::InternalErr(err_msg) => log!(Error, &format!("internal error: {}", err_msg)),
+            SyntaxParseError::InvalidSyntaxTreeStruct(cause) => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
+            SyntaxParseError::NoSucceededRule(rule_id, src_i, rule_stack) => log!(Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), format!("rule stack: {:?}", rule_stack)),
+            SyntaxParseError::TooDeepRecursion(max_recur_count) => log!(Error, &format!("too deep recursion over {}", max_recur_count)),
+            SyntaxParseError::TooLongRepeat(max_loop_count) => log!(Error, &format!("too long repeat over {}", max_loop_count)),
+            SyntaxParseError::UnknownRuleID(rule_id) => log!(Error, &format!("unknown rule id '{}'", rule_id)),
+        };
     }
 }
 

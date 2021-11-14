@@ -23,12 +23,12 @@ pub enum FCPEGError {
     SyntaxParseErr(SyntaxParseError),
 }
 
-impl FCPEGError {
-    pub fn get_console_data(&self) -> ConsoleLogData {
+impl ConsoleLogger for FCPEGError {
+    fn get_log(&self) -> ConsoleLog {
         return match self {
-            FCPEGError::BlockParseErr(e) => e.get_log_data(),
-            FCPEGError::FCPEGFileErr(e) => e.get_log_data(),
-            FCPEGError::SyntaxParseErr(e) => e.get_log_data(),
+            FCPEGError::BlockParseErr(e) => e.get_log(),
+            FCPEGError::FCPEGFileErr(e) => e.get_log(),
+            FCPEGError::SyntaxParseErr(e) => e.get_log(),
         };
     }
 }

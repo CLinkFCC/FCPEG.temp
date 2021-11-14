@@ -2,6 +2,7 @@ use std::collections::*;
 
 use crate::config::*;
 
+use rustnutlib::*;
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
 
@@ -13,13 +14,13 @@ pub enum FCPEGFileError {
     ConfigFileErr(ConfigFileError),
 }
 
-impl FCPEGFileError {
-    pub fn get_log_data(&self) -> ConsoleLogData {
-        match self {
-            FCPEGFileError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
+impl ConsoleLogger for FCPEGFileError {
+    fn get_log(&self) -> ConsoleLog {
+        return match self {
+            FCPEGFileError::Unknown() => log!(Error, "unknown"),
             FCPEGFileError::FileErr(err) => err.get_log_data(),
-            FCPEGFileError::ConfigFileErr(err) => err.get_log_data(),
-        }
+            FCPEGFileError::ConfigFileErr(err) => err.get_log(),
+        };
     }
 }
 

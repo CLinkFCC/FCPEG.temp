@@ -3,6 +3,7 @@ use std::fmt::*;
 
 use once_cell::sync::*;
 
+use rustnutlib::*;
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
 
@@ -26,18 +27,18 @@ pub enum ConfigFileError {
     UnknownRegexMode(String),
 }
 
-impl ConfigFileError {
-    pub fn get_log_data(&self) -> ConsoleLogData {
-        match self {
-            ConfigFileError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
-            ConfigFileError::DuplicatedPropName(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, "duplicated property name", vec![], vec![format!("property name:\t{}", prop_name)]),
+impl ConsoleLogger for ConfigFileError {
+    fn get_log(&self) -> ConsoleLog {
+        return match self {
+            ConfigFileError::Unknown() => log!(Error, "unknown"),
+            ConfigFileError::DuplicatedPropName(prop_name) => log!(Error, "duplicated property name", format!("property name:\t{}", prop_name)),
             ConfigFileError::FileManError(err) => err.get_log_data(),
-            ConfigFileError::InvalidPropValue(prop_name, prop_value) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value", vec![], vec![format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)]),
-            ConfigFileError::InvalidPropValueLength(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name)]),
-            ConfigFileError::InvalidSyntax(line, msg) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid syntax", vec![format!("{}", msg), format!("line:\t{}", line)], vec![]),
-            ConfigFileError::UnknownPropName(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown property name '{}'", prop_name), vec![], vec![]),
-            ConfigFileError::UnknownRegexMode(input) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown regex mode '{}'", input), vec![], vec![]),
-        }
+            ConfigFileError::InvalidPropValue(prop_name, prop_value) => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
+            ConfigFileError::InvalidPropValueLength(prop_name) => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
+            ConfigFileError::InvalidSyntax(line, msg) => log!(Error, "invalid syntax", format!("{}", msg), format!("line:\t{}", line)),
+            ConfigFileError::UnknownPropName(prop_name) => log!(Error, &format!("unknown property name '{}'", prop_name)),
+            ConfigFileError::UnknownRegexMode(input) => log!(Error, &format!("unknown regex mode '{}'", input)),
+        };
     }
 }
 

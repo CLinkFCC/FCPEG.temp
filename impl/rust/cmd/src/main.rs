@@ -7,6 +7,7 @@ use argh::FromArgs;
 
 use fcpeg::*;
 
+use rustnutlib::*;
 use rustnutlib::console::*;
 use rustnutlib::fileman::*;
 
@@ -48,21 +49,27 @@ struct ParseSubcommand {
     #[argh(option, default = "false")]
     man: bool,
 
-    /// whether to output syntax tree or not
+    /// whether to enable monitoring mode
     #[argh(option, default = "false")]
     mon: bool,
 
-    /// whether to output syntax tree or not
+    /// whether to output syntax tree
     #[argh(option, short = 'o', default = "false")]
     output: bool,
 
-    /// whether to output syntax tree or not
-    #[argh(option, short = 't', default = "false")]
+    /// whether to output processing time
+    #[argh(option, default = "false")]
     time: bool,
 }
 
 fn proc_parse_subcmd(subcmd: &ParseSubcommand) {
-    let mut cons = Console::new();
+    let mut cons = match Console::load(None) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("[err] failed to launch parser: failure on loading console data");
+            return;
+        },
+    };
 
     // note: マニュアルメッセージ
     if subcmd.man {
@@ -84,13 +91,15 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand) {
 }
 
 fn show_parse_cmd_help(cons: &mut Console) {
-    cons.log(ConsoleLogData::new(ConsoleLogKind::Notice, "command help", vec![
-        "parse:\tparse specified files".to_string(),
-        "\t-f:\tspecify .fcpeg file".to_string(),
-        "\t-h:\tshow help".to_string(),
-        "\t-i:\tspecify input files".to_string(),
-        "\t-mon:\tmonitor source files".to_string()
-    ], vec![]), false);
+    let log = log!(Notice, "command help",
+        "parse:\tparse specified files",
+        "\t-f:\tspecify .fcpeg file",
+        "\t-h:\tshow help",
+        "\t-i:\tspecify input files",
+        "\t-mon:\tmonitor source files"
+    );
+
+    cons.log(log, false);
 }
 
 fn show_syntax_trees(input_file_paths: &Vec<String>, trees: &Vec<data::SyntaxTree>) {
@@ -114,7 +123,7 @@ fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut Con
 
     let trees = match FCPEG::parse_from_paths(fcpeg_file_path, fcpeg_src_paths) {
         Err(e) => {
-            cons.log(e.get_console_data(), false);
+            cons.log(e.get_log(), false);
             println!("--- End ---");
             println!();
             return;
@@ -138,10 +147,14 @@ fn parse(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut Con
 }
 
 fn parse_with_monitoring(fcpeg_file_path: &String, fcpeg_src_paths: &Vec<String>, cons: &mut Console, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool) {
-    cons.log(ConsoleLogData::new(ConsoleLogKind::Notice, "command help", vec!["You can quit parsing with '^C'.".to_string()], vec![]), false);
+    let log = log!(Notice, "command help", "You can quit parsing with '^C'.");
+    cons.log(log, false);
 
     match quit_limit_sec {
-        Some(v) => cons.log(ConsoleLogData::new(ConsoleLogKind::Notice, "command help", vec![format!("This program will automatically quit {} sec(s) later.", interval_sec * v)], vec![]), false),
+        Some(v) => {
+            let log = log!(Notice, "command help", format!("This program will automatically quit {} sec(s) later.", interval_sec * v));
+            cons.log(log, false);
+        },
         None => (),
     }
 
@@ -184,20 +197,20 @@ impl FileChangeDetector {
         };
     }
 
-    fn detect_file_change(&mut self, file_path: &str) -> bool {
-        match FileMan::read_all(file_path) {
+    fn detect_file_change(&mut self, file_path: String) -> bool {
+        match FileMan::read_all(&file_path) {
             Err(_e) => return false,
             Ok(v) => {
-                let is_same_cont = match self.log_map.get(file_path) {
+                let is_same_cont = match self.log_map.get(&file_path) {
                     Some(latest_cont) => *latest_cont == v,
                     None => {
-                        self.log_map.insert(file_path.to_string(), v);
+                        self.log_map.insert(file_path, v);
                         return false;
                     },
                 };
 
                 if !is_same_cont {
-                    self.log_map.insert(file_path.to_string(), v);
+                    self.log_map.insert(file_path, v);
                 }
 
                 return !is_same_cont;
@@ -207,7 +220,7 @@ impl FileChangeDetector {
 
     pub fn detect_multiple_file_changes(&mut self) -> bool {
         for each_path in self.target_file_paths.clone() {
-            if self.detect_file_change(&each_path.clone()) {
+            if self.detect_file_change(each_path.clone()) {
                 return true;
             }
         }
