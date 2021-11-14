@@ -6,12 +6,13 @@
     + use Block,
     + use Symbol,
 
-    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*#,
+    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*# Symbol.EOF#,
 }
 
 [Symbol]{
     Space <- " ",
     LineEnd <- Space* "\n" Space*,
+    EOF <- "\z",
 }
 
 [Misc]{
@@ -53,7 +54,7 @@
 
     Num <- [0-9]+,
     ID <- Misc.ChainID,
-    EscSeq <- "\\"# ("\\" : "\"" : "0" : "n" : "t")##,
+    EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
     Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))+## "\""#,
     CharClass <- "["# (!"[" !"]" !Symbol.LineEnd (("\\[" : "\\]" : "\\\\" : .))##)+## "]"#,
     Wildcard <- "."#,

@@ -70,6 +70,9 @@ impl SyntaxParser {
             }
         }
 
+        // EOF 用のヌル文字
+        tmp_src_content += "\0";
+
         // フィールドを初期化
         self.src_i = 0;
         self.src_content = tmp_src_content;

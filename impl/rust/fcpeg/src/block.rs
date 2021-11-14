@@ -515,9 +515,9 @@ impl BlockParser {
                             s += match node.get_leaf_child_at(0)?.value.as_str() {
                                 "\\" => "\\",
                                 "\"" => "\"",
-                                "0" => "\0",
                                 "n" => "\n",
                                 "t" => "\t",
+                                "z" => "\0",
                                 _ => return Err(SyntaxParseError::InternalErr("unknown escape sequence character".to_string())),
                             };
                         },
@@ -570,7 +570,7 @@ impl FCPEGBlock {
         let block_use = use_block!("Block");
         let symbol_use = use_block!("Symbol");
 
-        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*#,
+        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*# Symbol.EOF#,
         let fcpeg_rule = rule!{
             "FCPEG",
             choice!{
@@ -587,6 +587,7 @@ impl FCPEGBlock {
                 },
                 expr!(ID, "Symbol.LineEnd", "*", "#"),
                 expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(String, "\0", "#"),
             },
         };
 
@@ -614,7 +615,16 @@ impl FCPEGBlock {
             },
         };
 
-        return block!("Symbol", vec![space_rule, line_end_rule]);
+        // code: EOF <- "\z",
+        let eof_rule = rule!{
+            "EOF",
+            choice!{
+                vec![],
+                expr!(String, "\0", "#"),
+            },
+        };
+
+        return block!("Symbol", vec![space_rule, line_end_rule, eof_rule]);
     }
 
     fn get_misc_block() -> Block {
@@ -1024,7 +1034,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: EscSeq <- "\\"# ("\\" : "\"" : "0" : "n" : "t")##,
+        // code: EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
         let esc_seq_rule = rule!{
             "EscSeq",
             choice!{
@@ -1044,15 +1054,15 @@ impl FCPEGBlock {
                         },
                         choice!{
                             vec![],
-                            expr!(String, "0"),
-                        },
-                        choice!{
-                            vec![],
                             expr!(String, "n"),
                         },
                         choice!{
                             vec![],
                             expr!(String, "t"),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, "z"),
                         },
                     },
                 },
