@@ -34,7 +34,6 @@ impl RuleMap {
 
     // ここでは規則 ID の存在チェックは行われない
     pub fn get_from_root_fcpeg_file_man(file_alias_name: &String, block_map: &mut BlockMap) -> BlockParseResult<RuleMap> {
-        println!("{}", block_map.len());
         let main_block = match block_map.get("Main") {
             Some(v) => v,
             None => return Err(BlockParseError::MainBlockNotFound()),

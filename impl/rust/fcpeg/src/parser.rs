@@ -16,7 +16,8 @@ pub enum SyntaxParseError {
     BlockParseErr(BlockParseError),
     InternalErr(String),
     InvalidCharClassFormat(String),
-    InvalidSyntaxTreeStruct(String),
+    InvalidMacroArgumentLength(Vec<String>),
+    InvalidSyntaxTreeStructure(String),
     NoSucceededRule(String, usize, Vec<(usize, String)>),
     TooDeepRecursion(usize),
     TooLongRepeat(usize),
@@ -31,7 +32,8 @@ impl ConsoleLogger for SyntaxParseError {
             SyntaxParseError::BlockParseErr(err) => err.get_log(),
             SyntaxParseError::InternalErr(err_msg) => log!(Error, &format!("internal error: {}", err_msg)),
             SyntaxParseError::InvalidCharClassFormat(value) => log!(Error, &format!("invalid character class format '{}'", value)),
-            SyntaxParseError::InvalidSyntaxTreeStruct(cause) => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
+            SyntaxParseError::InvalidMacroArgumentLength(arg_names) => log!(Error, &format!("invalid macro argument length ({:?})", arg_names)),
+            SyntaxParseError::InvalidSyntaxTreeStructure(cause) => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
             SyntaxParseError::NoSucceededRule(rule_id, src_i, rule_stack) => log!(Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), format!("rule stack: {:?}", rule_stack)),
             SyntaxParseError::TooDeepRecursion(max_recur_count) => log!(Error, &format!("too deep recursion over {}", max_recur_count)),
             SyntaxParseError::TooLongRepeat(max_loop_count) => log!(Error, &format!("too long repeat over {}", max_loop_count)),
@@ -526,13 +528,17 @@ impl SyntaxParser {
                 let rule_id = &expr.value;
 
                 let mut macro_args = HashMap::<String, Box::<RuleGroup>>::new();
-                let macro_def_args = match self.rule_map.get_rule(rule_id) {
+                let new_macro_def_args = match self.rule_map.get_rule(rule_id) {
                     Some(rule) => &rule.macro_args,
                     None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
                 };
 
+                if arg_groups.len() != new_macro_def_args.len() {
+                    return Err(SyntaxParseError::InvalidMacroArgumentLength(new_macro_def_args.clone()));
+                }
+
                 for i in 0..arg_groups.len() {
-                    let new_macro_id = match macro_def_args.get(i) {
+                    let new_macro_id = match new_macro_def_args.get(i) {
                         Some(v) => v,
                         None => return Err(SyntaxParseError::InternalErr("invalid operation".to_string())),
                     };

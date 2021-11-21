@@ -116,6 +116,7 @@ pub enum BlockParseError {
     BlockAliasNotFound(usize, String),
     DuplicatedBlockAliasName(usize, String),
     DuplicatedBlockName(usize, String),
+    DuplicatedMacroArgumentName(String),
     DuplicatedStartCmd(),
     ExpectedBlockDef(usize),
     ExpectedToken(usize, String),
@@ -143,6 +144,7 @@ impl ConsoleLogger for BlockParseError {
             BlockParseError::BlockAliasNotFound(line, block_alias_name) => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("line:\t{}", line + 1)),
             BlockParseError::DuplicatedBlockAliasName(line, block_alias_name) => log!(Error, &format!("duplicated block alias name '{}'", block_alias_name), format!("line:\t{}", line + 1)),
             BlockParseError::DuplicatedBlockName(line, block_name) => log!(Error, &format!("duplicated block name '{}'", block_name), format!("line:\t{}", line + 1)),
+            BlockParseError::DuplicatedMacroArgumentName(arg_name) => log!(Error, &format!("duplicated argument name '{}'", arg_name)),
             BlockParseError::DuplicatedStartCmd() => log!(Error, "duplicated start command"),
             BlockParseError::ExpectedBlockDef(line) => log!(Error, "expected block definition", format!("line:\t{}", line + 1)),
             BlockParseError::ExpectedToken(line, expected_str) => log!(Error, &format!("expected token {}", expected_str), format!("line:\t{}", line + 1)),
@@ -277,9 +279,9 @@ impl BlockParser {
                 "DefineCmd" => BlockParser::to_define_cmd(cmd_node),
                 "StartCmd" => BlockParser::to_start_cmd(cmd_node),
                 "UseCmd" => BlockParser::to_use_cmd(cmd_node),
-                _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid node name '{}'", node_name))),
+                _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("invalid node name '{}'", node_name))),
             },
-            _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+            _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure("invalid operation".to_string())),
         };
     }
 
@@ -294,8 +296,6 @@ impl BlockParser {
             Some(macro_node) => BlockParser::to_define_cmd_macro(macro_node)?,
             None => vec![],
         };
-
-        println!("def cmd {} {:?}", rule_name, macro_def_args);
 
         let new_choice = match cmd_node.find_first_child_node(vec!["Rule.PureChoice"]) {
             Some(choice_node) => BlockParser::to_rule_choice_elem(choice_node, &macro_def_args)?,
@@ -313,7 +313,13 @@ impl BlockParser {
             match each_elem {
                 SyntaxNodeElement::Node(each_node) => {
                     if each_node.ast_reflection_style == ASTReflectionStyle::Reflection("Misc.SingleID".to_string()) {
-                        args.push(each_node.join_child_leaf_values());
+                        let new_arg = each_node.join_child_leaf_values();
+
+                        if args.contains(&new_arg) {
+                            return Err(SyntaxParseError::BlockParseErr(BlockParseError::DuplicatedMacroArgumentName(new_arg.clone())));
+                        }
+
+                        args.push(new_arg);
                     }
                 },
                 _ => (),
@@ -367,7 +373,7 @@ impl BlockParser {
                     match v.get_leaf_child_at(0)?.value.as_str() {
                         "&" => RuleElementLookaheadKind::Positive,
                         "!" => RuleElementLookaheadKind::Negative,
-                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("unknown lookahead kind"))),
+                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("unknown lookahead kind"))),
                     }
                 },
                 None => RuleElementLookaheadKind::None,
@@ -409,7 +415,7 @@ impl BlockParser {
                         SyntaxNodeElement::Leaf(leaf) => {
                             match leaf.value.as_str() {
                                 "?" | "*" | "+" => RuleElementLoopCount::from_symbol(&leaf.value),
-                                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("unknown lookahead kind"))),
+                                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("unknown lookahead kind"))),
                             }
                         }
                     }
@@ -438,7 +444,7 @@ impl BlockParser {
             // Choice または Expr ノード
             let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec!["Choice", "Expr"]) {
                 Some(v) => v,
-                None => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+                None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("invalid operation".to_string())),
             };
 
             match &choice_or_expr_node.ast_reflection_style {
@@ -458,12 +464,12 @@ impl BlockParser {
                             new_expr.ast_reflection_style = ast_reflection_style;
                             RuleElement::Expression(Box::new(new_expr))
                         },
-                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid node name '{}'", name))),
+                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("invalid node name '{}'", name))),
                     };
 
                     children.push(new_elem);
                 },
-                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("invalid operation".to_string())),
             };
         }
 

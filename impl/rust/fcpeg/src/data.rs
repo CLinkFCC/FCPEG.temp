@@ -73,14 +73,14 @@ impl SyntaxNodeElement {
     pub fn get_node(&self) -> SyntaxParseResult<&SyntaxNode> {
         return match self {
             SyntaxNodeElement::Node(node) => Ok(node),
-            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("element not node list".to_string())),
+            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("element not node list".to_string())),
         };
     }
 
     pub fn get_leaf(&self) -> SyntaxParseResult<&SyntaxLeaf> {
         return match self {
             SyntaxNodeElement::Leaf(leaf) => Ok(leaf),
-            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("element not leaf".to_string())),
+            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("element not leaf".to_string())),
         };
     }
 
@@ -224,7 +224,7 @@ impl SyntaxNode {
                 if reflectable_elem_i == index {
                     return match self.sub_elems.get(elem_i) {
                         Some(v) => Ok(&v),
-                        None => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+                        None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("invalid operation".to_string())),
                     };
                 }
 
@@ -234,7 +234,7 @@ impl SyntaxNode {
             elem_i += 1;
         }
 
-        return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("{}th reflectable element not matched", index + 1)));
+        return Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("{}th reflectable element not matched", index + 1)));
     }
 
     pub fn get_node_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxNode> {
