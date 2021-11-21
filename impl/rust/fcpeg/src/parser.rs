@@ -1,6 +1,10 @@
+use std::collections::*;
+
 use crate::block::*;
 use crate::data::*;
 use crate::rule::*;
+
+use regex::*;
 
 use rustnutlib::*;
 use rustnutlib::console::*;
@@ -11,10 +15,12 @@ pub enum SyntaxParseError {
     Unknown(),
     BlockParseErr(BlockParseError),
     InternalErr(String),
+    InvalidCharClassFormat(String),
     InvalidSyntaxTreeStruct(String),
     NoSucceededRule(String, usize, Vec<(usize, String)>),
     TooDeepRecursion(usize),
     TooLongRepeat(usize),
+    UnknownMacroArgID(String),
     UnknownRuleID(String),
 }
 
@@ -24,10 +30,12 @@ impl ConsoleLogger for SyntaxParseError {
             SyntaxParseError::Unknown() => log!(Error, "unknown error"),
             SyntaxParseError::BlockParseErr(err) => err.get_log(),
             SyntaxParseError::InternalErr(err_msg) => log!(Error, &format!("internal error: {}", err_msg)),
+            SyntaxParseError::InvalidCharClassFormat(value) => log!(Error, &format!("invalid character class format '{}'", value)),
             SyntaxParseError::InvalidSyntaxTreeStruct(cause) => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
             SyntaxParseError::NoSucceededRule(rule_id, src_i, rule_stack) => log!(Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), format!("rule stack: {:?}", rule_stack)),
             SyntaxParseError::TooDeepRecursion(max_recur_count) => log!(Error, &format!("too deep recursion over {}", max_recur_count)),
             SyntaxParseError::TooLongRepeat(max_loop_count) => log!(Error, &format!("too long repeat over {}", max_loop_count)),
+            SyntaxParseError::UnknownMacroArgID(macro_arg_id) => log!(Error, &format!("unknown macro arg id '{}'", macro_arg_id)),
             SyntaxParseError::UnknownRuleID(rule_id) => log!(Error, &format!("unknown rule id '{}'", rule_id)),
         };
     }
@@ -41,6 +49,7 @@ pub struct SyntaxParser {
     max_recursion_count: usize,
     max_loop_count: usize,
     rule_stack: Vec<(usize, String)>,
+    regex_map: HashMap::<String, Regex>,
 }
 
 impl SyntaxParser {
@@ -53,6 +62,7 @@ impl SyntaxParser {
             max_recursion_count: 65536,
             max_loop_count: 65536,
             rule_stack: vec![],
+            regex_map: HashMap::new(),
         });
     }
 
@@ -86,7 +96,7 @@ impl SyntaxParser {
 
         self.recursion_count += 1;
 
-        let mut root_node = match self.is_rule_successful(&start_rule_id)? {
+        let mut root_node = match self.is_rule_successful(&HashMap::new(), &start_rule_id)? {
             Some(v) => v,
             None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i, self.rule_stack.clone())),
         };
@@ -102,7 +112,7 @@ impl SyntaxParser {
         return Ok(SyntaxTree::from_node(root_node));
     }
 
-    fn is_rule_successful(&mut self, rule_id: &String) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
+    fn is_rule_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, rule_id: &String) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
         let rule = match self.rule_map.get_rule(rule_id) {
             Some(v) => v.clone(),
             None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
@@ -110,7 +120,7 @@ impl SyntaxParser {
 
         self.rule_stack.push((self.src_i, rule_id.clone()));
 
-        return match self.is_choice_successful(&rule.group.elem_order, &rule.group)? {
+        return match self.is_choice_successful(macro_def_args, &rule.group.elem_order, &rule.group)? {
             Some(v) => {
                 let mut ast_reflection_style = match &rule.group.sub_elems.get(0) {
                     Some(v) => {
@@ -139,18 +149,18 @@ impl SyntaxParser {
         }
     }
 
-    fn is_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        return self.is_lookahead_choice_successful(parent_elem_order, group);
+    fn is_choice_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+        return self.is_lookahead_choice_successful(macro_def_args, parent_elem_order, group);
     }
 
-    fn is_lookahead_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_lookahead_choice_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return if group.lookahead_kind.is_none() {
-            self.is_loop_choice_successful(parent_elem_order, group)
+            self.is_loop_choice_successful(macro_def_args, parent_elem_order, group)
         } else {
             let start_src_i = self.src_i;
             let is_lookahead_positive = group.lookahead_kind == RuleElementLookaheadKind::Positive;
 
-            let is_choice_successful = self.is_loop_choice_successful(parent_elem_order, group)?;
+            let is_choice_successful = self.is_loop_choice_successful(macro_def_args, parent_elem_order, group)?;
             self.src_i = start_src_i;
 
             if is_choice_successful.is_some() == is_lookahead_positive {
@@ -161,7 +171,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_loop_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &std::boxed::Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_loop_choice_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = match parent_elem_order {
             RuleElementOrder::Random(tmp_occurrence_count) => {
                 let (mut tmp_min_count, mut tmp_max_count) = tmp_occurrence_count.to_tuple();
@@ -195,7 +205,7 @@ impl SyntaxParser {
                 return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
             }
 
-            match self.is_each_choice_matched(group)? {
+            match self.is_each_choice_matched(macro_def_args, group)? {
                 Some(node_elems) => {
                     for each_elem in node_elems {
                         match &each_elem {
@@ -231,7 +241,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_choice_matched(&mut self, group: &std::boxed::Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_each_choice_matched(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let mut children = Vec::<SyntaxNodeElement>::new();
 
         for each_elem in &group.sub_elems {
@@ -251,7 +261,7 @@ impl SyntaxParser {
 
                                     match each_sub_elem {
                                         RuleElement::Group(each_sub_choice) if !is_check_done => {
-                                            match self.is_choice_successful(&each_group.elem_order, each_sub_choice)? {
+                                            match self.is_choice_successful(macro_def_args, &each_group.elem_order, each_sub_choice)? {
                                                 Some(v) => {
                                                     for each_result_sub_elem in v {
                                                         match each_result_sub_elem {
@@ -300,7 +310,7 @@ impl SyntaxParser {
                                     for each_sub_elem in &each_group.sub_elems {
                                         match each_sub_elem {
                                             RuleElement::Group(each_sub_group) => {
-                                                match self.is_choice_successful(&each_group.elem_order, each_sub_group)? {
+                                                match self.is_choice_successful(macro_def_args, &each_group.elem_order, each_sub_group)? {
                                                     Some(v) => {
                                                         if group.sub_elems.len() != 1 {
                                                             let new_child = SyntaxNodeElement::from_node_args(v, each_sub_group.ast_reflection_style.clone());
@@ -337,7 +347,7 @@ impl SyntaxParser {
                                     }
                                 },
                                 RuleGroupKind::Sequence => {
-                                    match self.is_choice_successful(&each_group.elem_order, each_group)? {
+                                    match self.is_choice_successful(macro_def_args, &each_group.elem_order, each_group)? {
                                         Some(v) => {
                                             if group.sub_elems.len() != 1 {
                                                 let new_child = SyntaxNodeElement::from_node_args(v, each_group.ast_reflection_style.clone());
@@ -370,7 +380,7 @@ impl SyntaxParser {
                     }
                 },
                 RuleElement::Expression(each_expr) => {
-                    match self.is_expr_successful(each_expr)? {
+                    match self.is_expr_successful(macro_def_args, each_expr)? {
                         Some(node_elems) => {
                             for each_elem in node_elems {
                                 match each_elem {
@@ -393,18 +403,18 @@ impl SyntaxParser {
         return Ok(Some(children));
     }
 
-    fn is_expr_successful(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        return self.is_lookahead_expr_successful(expr);
+    fn is_expr_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+        return self.is_lookahead_expr_successful(macro_def_args, expr);
     }
 
-    fn is_lookahead_expr_successful(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_lookahead_expr_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return if expr.lookahead_kind.is_none() {
-            self.is_loop_expr_successful(expr)
+            self.is_loop_expr_successful(macro_def_args, expr)
         } else {
             let start_src_i = self.src_i;
             let is_lookahead_positive = expr.lookahead_kind == RuleElementLookaheadKind::Positive;
 
-            let is_expr_successful = self.is_loop_expr_successful(expr)?;
+            let is_expr_successful = self.is_loop_expr_successful(macro_def_args, expr)?;
             self.src_i = start_src_i;
 
             if is_expr_successful.is_some() == is_lookahead_positive {
@@ -415,7 +425,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_loop_expr_successful(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_loop_expr_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = expr.loop_count.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
@@ -430,7 +440,7 @@ impl SyntaxParser {
                 return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
             }
 
-            match self.is_each_expr_matched(expr)? {
+            match self.is_each_expr_matched(macro_def_args, expr)? {
                 Some(node) => {
                     for each_node in node {
                         match each_node {
@@ -462,20 +472,29 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_expr_matched(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_each_expr_matched(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         if self.src_i >= self.src_content.chars().count() {
             return Ok(None);
         }
 
-        match expr.kind {
+        match &expr.kind {
             RuleExpressionKind::CharClass => {
                 if self.src_content.chars().count() < self.src_i + 1 {
                     return Ok(None);
                 }
 
-                let pattern = match self.rule_map.regex_map.get(&expr.value) {
+                // note: パターンが見つからない場合は新しく追加する
+                let pattern = match self.regex_map.get(&expr.value) {
                     Some(v) => v,
-                    None => return Err(SyntaxParseError::InternalErr("regex pattern of character class not found".to_string())),
+                    None => {
+                        let pattern = match Regex::new(&expr.value.clone()) {
+                            Ok(v) => v,
+                            Err(_) => return Err(SyntaxParseError::InvalidCharClassFormat(expr.to_string())),
+                        };
+
+                        self.regex_map.insert(expr.value.clone(), pattern);
+                        self.regex_map.get(&expr.value).unwrap()
+                    },
                 };
 
                 let tar_char = self.substring_src_content(self.src_i, 1);
@@ -495,46 +514,34 @@ impl SyntaxParser {
                     return Err(SyntaxParseError::TooDeepRecursion(self.max_recursion_count));
                 }
 
-                match self.is_rule_successful(&expr.value.clone())? {
-                    Some(node_elem) => {
-                        self.recursion_count += 1;
-
-                        let conv_node_elems = match &node_elem {
-                            SyntaxNodeElement::Node(node) => {
-                                let sub_ast_reflection = match &expr.ast_reflection_style {
-                                    ASTReflectionStyle::Reflection(elem_name) => {
-                                        let conv_elem_name = if elem_name == "" {
-                                            expr.value.clone()
-                                        } else {
-                                            elem_name.clone()
-                                        };
-
-                                        ASTReflectionStyle::Reflection(conv_elem_name)
-                                    },
-                                    _ => expr.ast_reflection_style.clone(),
-                                };
-
-                                let node = SyntaxNodeElement::from_node_args(node.sub_elems.clone(), sub_ast_reflection);
-
-                                if expr.ast_reflection_style.is_expandable() {
-                                    match node {
-                                        SyntaxNodeElement::Node(node) => node.sub_elems,
-                                        _ => vec![node],
-                                    }
-                                } else {
-                                    vec![node]
-                                }
-                            },
-                            SyntaxNodeElement::Leaf(_) => vec![node_elem],
-                        };
-
-                        return Ok(Some(conv_node_elems));
-                    },
-                    None => {
-                        self.recursion_count -= 1;
-                        return Ok(None);
-                    },
+                return self.is_rule_expr_matched(macro_def_args, expr);
+            },
+            RuleExpressionKind::MacroArgID => {
+                return match macro_def_args.get(&expr.value) {
+                    Some(v) => self.is_choice_successful(macro_def_args, &RuleElementOrder::Sequential, v),
+                    None => Err(SyntaxParseError::UnknownMacroArgID(expr.value.clone())),
                 };
+            },
+            RuleExpressionKind::MacroCall(arg_groups) => {
+                let rule_id = &expr.value;
+
+                let mut macro_args = HashMap::<String, Box::<RuleGroup>>::new();
+                let macro_def_args = match self.rule_map.get_rule(rule_id) {
+                    Some(rule) => &rule.macro_args,
+                    None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
+                };
+
+                for i in 0..arg_groups.len() {
+                    let new_macro_id = match macro_def_args.get(i) {
+                        Some(v) => v,
+                        None => return Err(SyntaxParseError::InternalErr("invalid operation".to_string())),
+                    };
+
+                    let new_macro_group = arg_groups.get(i).unwrap();
+                    macro_args.insert(new_macro_id.clone(), new_macro_group.clone());
+                }
+
+                return self.is_rule_expr_matched(&macro_args, expr);
             },
             RuleExpressionKind::String => {
                 if self.src_content.chars().count() < self.src_i + expr.value.chars().count() {
@@ -560,6 +567,49 @@ impl SyntaxParser {
                 return Ok(Some(vec![new_leaf]));
             },
         }
+    }
+
+    fn is_rule_expr_matched(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+        match self.is_rule_successful(macro_def_args, &expr.value)? {
+            Some(node_elem) => {
+                self.recursion_count += 1;
+
+                let conv_node_elems = match &node_elem {
+                    SyntaxNodeElement::Node(node) => {
+                        let sub_ast_reflection = match &expr.ast_reflection_style {
+                            ASTReflectionStyle::Reflection(elem_name) => {
+                                let conv_elem_name = if elem_name == "" {
+                                    expr.value.clone()
+                                } else {
+                                    elem_name.clone()
+                                };
+
+                                ASTReflectionStyle::Reflection(conv_elem_name)
+                            },
+                            _ => expr.ast_reflection_style.clone(),
+                        };
+
+                        let node = SyntaxNodeElement::from_node_args(node.sub_elems.clone(), sub_ast_reflection);
+
+                        if expr.ast_reflection_style.is_expandable() {
+                            match node {
+                                SyntaxNodeElement::Node(node) => node.sub_elems,
+                                _ => vec![node],
+                            }
+                        } else {
+                            vec![node]
+                        }
+                    },
+                    SyntaxNodeElement::Leaf(_) => vec![node_elem],
+                };
+
+                return Ok(Some(conv_node_elems));
+            },
+            None => {
+                self.recursion_count -= 1;
+                return Ok(None);
+            },
+        };
     }
 
     fn substring_src_content(&self, start_i: usize, len: usize) -> String {

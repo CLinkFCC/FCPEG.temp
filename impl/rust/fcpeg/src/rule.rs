@@ -5,12 +5,9 @@ use std::option::*;
 use crate::block::*;
 use crate::data::*;
 
-use regex::*;
-
 #[derive(Clone)]
 pub struct RuleMap {
     pub rule_map: HashMap<String, Rule>,
-    pub regex_map: HashMap::<String, Regex>,
     pub start_rule_id: String,
 }
 
@@ -18,7 +15,6 @@ impl RuleMap {
     pub fn new(start_rule_id: String) -> RuleMap {
         return RuleMap {
             rule_map: HashMap::new(),
-            regex_map: HashMap::new(),
             start_rule_id: start_rule_id,
         };
     }
@@ -129,7 +125,7 @@ impl RuleMap {
                     BlockCommand::Define(_line, rule) => {
                         let mut each_rule = rule.clone();
                         each_rule.name = format!("{}.{}.{}", file_alias_name, each_block.name, each_rule.name);
-                        self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &block_alias_map)?;
+                        self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &each_rule.macro_args, &block_alias_map)?;
                         let rule_id = RuleMap::get_rule_id(file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
                         self.insert_rule(rule_id, each_rule);
                     },
@@ -141,62 +137,53 @@ impl RuleMap {
         return Ok(());
     }
 
-    pub fn proc_define_cmd(&mut self, group: &mut RuleGroup, rule_id: &String, block_name: &String, file_alias_name: &String, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
+    pub fn proc_define_cmd(&mut self, group: &mut RuleGroup, rule_id: &String, block_name: &String, file_alias_name: &String, macro_args: &Vec<String>, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
         for each_elem in group.sub_elems.iter_mut() {
             match each_elem {
-                RuleElement::Group(each_group) => {
-                    self.proc_define_cmd(each_group, rule_id, block_name, file_alias_name, block_alias_map)?;
-                },
-                RuleElement::Expression(each_expr) => {
-                    if each_expr.kind == RuleExpressionKind::ID {
-                        let id_tokens: Vec<&str> = each_expr.value.split(".").collect();
-
-                        if id_tokens.len() == 1 {
-                            each_expr.value = format!("{}.{}.{}", file_alias_name, block_name, each_expr.value);
-                            continue;
-                        }
-
-                        if id_tokens.len() == 2 {
-                            let block_name = id_tokens.get(0).unwrap();
-                            let rule_name = id_tokens.get(1).unwrap();
-
-                            if block_alias_map.contains_key(&block_name.to_string()) {
-                                // ブロック名がエイリアスである場合
-                                each_expr.value = format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name);
-                            } else {
-                                // ブロック名がエイリアスでない場合
-                                return Err(BlockParseError::BlockAliasNotFound(each_expr.line, block_name.to_string()));
-                            }
-
-                            continue;
-                        }
-
-                        if id_tokens.len() == 3 {
-                            let file_alias_name = id_tokens.get(0).unwrap();
-                            let block_name = id_tokens.get(1).unwrap();
-                            let rule_name = id_tokens.get(2).unwrap();
-
-                            each_expr.value = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
-                            continue;
-                        }
-
-                        return Err(BlockParseError::InternalErr(format!("invalid id expression '{}'", each_expr.value)));
-                    }
-
-                    if each_expr.kind == RuleExpressionKind::CharClass {
-                        if self.regex_map.contains_key(&each_expr.value) {
-                            continue;
-                        }
-
-                        let pattern = match Regex::new(&each_expr.value.clone()) {
-                            Err(_e) => return Err(BlockParseError::InvalidCharClassFormat(each_expr.line, each_expr.to_string())),
-                            Ok(v) => v,
-                        };
-
-                        self.regex_map.insert(each_expr.value.clone(), pattern);
-                    }
-                },
+                RuleElement::Group(each_group) => self.proc_define_cmd(each_group, rule_id, block_name, file_alias_name, macro_args, block_alias_map)?,
+                RuleElement::Expression(each_expr) => self.proc_expr(each_expr, block_name, file_alias_name, macro_args, block_alias_map)?,
             }
+        }
+
+        return Ok(());
+    }
+
+    pub fn proc_expr(&mut self, expr: &mut RuleExpression, block_name: &String, file_alias_name: &String, macro_args: &Vec<String>, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
+        match &expr.kind {
+            RuleExpressionKind::ID | RuleExpressionKind::MacroCall(_) => {
+                let id_tokens: Vec<&str> = expr.value.split(".").collect();
+
+                match id_tokens.len() {
+                    1 => {
+                        if macro_args.contains(&expr.value) {
+                            expr.kind = RuleExpressionKind::MacroArgID;
+                        } else {
+                            expr.value = format!("{}.{}.{}", file_alias_name, block_name, expr.value);
+                        };
+                    },
+                    2 => {
+                        let block_name = id_tokens.get(0).unwrap();
+                        let rule_name = id_tokens.get(1).unwrap();
+
+                        if block_alias_map.contains_key(&block_name.to_string()) {
+                            // ブロック名がエイリアスである場合
+                            expr.value = format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name);
+                        } else {
+                            // ブロック名がエイリアスでない場合
+                            return Err(BlockParseError::BlockAliasNotFound(expr.line, block_name.to_string()));
+                        }
+                    },
+                    3 => {
+                        let file_alias_name = id_tokens.get(0).unwrap();
+                        let block_name = id_tokens.get(1).unwrap();
+                        let rule_name = id_tokens.get(2).unwrap();
+
+                        expr.value = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
+                    },
+                    _ => return Err(BlockParseError::InternalErr(format!("invalid id expression '{}'", expr.value))),
+                }
+            },
+            _ => (),
         }
 
         return Ok(());
@@ -209,10 +196,6 @@ impl Display for RuleMap {
 
         for each_rule in self.rule_map.values() {
             rule_text_lines.push(each_rule.to_string());
-        }
-
-        for each_key in self.regex_map.keys() {
-            rule_text_lines.push(format!("reg {}", each_key));
         }
 
         return writeln!(f, "{}", rule_text_lines.join("\n"));
@@ -429,6 +412,18 @@ impl RuleGroup {
         };
     }
 
+    pub fn extract(&self) -> RuleGroup {
+        return match self.sub_elems.get(0) {
+            Some(child_elem) if self.sub_elems.len() == 1 => {
+                match child_elem {
+                    RuleElement::Group(group) => group.clone().extract(),
+                    _ => self.clone(),
+                }
+            },
+            _ => self.clone(),
+        };
+    }
+
     // todo: 関数の役割を検証
     pub fn has_choices(&self) -> bool {
         for each_elem in &self.sub_elems {
@@ -502,10 +497,12 @@ impl Display for RuleGroup {
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone)]
 pub enum RuleExpressionKind {
     CharClass,
     ID,
+    MacroCall(Vec<Box<RuleGroup>>),
+    MacroArgID,
     String,
     Wildcard,
 }
@@ -515,6 +512,8 @@ impl Display for RuleExpressionKind {
         let s = match self {
             RuleExpressionKind::CharClass => "CharClass",
             RuleExpressionKind::ID => "ID",
+            RuleExpressionKind::MacroCall(_) => "MacroID",
+            RuleExpressionKind::MacroArgID => "MacroArgID",
             RuleExpressionKind::String => "String",
             RuleExpressionKind::Wildcard => "Wildcard",
         };
@@ -549,9 +548,19 @@ impl RuleExpression {
 impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let loop_text = self.loop_count.to_string(true, "{", ",", "}");
-        let value_text = match self.kind {
+        let value_text = match self.kind.clone() {
             RuleExpressionKind::CharClass => self.value.clone(),
             RuleExpressionKind::ID => self.value.clone(),
+            RuleExpressionKind::MacroArgID => self.value.clone(),
+            RuleExpressionKind::MacroCall(arg_groups) => {
+                let mut group_text = Vec::<String>::new();
+
+                for each_group in &arg_groups {
+                    group_text.push(each_group.to_string());
+                }
+
+                format!("{}({})", self.value, group_text.join(", "))
+            },
             RuleExpressionKind::String => format!("\"{}\"", self.value),
             RuleExpressionKind::Wildcard => ".".to_string(),
         };
