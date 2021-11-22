@@ -16,12 +16,12 @@ pub enum SyntaxParseError {
     BlockParseErr(BlockParseError),
     InternalErr(String),
     InvalidCharClassFormat(String),
-    InvalidMacroArgumentLength(Vec<String>),
+    InvalidGenericsArgumentLength(Vec<String>),
     InvalidSyntaxTreeStructure(String),
     NoSucceededRule(String, usize, Vec<(usize, String)>),
     TooDeepRecursion(usize),
-    TooLongRepeat(usize),
-    UnknownMacroArgID(String),
+    TooLongRepetition(usize),
+    UnknownGenericsArgumentID(String),
     UnknownRuleID(String),
 }
 
@@ -32,12 +32,12 @@ impl ConsoleLogger for SyntaxParseError {
             SyntaxParseError::BlockParseErr(err) => err.get_log(),
             SyntaxParseError::InternalErr(err_msg) => log!(Error, &format!("internal error: {}", err_msg)),
             SyntaxParseError::InvalidCharClassFormat(value) => log!(Error, &format!("invalid character class format '{}'", value)),
-            SyntaxParseError::InvalidMacroArgumentLength(arg_names) => log!(Error, &format!("invalid macro argument length ({:?})", arg_names)),
+            SyntaxParseError::InvalidGenericsArgumentLength(arg_ids) => log!(Error, &format!("invalid generics argument length ({:?})", arg_ids)),
             SyntaxParseError::InvalidSyntaxTreeStructure(cause) => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
             SyntaxParseError::NoSucceededRule(rule_id, src_i, rule_stack) => log!(Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), format!("rule stack: {:?}", rule_stack)),
             SyntaxParseError::TooDeepRecursion(max_recur_count) => log!(Error, &format!("too deep recursion over {}", max_recur_count)),
-            SyntaxParseError::TooLongRepeat(max_loop_count) => log!(Error, &format!("too long repeat over {}", max_loop_count)),
-            SyntaxParseError::UnknownMacroArgID(macro_arg_id) => log!(Error, &format!("unknown macro arg id '{}'", macro_arg_id)),
+            SyntaxParseError::TooLongRepetition(max_loop_count) => log!(Error, &format!("too long repetition over {}", max_loop_count)),
+            SyntaxParseError::UnknownGenericsArgumentID(arg_id) => log!(Error, &format!("unknown generics argument id '{}'", arg_id)),
             SyntaxParseError::UnknownRuleID(rule_id) => log!(Error, &format!("unknown rule id '{}'", rule_id)),
         };
     }
@@ -118,7 +118,7 @@ impl SyntaxParser {
         return Ok(SyntaxTree::from_node(root_node));
     }
 
-    fn is_rule_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, rule_id: &String) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
+    fn is_rule_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, rule_id: &String) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
         let rule = match self.rule_map.get_rule(rule_id) {
             Some(v) => v.clone(),
             None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
@@ -126,7 +126,7 @@ impl SyntaxParser {
 
         self.rule_stack.push((self.src_i, rule_id.clone()));
 
-        return match self.is_choice_successful(macro_def_args, &rule.group.elem_order, &rule.group)? {
+        return match self.is_choice_successful(generics_args, &rule.group.elem_order, &rule.group)? {
             Some(v) => {
                 let mut ast_reflection_style = match &rule.group.sub_elems.get(0) {
                     Some(v) => {
@@ -155,18 +155,18 @@ impl SyntaxParser {
         }
     }
 
-    fn is_choice_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        return self.is_lookahead_choice_successful(macro_def_args, parent_elem_order, group);
+    fn is_choice_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+        return self.is_lookahead_choice_successful(generics_args, parent_elem_order, group);
     }
 
-    fn is_lookahead_choice_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_lookahead_choice_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return if group.lookahead_kind.is_none() {
-            self.is_loop_choice_successful(macro_def_args, parent_elem_order, group)
+            self.is_loop_choice_successful(generics_args, parent_elem_order, group)
         } else {
             let start_src_i = self.src_i;
             let is_lookahead_positive = group.lookahead_kind == RuleElementLookaheadKind::Positive;
 
-            let is_choice_successful = self.is_loop_choice_successful(macro_def_args, parent_elem_order, group)?;
+            let is_choice_successful = self.is_loop_choice_successful(generics_args, parent_elem_order, group)?;
             self.src_i = start_src_i;
 
             if is_choice_successful.is_some() == is_lookahead_positive {
@@ -177,7 +177,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_loop_choice_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_loop_choice_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = match parent_elem_order {
             RuleElementOrder::Random(tmp_occurrence_count) => {
                 let (mut tmp_min_count, mut tmp_max_count) = tmp_occurrence_count.to_tuple();
@@ -208,10 +208,10 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.max_loop_count as i32 {
-                return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
+                return Err(SyntaxParseError::TooLongRepetition(self.max_loop_count as usize));
             }
 
-            match self.is_each_choice_matched(macro_def_args, group)? {
+            match self.is_each_choice_matched(generics_args, group)? {
                 Some(node_elems) => {
                     for each_elem in node_elems {
                         match &each_elem {
@@ -247,7 +247,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_choice_matched(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_each_choice_matched(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let mut children = Vec::<SyntaxNodeElement>::new();
 
         for each_elem in &group.sub_elems {
@@ -267,7 +267,7 @@ impl SyntaxParser {
 
                                     match each_sub_elem {
                                         RuleElement::Group(each_sub_choice) if !is_check_done => {
-                                            match self.is_choice_successful(macro_def_args, &each_group.elem_order, each_sub_choice)? {
+                                            match self.is_choice_successful(generics_args, &each_group.elem_order, each_sub_choice)? {
                                                 Some(v) => {
                                                     for each_result_sub_elem in v {
                                                         match each_result_sub_elem {
@@ -316,7 +316,7 @@ impl SyntaxParser {
                                     for each_sub_elem in &each_group.sub_elems {
                                         match each_sub_elem {
                                             RuleElement::Group(each_sub_group) => {
-                                                match self.is_choice_successful(macro_def_args, &each_group.elem_order, each_sub_group)? {
+                                                match self.is_choice_successful(generics_args, &each_group.elem_order, each_sub_group)? {
                                                     Some(v) => {
                                                         if group.sub_elems.len() != 1 {
                                                             let new_child = SyntaxNodeElement::from_node_args(v, each_sub_group.ast_reflection_style.clone());
@@ -353,7 +353,7 @@ impl SyntaxParser {
                                     }
                                 },
                                 RuleGroupKind::Sequence => {
-                                    match self.is_choice_successful(macro_def_args, &each_group.elem_order, each_group)? {
+                                    match self.is_choice_successful(generics_args, &each_group.elem_order, each_group)? {
                                         Some(v) => {
                                             if group.sub_elems.len() != 1 {
                                                 let new_child = SyntaxNodeElement::from_node_args(v, each_group.ast_reflection_style.clone());
@@ -386,7 +386,7 @@ impl SyntaxParser {
                     }
                 },
                 RuleElement::Expression(each_expr) => {
-                    match self.is_expr_successful(macro_def_args, each_expr)? {
+                    match self.is_expr_successful(generics_args, each_expr)? {
                         Some(node_elems) => {
                             for each_elem in node_elems {
                                 match each_elem {
@@ -409,18 +409,18 @@ impl SyntaxParser {
         return Ok(Some(children));
     }
 
-    fn is_expr_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        return self.is_lookahead_expr_successful(macro_def_args, expr);
+    fn is_expr_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+        return self.is_lookahead_expr_successful(generics_args, expr);
     }
 
-    fn is_lookahead_expr_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_lookahead_expr_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return if expr.lookahead_kind.is_none() {
-            self.is_loop_expr_successful(macro_def_args, expr)
+            self.is_loop_expr_successful(generics_args, expr)
         } else {
             let start_src_i = self.src_i;
             let is_lookahead_positive = expr.lookahead_kind == RuleElementLookaheadKind::Positive;
 
-            let is_expr_successful = self.is_loop_expr_successful(macro_def_args, expr)?;
+            let is_expr_successful = self.is_loop_expr_successful(generics_args, expr)?;
             self.src_i = start_src_i;
 
             if is_expr_successful.is_some() == is_lookahead_positive {
@@ -431,7 +431,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_loop_expr_successful(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_loop_expr_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = expr.loop_count.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
@@ -443,10 +443,10 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.max_loop_count {
-                return Err(SyntaxParseError::TooLongRepeat(self.max_loop_count as usize));
+                return Err(SyntaxParseError::TooLongRepetition(self.max_loop_count as usize));
             }
 
-            match self.is_each_expr_matched(macro_def_args, expr)? {
+            match self.is_each_expr_matched(generics_args, expr)? {
                 Some(node) => {
                     for each_node in node {
                         match each_node {
@@ -478,7 +478,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_expr_matched(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_each_expr_matched(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         if self.src_i >= self.src_content.chars().count() {
             return Ok(None);
         }
@@ -514,6 +514,37 @@ impl SyntaxParser {
                     return Ok(None);
                 }
             },
+            RuleExpressionKind::Generics(args) => {
+                let rule_id = &expr.value;
+
+                let mut new_args = HashMap::<String, Box::<RuleGroup>>::new();
+                let new_arg_ids = match self.rule_map.get_rule(rule_id) {
+                    Some(rule) => &rule.generics_arg_ids,
+                    None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
+                };
+
+                if args.len() != new_arg_ids.len() {
+                    return Err(SyntaxParseError::InvalidGenericsArgumentLength(new_arg_ids.clone()));
+                }
+
+                for i in 0..args.len() {
+                    let new_arg_id = match new_arg_ids.get(i) {
+                        Some(v) => v,
+                        None => return Err(SyntaxParseError::InternalErr("invalid operation".to_string())),
+                    };
+
+                    let new_arg = args.get(i).unwrap();
+                    new_args.insert(new_arg_id.clone(), new_arg.clone());
+                }
+
+                return self.is_rule_expr_matched(&new_args, expr);
+            },
+            RuleExpressionKind::GenericsArgID => {
+                return match generics_args.get(&expr.value) {
+                    Some(v) => self.is_choice_successful(generics_args, &RuleElementOrder::Sequential, v),
+                    None => Err(SyntaxParseError::UnknownGenericsArgumentID(expr.value.clone())),
+                };
+            },
             RuleExpressionKind::ID => {
                 self.recursion_count += 1;
 
@@ -521,38 +552,7 @@ impl SyntaxParser {
                     return Err(SyntaxParseError::TooDeepRecursion(self.max_recursion_count));
                 }
 
-                return self.is_rule_expr_matched(macro_def_args, expr);
-            },
-            RuleExpressionKind::MacroArgID => {
-                return match macro_def_args.get(&expr.value) {
-                    Some(v) => self.is_choice_successful(macro_def_args, &RuleElementOrder::Sequential, v),
-                    None => Err(SyntaxParseError::UnknownMacroArgID(expr.value.clone())),
-                };
-            },
-            RuleExpressionKind::MacroCall(arg_groups) => {
-                let rule_id = &expr.value;
-
-                let mut macro_args = HashMap::<String, Box::<RuleGroup>>::new();
-                let new_macro_def_args = match self.rule_map.get_rule(rule_id) {
-                    Some(rule) => &rule.macro_args,
-                    None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
-                };
-
-                if arg_groups.len() != new_macro_def_args.len() {
-                    return Err(SyntaxParseError::InvalidMacroArgumentLength(new_macro_def_args.clone()));
-                }
-
-                for i in 0..arg_groups.len() {
-                    let new_macro_id = match new_macro_def_args.get(i) {
-                        Some(v) => v,
-                        None => return Err(SyntaxParseError::InternalErr("invalid operation".to_string())),
-                    };
-
-                    let new_macro_group = arg_groups.get(i).unwrap();
-                    macro_args.insert(new_macro_id.clone(), new_macro_group.clone());
-                }
-
-                return self.is_rule_expr_matched(&macro_args, expr);
+                return self.is_rule_expr_matched(generics_args, expr);
             },
             RuleExpressionKind::String => {
                 if self.src_content.chars().count() < self.src_i + expr.value.chars().count() {
@@ -582,8 +582,8 @@ impl SyntaxParser {
         }
     }
 
-    fn is_rule_expr_matched(&mut self, macro_def_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        match self.is_rule_successful(macro_def_args, &expr.value)? {
+    fn is_rule_expr_matched(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+        match self.is_rule_successful(generics_args, &expr.value)? {
             Some(node_elem) => {
                 self.recursion_count += 1;
 

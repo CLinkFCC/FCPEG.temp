@@ -124,7 +124,7 @@ impl RuleMap {
                     BlockCommand::Define(_line, rule) => {
                         let mut each_rule = rule.clone();
                         each_rule.name = format!("{}.{}.{}", file_alias_name, each_block.name, each_rule.name);
-                        self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &each_rule.macro_args, &block_alias_map)?;
+                        self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &each_rule.generics_arg_ids, &block_alias_map)?;
                         let rule_id = RuleMap::get_rule_id(file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
                         self.insert_rule(rule_id, each_rule);
                     },
@@ -136,26 +136,26 @@ impl RuleMap {
         return Ok(());
     }
 
-    pub fn proc_define_cmd(&mut self, group: &mut RuleGroup, rule_id: &String, block_name: &String, file_alias_name: &String, macro_args: &Vec<String>, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
+    pub fn proc_define_cmd(&mut self, group: &mut RuleGroup, rule_id: &String, block_name: &String, file_alias_name: &String, generics_arg_ids: &Vec<String>, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
         for each_elem in group.sub_elems.iter_mut() {
             match each_elem {
-                RuleElement::Group(each_group) => self.proc_define_cmd(each_group, rule_id, block_name, file_alias_name, macro_args, block_alias_map)?,
-                RuleElement::Expression(each_expr) => self.proc_expr(each_expr, block_name, file_alias_name, macro_args, block_alias_map)?,
+                RuleElement::Group(each_group) => self.proc_define_cmd(each_group, rule_id, block_name, file_alias_name, generics_arg_ids, block_alias_map)?,
+                RuleElement::Expression(each_expr) => self.proc_expr(each_expr, block_name, file_alias_name, generics_arg_ids, block_alias_map)?,
             }
         }
 
         return Ok(());
     }
 
-    pub fn proc_expr(&mut self, expr: &mut RuleExpression, block_name: &String, file_alias_name: &String, macro_args: &Vec<String>, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
+    pub fn proc_expr(&mut self, expr: &mut RuleExpression, block_name: &String, file_alias_name: &String, generics_arg_ids: &Vec<String>, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
         match &expr.kind {
-            RuleExpressionKind::ID | RuleExpressionKind::MacroCall(_) => {
+            RuleExpressionKind::ID | RuleExpressionKind::Generics(_) => {
                 let id_tokens: Vec<&str> = expr.value.split(".").collect();
 
                 match id_tokens.len() {
                     1 => {
-                        if macro_args.contains(&expr.value) {
-                            expr.kind = RuleExpressionKind::MacroArgID;
+                        if generics_arg_ids.contains(&expr.value) {
+                            expr.kind = RuleExpressionKind::GenericsArgID;
                         } else {
                             expr.value = format!("{}.{}.{}", file_alias_name, block_name, expr.value);
                         };
@@ -238,15 +238,15 @@ impl Display for RuleElementLookaheadKind {
 #[derive(Clone)]
 pub struct Rule {
     pub name: String,
-    pub macro_args: Vec<String>,
+    pub generics_arg_ids: Vec<String>,
     pub group: Box<RuleGroup>,
 }
 
 impl Rule {
-    pub fn new(name: String, macro_args: Vec<String>, group: Box<RuleGroup>) -> Rule {
+    pub fn new(name: String, generics_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
         return Rule {
             name: name,
-            macro_args: macro_args,
+            generics_arg_ids: generics_arg_ids,
             group: group,
         };
     }
@@ -254,13 +254,13 @@ impl Rule {
 
 impl Display for Rule {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        let macro_args_text = if self.macro_args.len() == 0 {
+        let generics_arg_id_text = if self.generics_arg_ids.len() == 0 {
             String::new()
         } else {
-            format!("({})", self.macro_args.join(", "))
+            format!("({})", self.generics_arg_ids.join(", "))
         };
 
-        return write!(f, "{}{} <- {}", self.name, macro_args_text, self.group);
+        return write!(f, "{}{} <- {}", self.name, generics_arg_id_text, self.group);
     }
 }
 
@@ -458,9 +458,9 @@ impl Display for RuleGroup {
 #[derive(Clone)]
 pub enum RuleExpressionKind {
     CharClass,
+    Generics(Vec<Box<RuleGroup>>),
+    GenericsArgID,
     ID,
-    MacroCall(Vec<Box<RuleGroup>>),
-    MacroArgID,
     String,
     Wildcard,
 }
@@ -469,9 +469,9 @@ impl Display for RuleExpressionKind {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let s = match self {
             RuleExpressionKind::CharClass => "CharClass",
+            RuleExpressionKind::Generics(_) => "Generics",
+            RuleExpressionKind::GenericsArgID => "GenericsArgID",
             RuleExpressionKind::ID => "ID",
-            RuleExpressionKind::MacroCall(_) => "MacroID",
-            RuleExpressionKind::MacroArgID => "MacroArgID",
             RuleExpressionKind::String => "String",
             RuleExpressionKind::Wildcard => "Wildcard",
         };
@@ -508,17 +508,17 @@ impl Display for RuleExpression {
         let loop_text = self.loop_count.to_string(true, "{", ",", "}");
         let value_text = match self.kind.clone() {
             RuleExpressionKind::CharClass => self.value.clone(),
-            RuleExpressionKind::ID => self.value.clone(),
-            RuleExpressionKind::MacroArgID => self.value.clone(),
-            RuleExpressionKind::MacroCall(arg_groups) => {
-                let mut group_text = Vec::<String>::new();
+            RuleExpressionKind::Generics(args) => {
+                let mut arg_text = Vec::<String>::new();
 
-                for each_group in &arg_groups {
-                    group_text.push(each_group.to_string());
+                for each_arg in &args {
+                    arg_text.push(each_arg.to_string());
                 }
-
-                format!("{}({})", self.value, group_text.join(", "))
+                
+                format!("{}({})", self.value, arg_text.join(", "))
             },
+            RuleExpressionKind::GenericsArgID => self.value.clone(),
+            RuleExpressionKind::ID => self.value.clone(),
             RuleExpressionKind::String => format!("\"{}\"", self.value),
             RuleExpressionKind::Wildcard => ".".to_string(),
         };
