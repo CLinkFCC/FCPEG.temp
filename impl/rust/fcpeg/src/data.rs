@@ -7,6 +7,23 @@ use crate::parser::*;
 use crate::rule::*;
 
 #[derive(Clone, PartialEq)]
+pub struct CharacterPosition {
+    pub index: usize,
+    pub line: usize,
+    pub column: usize,
+}
+
+impl CharacterPosition {
+    pub fn new(index: usize, line: usize, column: usize) -> CharacterPosition {
+        return CharacterPosition {
+            index: index,
+            line: line,
+            column: column,
+        };
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub enum ASTReflectionStyle {
     // note: AST に反映される
     Reflection(String),
@@ -66,8 +83,8 @@ impl SyntaxNodeElement {
         return SyntaxNodeElement::Node(SyntaxNode::new(sub_elems, ast_reflection_style));
     }
 
-    pub fn from_leaf_args(value: String, ast_reflection: ASTReflectionStyle) -> SyntaxNodeElement {
-        return SyntaxNodeElement::Leaf(SyntaxLeaf::new(value, ast_reflection));
+    pub fn from_leaf_args(pos: CharacterPosition, value: String, ast_reflection: ASTReflectionStyle) -> SyntaxNodeElement {
+        return SyntaxNodeElement::Leaf(SyntaxLeaf::new(pos, value, ast_reflection));
     }
 
     pub fn get_node(&self) -> SyntaxParseResult<&SyntaxNode> {
@@ -295,13 +312,15 @@ impl SyntaxNode {
 
 #[derive(Clone)]
 pub struct SyntaxLeaf {
+    pub pos: CharacterPosition,
     pub value: String,
     pub ast_reflection_style: ASTReflectionStyle,
 }
 
 impl SyntaxLeaf {
-    pub fn new(value: String, ast_reflection_style: ASTReflectionStyle) -> SyntaxLeaf {
+    pub fn new(pos: CharacterPosition, value: String, ast_reflection_style: ASTReflectionStyle) -> SyntaxLeaf {
         return SyntaxLeaf {
+            pos: pos,
             value: value,
             ast_reflection_style: ast_reflection_style,
         };
@@ -327,7 +346,9 @@ impl SyntaxLeaf {
             ASTReflectionStyle::Expansion => "[expandable]".to_string(),
         };
 
-        writeln!(writer, "|{}- \"{}\" {}", "   |".repeat(nest), value, ast_reflection_text).unwrap();
+        let pos_text = format!("{}/{}/{}", self.pos.index, self.pos.line, self.pos.column);
+
+        writeln!(writer, "|{}- \"{}\" {} {}", "   |".repeat(nest), value, pos_text, ast_reflection_text).unwrap();
     }
 }
 

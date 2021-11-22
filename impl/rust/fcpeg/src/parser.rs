@@ -46,6 +46,8 @@ impl ConsoleLogger for SyntaxParseError {
 pub struct SyntaxParser {
     rule_map: RuleMap,
     src_i: usize,
+    src_line: usize,
+    src_latest_line_i: usize,
     src_content: String,
     recursion_count: usize,
     max_recursion_count: usize,
@@ -59,6 +61,8 @@ impl SyntaxParser {
         return Ok(SyntaxParser {
             rule_map: rule_map,
             src_i: 0,
+            src_line: 0,
+            src_latest_line_i: 0,
             src_content: String::new(),
             recursion_count: 1,
             max_recursion_count: 65536,
@@ -502,8 +506,9 @@ impl SyntaxParser {
                 let tar_char = self.substring_src_content(self.src_i, 1);
 
                 if pattern.is_match(&tar_char) {
-                    let new_leaf = SyntaxNodeElement::from_leaf_args(tar_char, expr.ast_reflection_style.clone());
-                    self.src_i += 1;
+                    let new_leaf = SyntaxNodeElement::from_leaf_args(self.get_char_position(), tar_char.clone(), expr.ast_reflection_style.clone());
+                    self.add_source_index_by_string(&tar_char);
+
                     return Ok(Some(vec![new_leaf]));
                 } else {
                     return Ok(None);
@@ -555,8 +560,9 @@ impl SyntaxParser {
                 }
 
                 if self.substring_src_content(self.src_i, expr.value.chars().count()) == expr.value {
-                    let new_leaf = SyntaxNodeElement::from_leaf_args(expr.value.clone(), expr.ast_reflection_style.clone());
-                    self.src_i += expr.value.chars().count();
+                    let new_leaf = SyntaxNodeElement::from_leaf_args(self.get_char_position(), expr.value.clone(), expr.ast_reflection_style.clone());
+                    self.add_source_index_by_string(&expr.value);
+
                     return Ok(Some(vec![new_leaf]));
                 } else {
                     return Ok(None);
@@ -568,8 +574,9 @@ impl SyntaxParser {
                 }
 
                 let expr_value = self.substring_src_content(self.src_i, 1);
-                let new_leaf = SyntaxNodeElement::from_leaf_args(expr_value, expr.ast_reflection_style.clone());
-                self.src_i += 1;
+                let new_leaf = SyntaxNodeElement::from_leaf_args(self.get_char_position(), expr_value.clone(), expr.ast_reflection_style.clone());
+                self.add_source_index_by_string(&expr_value);
+
                 return Ok(Some(vec![new_leaf]));
             },
         }
@@ -620,5 +627,40 @@ impl SyntaxParser {
 
     fn substring_src_content(&self, start_i: usize, len: usize) -> String {
         return self.src_content.chars().skip(start_i).take(len).collect::<String>();
+    }
+
+    // todo: 文字列と進めるインデックスのペアとしてキャッシュを取る
+    fn add_source_index_by_string(&mut self, expr_str: &String) {
+        let mut new_line_indexes = Vec::<usize>::new();
+        let mut char_i = 0usize;
+
+        for each_char in expr_str.chars().rev() {
+            if each_char == '\n' {
+                new_line_indexes.push(char_i);
+
+                if new_line_indexes.len() >= 2 {
+                    break;
+                }
+            }
+
+            char_i += 1;
+        }
+
+        match new_line_indexes.pop() {
+            Some(latest_new_line_i) => {
+                self.src_line += expr_str.match_indices("\n").count();
+                self.src_latest_line_i = match new_line_indexes.last() {
+                    Some(second_latest_new_line_i) => self.src_i + latest_new_line_i - second_latest_new_line_i + 1,
+                    None => self.src_i + latest_new_line_i + 1,
+                };
+            },
+            None => (),
+        }
+
+        self.src_i += expr_str.len();
+    }
+
+    fn get_char_position(&self) -> CharacterPosition {
+        return CharacterPosition::new(self.src_i, self.src_line, self.src_i - self.src_latest_line_i);
     }
 }

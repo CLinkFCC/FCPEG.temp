@@ -422,47 +422,6 @@ impl RuleGroup {
             _ => self.clone(),
         };
     }
-
-    // todo: 関数の役割を検証
-    pub fn has_choices(&self) -> bool {
-        for each_elem in &self.sub_elems {
-            match each_elem {
-                RuleElement::Group(_) => return true,
-                _ => (),
-            }
-        }
-
-        return false;
-    }
-
-    pub fn is_hierarchy_omission_needed(choices: &Vec<Box<RuleGroup>>, is_random_order: bool) -> Option<Box<RuleGroup>> {
-        match choices.get(0) {
-            Some(v) => {
-                if choices.len() == 1 && v.lookahead_kind == RuleElementLookaheadKind::None && v.loop_count.to_tuple() == (1, 1) && match &v.elem_order { RuleElementOrder::Random(loop_count) => loop_count.to_tuple() == (1, 1), RuleElementOrder::Sequential => false, } {
-                    if is_random_order {
-                        match v.sub_elems.get(0) {
-                            Some(v2) => {
-                                match v2 {
-                                    RuleElement::Group(v3) => {
-                                        if v3.has_choices() {
-                                            return Some(v.clone());
-                                        }
-                                    },
-                                    _ => (),
-                                }
-                            },
-                            None => (),
-                        }
-                    } else {
-                        return Some(v.clone());
-                    }
-                }
-            },
-            None => (),
-        };
-
-        return None;
-    }
 }
 
 impl Display for RuleGroup {
