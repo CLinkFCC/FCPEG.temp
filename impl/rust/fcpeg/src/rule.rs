@@ -36,7 +36,7 @@ impl RuleMap {
     pub fn get_from_root_fcpeg_file_man(file_alias_name: &String, block_map: &mut BlockMap) -> BlockParseResult<RuleMap> {
         let main_block = match block_map.get("Main") {
             Some(v) => v,
-            None => return Err(BlockParseError::MainBlockNotFound()),
+            None => return Err(BlockParseError::MainBlockNotFound {}),
         };
 
         let mut has_start_cmd = false;
@@ -49,12 +49,12 @@ impl RuleMap {
         // define ブロックがあればエラー
         for each_cmd in &main_block.cmds {
             match each_cmd {
-                BlockCommand::Define(_line, _rule) => {
-                    return Err(BlockParseError::RuleInMainBlock());
+                BlockCommand::Define { pos, rule: _ } => {
+                    return Err(BlockParseError::RuleInMainBlock { pos: pos.clone() });
                 },
-                BlockCommand::Use(line, file_alias_name, block_name, block_alias_name) => {
+                BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
                     if block_alias_map.contains_key(&block_alias_name.clone()) {
-                        return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.clone()));
+                        return Err(BlockParseError::DuplicatedBlockAliasName { pos: pos.clone(), alias_name: block_alias_name.clone() });
                     }
 
                     let rule_id = format!("{}.{}", file_alias_name, block_name);
@@ -67,9 +67,9 @@ impl RuleMap {
         // start コマンドを処理する
         for each_cmd in &main_block.cmds {
             match each_cmd {
-                BlockCommand::Start(_line, file_alias_name, block_name, rule_name) => {
+                BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => {
                     if has_start_cmd {
-                        return Err(BlockParseError::DuplicatedStartCmd());
+                        return Err(BlockParseError::DuplicatedStartCmd { pos: pos.clone() });
                     }
 
                     has_start_cmd = true;
@@ -85,7 +85,7 @@ impl RuleMap {
         }
 
         if !has_start_cmd {
-            return Err(BlockParseError::NoStartCmdInMainBlock());
+            return Err(BlockParseError::NoStartCmdInMainBlock {});
         }
 
         let mut rule_map = RuleMap::new(start_rule_id);
@@ -105,10 +105,10 @@ impl RuleMap {
             // start コマンドを排除しながら use コマンドを処理する
             for each_cmd in &each_block.cmds {
                 match each_cmd {
-                    BlockCommand::Start(_line, _file_alias_name, _block_name, _rule_name) => return Err(BlockParseError::StartCmdOutsideMainBlock()),
-                    BlockCommand::Use(line, file_alias_name, block_name, block_alias_name) => {
+                    BlockCommand::Start { pos, file_alias_name: _, block_name: _, rule_name: _ } => return Err(BlockParseError::StartCmdOutsideMainBlock { pos: pos.clone() }),
+                    BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
                         if block_alias_map.contains_key(&block_alias_name.clone()) {
-                            return Err(BlockParseError::DuplicatedBlockAliasName(line.clone(), block_alias_name.clone()));
+                            return Err(BlockParseError::DuplicatedBlockAliasName { pos: pos.clone(), alias_name: block_alias_name.clone() });
                         }
 
                         let rule_id = format!("{}.{}", file_alias_name.clone(), block_name.clone());
@@ -121,7 +121,7 @@ impl RuleMap {
             // define コマンドを処理する
             for each_cmd in &each_block.cmds {
                 match each_cmd {
-                    BlockCommand::Define(_line, rule) => {
+                    BlockCommand::Define { pos: _, rule } => {
                         let mut each_rule = rule.clone();
                         each_rule.name = format!("{}.{}.{}", file_alias_name, each_block.name, each_rule.name);
                         self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &each_rule.generics_arg_ids, &block_alias_map)?;
@@ -169,7 +169,7 @@ impl RuleMap {
                             expr.value = format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name);
                         } else {
                             // ブロック名がエイリアスでない場合
-                            return Err(BlockParseError::BlockAliasNotFound(expr.line, block_name.to_string()));
+                            return Err(BlockParseError::BlockAliasNotFound { pos: expr.pos.clone(), alias_name: block_name.to_string() });
                         }
                     },
                     3 => {
@@ -179,7 +179,7 @@ impl RuleMap {
 
                         expr.value = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
                     },
-                    _ => return Err(BlockParseError::InternalErr(format!("invalid id expression '{}'", expr.value))),
+                    _ => return Err(BlockParseError::InternalErr { msg: format!("invalid id expression '{}'", expr.value) }),
                 }
             },
             _ => (),
@@ -482,7 +482,7 @@ impl Display for RuleExpressionKind {
 
 #[derive(Clone)]
 pub struct RuleExpression {
-    pub line: usize,
+    pub pos: CharacterPosition,
     pub kind: RuleExpressionKind,
     pub value: String,
     pub ast_reflection_style: ASTReflectionStyle,
@@ -491,9 +491,9 @@ pub struct RuleExpression {
 }
 
 impl RuleExpression {
-    pub fn new(line: usize, kind: RuleExpressionKind, value: String) -> RuleExpression {
+    pub fn new(pos: CharacterPosition, kind: RuleExpressionKind, value: String) -> RuleExpression {
         return RuleExpression {
-            line: line,
+            pos: pos,
             kind: kind,
             value: value,
             ast_reflection_style: ASTReflectionStyle::NoReflection,

@@ -8,18 +8,40 @@ use crate::rule::*;
 
 #[derive(Clone, PartialEq)]
 pub struct CharacterPosition {
+    pub file_path: Option<String>,
     pub index: usize,
     pub line: usize,
     pub column: usize,
 }
 
 impl CharacterPosition {
-    pub fn new(index: usize, line: usize, column: usize) -> CharacterPosition {
+    pub fn new(file_path: Option<String>, index: usize, line: usize, column: usize) -> CharacterPosition {
         return CharacterPosition {
+            file_path: file_path,
             index: index,
             line: line,
             column: column,
         };
+    }
+
+    pub fn get_empty() -> CharacterPosition {
+        return CharacterPosition {
+            file_path: None,
+            index: 0,
+            line: 0,
+            column: 0,
+        };
+    }
+}
+
+impl Display for CharacterPosition {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let file_path_text = match self.file_path.clone() {
+            Some(path) => format!("{}:", path),
+            None => String::new(),
+        };
+
+        return write!(f, "{}{}:{}", file_path_text, self.line + 1, self.column + 1);
     }
 }
 
@@ -62,9 +84,9 @@ impl ASTReflectionStyle {
 
 impl Display for ASTReflectionStyle {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let s = match &self {
+        let s = match self {
             ASTReflectionStyle::Reflection(elem_name) => format!("#{}", elem_name.clone()),
-            ASTReflectionStyle::NoReflection => "".to_string(),
+            ASTReflectionStyle::NoReflection => String::new(),
             ASTReflectionStyle::Expansion => "|".to_string(),
         };
 
@@ -90,14 +112,14 @@ impl SyntaxNodeElement {
     pub fn get_node(&self) -> SyntaxParseResult<&SyntaxNode> {
         return match self {
             SyntaxNodeElement::Node(node) => Ok(node),
-            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("element not node list".to_string())),
+            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "element not node list".to_string() }),
         };
     }
 
     pub fn get_leaf(&self) -> SyntaxParseResult<&SyntaxLeaf> {
         return match self {
             SyntaxNodeElement::Leaf(leaf) => Ok(leaf),
-            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("element not leaf".to_string())),
+            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "element not leaf".to_string() }),
         };
     }
 
@@ -232,6 +254,10 @@ impl SyntaxNode {
         return nodes;
     }
 
+    pub fn get_position(&self) -> SyntaxParseResult<CharacterPosition> {
+        return Ok(self.get_leaf_child_at(0)?.pos.clone());
+    }
+
     pub fn get_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxNodeElement> {
         let mut elem_i = 0;
         let mut reflectable_elem_i = 0;
@@ -241,7 +267,7 @@ impl SyntaxNode {
                 if reflectable_elem_i == index {
                     return match self.sub_elems.get(elem_i) {
                         Some(v) => Ok(&v),
-                        None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("invalid operation".to_string())),
+                        None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
                     };
                 }
 
@@ -251,7 +277,7 @@ impl SyntaxNode {
             elem_i += 1;
         }
 
-        return Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("{}th reflectable element not matched", index + 1)));
+        return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("{}th reflectable element not matched", index + 1) });
     }
 
     pub fn get_node_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxNode> {
@@ -379,19 +405,19 @@ impl Block {
 
 #[derive(Clone)]
 pub enum BlockCommand {
-    Comment(usize, String),
-    Define(usize, Rule),
-    Start(usize, String, String, String),
-    Use(usize, String, String, String),
+    Comment { pos: CharacterPosition, value: String },
+    Define { pos: CharacterPosition, rule: Rule },
+    Start { pos: CharacterPosition, file_alias_name: String, block_name: String, rule_name: String },
+    Use { pos: CharacterPosition, file_alias_name: String, block_name: String, block_alias_name: String },
 }
 
 impl Display for BlockCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            BlockCommand::Comment(line, value) => return write!(f, "{}| %{},", line, value),
-            BlockCommand::Define(line, rule) => return write!(f, "{}| rule {}", line, rule),
-            BlockCommand::Start(line, file_alias_name, block_name, rule_name) => return write!(f, "{}| start rule '{}.{}.{}'", line, file_alias_name, block_name, rule_name),
-            BlockCommand::Use(line, file_alias_name, block_name, block_alias_name) => return write!(f, "{}| use block '{}.{}' as '{}'", line, file_alias_name, block_name, block_alias_name),
+            BlockCommand::Comment { pos, value } => return write!(f, "{}| %{},", pos.line, value),
+            BlockCommand::Define { pos, rule } => return write!(f, "{}| rule {}", pos.line, rule),
+            BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => return write!(f, "{}| start rule '{}.{}.{}'", pos.line, file_alias_name, block_name, rule_name),
+            BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => return write!(f, "{}| use block '{}.{}' as '{}'", pos.line, file_alias_name, block_name, block_alias_name),
         }
     }
 }

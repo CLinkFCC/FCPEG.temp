@@ -12,33 +12,33 @@ use rustnutlib::console::*;
 pub type SyntaxParseResult<T> = Result<T, SyntaxParseError>;
 
 pub enum SyntaxParseError {
-    Unknown(),
-    BlockParseErr(BlockParseError),
-    InternalErr(String),
-    InvalidCharClassFormat(String),
-    InvalidGenericsArgumentLength(Vec<String>),
-    InvalidSyntaxTreeStructure(String),
-    NoSucceededRule(String, usize, Vec<(usize, String)>),
-    TooDeepRecursion(usize),
-    TooLongRepetition(usize),
-    UnknownGenericsArgumentID(String),
-    UnknownRuleID(String),
+    Unknown {},
+    BlockParseErr { err: BlockParseError },
+    InternalErr { msg: String },
+    InvalidCharClassFormat { value: String },
+    InvalidGenericsArgumentLength { arg_ids: Vec<String> },
+    InvalidSyntaxTreeStructure { cause: String },
+    NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(usize, String)> },
+    TooDeepRecursion { max_recur_count: usize },
+    TooLongRepetition { max_loop_count: usize },
+    UnknownGenericsArgumentID { arg_id: String },
+    UnknownRuleID { rule_id: String },
 }
 
 impl ConsoleLogger for SyntaxParseError {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            SyntaxParseError::Unknown() => log!(Error, "unknown error"),
-            SyntaxParseError::BlockParseErr(err) => err.get_log(),
-            SyntaxParseError::InternalErr(err_msg) => log!(Error, &format!("internal error: {}", err_msg)),
-            SyntaxParseError::InvalidCharClassFormat(value) => log!(Error, &format!("invalid character class format '{}'", value)),
-            SyntaxParseError::InvalidGenericsArgumentLength(arg_ids) => log!(Error, &format!("invalid generics argument length ({:?})", arg_ids)),
-            SyntaxParseError::InvalidSyntaxTreeStructure(cause) => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
-            SyntaxParseError::NoSucceededRule(rule_id, src_i, rule_stack) => log!(Error, &format!("no succeeded rule '{}' at {} in the source", rule_id, src_i + 1), format!("rule stack: {:?}", rule_stack)),
-            SyntaxParseError::TooDeepRecursion(max_recur_count) => log!(Error, &format!("too deep recursion over {}", max_recur_count)),
-            SyntaxParseError::TooLongRepetition(max_loop_count) => log!(Error, &format!("too long repetition over {}", max_loop_count)),
-            SyntaxParseError::UnknownGenericsArgumentID(arg_id) => log!(Error, &format!("unknown generics argument id '{}'", arg_id)),
-            SyntaxParseError::UnknownRuleID(rule_id) => log!(Error, &format!("unknown rule id '{}'", rule_id)),
+            SyntaxParseError::Unknown {} => log!(Error, "unknown error"),
+            SyntaxParseError::BlockParseErr { err } => err.get_log(),
+            SyntaxParseError::InternalErr { msg } => log!(Error, &format!("internal error: {}", msg)),
+            SyntaxParseError::InvalidCharClassFormat { value } => log!(Error, &format!("invalid character class format '{}'", value)),
+            SyntaxParseError::InvalidGenericsArgumentLength { arg_ids } => log!(Error, &format!("invalid generics argument length ({:?})", arg_ids)),
+            SyntaxParseError::InvalidSyntaxTreeStructure { cause } => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
+            SyntaxParseError::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, &format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack: {:?}", rule_stack)),
+            SyntaxParseError::TooDeepRecursion { max_recur_count } => log!(Error, &format!("too deep recursion over {}", max_recur_count)),
+            SyntaxParseError::TooLongRepetition { max_loop_count } => log!(Error, &format!("too long repetition over {}", max_loop_count)),
+            SyntaxParseError::UnknownGenericsArgumentID { arg_id } => log!(Error, &format!("unknown generics argument id '{}'", arg_id)),
+            SyntaxParseError::UnknownRuleID { rule_id } => log!(Error, &format!("unknown rule id '{}'", rule_id)),
         };
     }
 }
@@ -48,6 +48,7 @@ pub struct SyntaxParser {
     src_i: usize,
     src_line: usize,
     src_latest_line_i: usize,
+    src_path: String,
     src_content: String,
     recursion_count: usize,
     max_recursion_count: usize,
@@ -63,6 +64,7 @@ impl SyntaxParser {
             src_i: 0,
             src_line: 0,
             src_latest_line_i: 0,
+            src_path: String::new(),
             src_content: String::new(),
             recursion_count: 1,
             max_recursion_count: 65536,
@@ -72,7 +74,7 @@ impl SyntaxParser {
         });
     }
 
-    pub fn get_syntax_tree(&mut self, src_content: &String) -> SyntaxParseResult<SyntaxTree> {
+    pub fn get_syntax_tree(&mut self, src_path: String, src_content: &String) -> SyntaxParseResult<SyntaxTree> {
         let mut tmp_src_content = src_content.clone();
 
         // todo: 高速化: replace() と比べてどちらが速いか検証する
@@ -91,6 +93,7 @@ impl SyntaxParser {
 
         // フィールドを初期化
         self.src_i = 0;
+        self.src_path = src_path;
         self.src_content = tmp_src_content;
         self.recursion_count = 1;
 
@@ -104,14 +107,14 @@ impl SyntaxParser {
 
         let mut root_node = match self.is_rule_successful(&HashMap::new(), &start_rule_id)? {
             Some(v) => v,
-            None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i, self.rule_stack.clone())),
+            None => return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position(), rule_stack: self.rule_stack.clone() }),
         };
 
         // ルートは常に Reflectable
         root_node.set_ast_reflection(ASTReflectionStyle::Reflection(start_rule_id.clone()));
 
         if self.src_i < self.src_content.chars().count() {
-            return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i, self.rule_stack.clone()));
+            return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position(), rule_stack: self.rule_stack.clone() });
         }
 
         self.recursion_count -= 1;
@@ -121,7 +124,7 @@ impl SyntaxParser {
     fn is_rule_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, rule_id: &String) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
         let rule = match self.rule_map.get_rule(rule_id) {
             Some(v) => v.clone(),
-            None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
+            None => return Err(SyntaxParseError::UnknownRuleID { rule_id: rule_id.clone() }),
         };
 
         self.rule_stack.push((self.src_i, rule_id.clone()));
@@ -200,7 +203,7 @@ impl SyntaxParser {
         };
 
         if max_count != -1 && min_count as i32 > max_count {
-            return Err(SyntaxParseError::InternalErr(format!("invalid loop count {{{},{}}}", min_count, max_count)));
+            return Err(SyntaxParseError::InternalErr { msg: format!("invalid loop count {{{},{}}}", min_count, max_count) });
         }
 
         let mut children = Vec::<SyntaxNodeElement>::new();
@@ -208,7 +211,7 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.max_loop_count as i32 {
-                return Err(SyntaxParseError::TooLongRepetition(self.max_loop_count as usize));
+                return Err(SyntaxParseError::TooLongRepetition { max_loop_count: self.max_loop_count as usize });
             }
 
             match self.is_each_choice_matched(generics_args, group)? {
@@ -435,7 +438,7 @@ impl SyntaxParser {
         let (min_count, max_count) = expr.loop_count.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
-            return Err(SyntaxParseError::InternalErr(format!("invalid loop count {{{},{}}}", min_count, max_count)));
+            return Err(SyntaxParseError::InternalErr { msg: format!("invalid loop count {{{},{}}}", min_count, max_count) });
         }
 
         let mut children = Vec::<SyntaxNodeElement>::new();
@@ -443,7 +446,7 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.max_loop_count {
-                return Err(SyntaxParseError::TooLongRepetition(self.max_loop_count as usize));
+                return Err(SyntaxParseError::TooLongRepetition { max_loop_count: self.max_loop_count as usize });
             }
 
             match self.is_each_expr_matched(generics_args, expr)? {
@@ -495,7 +498,7 @@ impl SyntaxParser {
                     None => {
                         let pattern = match Regex::new(&expr.value.clone()) {
                             Ok(v) => v,
-                            Err(_) => return Err(SyntaxParseError::InvalidCharClassFormat(expr.to_string())),
+                            Err(_) => return Err(SyntaxParseError::InvalidCharClassFormat { value: expr.to_string() }),
                         };
 
                         self.regex_map.insert(expr.value.clone(), pattern);
@@ -520,17 +523,17 @@ impl SyntaxParser {
                 let mut new_args = HashMap::<String, Box::<RuleGroup>>::new();
                 let new_arg_ids = match self.rule_map.get_rule(rule_id) {
                     Some(rule) => &rule.generics_arg_ids,
-                    None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
+                    None => return Err(SyntaxParseError::UnknownRuleID { rule_id: rule_id.clone() }),
                 };
 
                 if args.len() != new_arg_ids.len() {
-                    return Err(SyntaxParseError::InvalidGenericsArgumentLength(new_arg_ids.clone()));
+                    return Err(SyntaxParseError::InvalidGenericsArgumentLength { arg_ids: new_arg_ids.clone() });
                 }
 
                 for i in 0..args.len() {
                     let new_arg_id = match new_arg_ids.get(i) {
                         Some(v) => v,
-                        None => return Err(SyntaxParseError::InternalErr("invalid operation".to_string())),
+                        None => return Err(SyntaxParseError::InternalErr { msg: "invalid operation".to_string() }),
                     };
 
                     let new_arg = args.get(i).unwrap();
@@ -542,14 +545,14 @@ impl SyntaxParser {
             RuleExpressionKind::GenericsArgID => {
                 return match generics_args.get(&expr.value) {
                     Some(v) => self.is_choice_successful(generics_args, &RuleElementOrder::Sequential, v),
-                    None => Err(SyntaxParseError::UnknownGenericsArgumentID(expr.value.clone())),
+                    None => Err(SyntaxParseError::UnknownGenericsArgumentID { arg_id: expr.value.clone() }),
                 };
             },
             RuleExpressionKind::ID => {
                 self.recursion_count += 1;
 
                 if self.max_recursion_count < self.recursion_count {
-                    return Err(SyntaxParseError::TooDeepRecursion(self.max_recursion_count));
+                    return Err(SyntaxParseError::TooDeepRecursion { max_recur_count: self.max_recursion_count });
                 }
 
                 return self.is_rule_expr_matched(generics_args, expr);
@@ -661,6 +664,6 @@ impl SyntaxParser {
     }
 
     fn get_char_position(&self) -> CharacterPosition {
-        return CharacterPosition::new(self.src_i, self.src_line, self.src_i - self.src_latest_line_i);
+        return CharacterPosition::new(Some(self.src_path.clone()), self.src_i, self.src_line, self.src_i - self.src_latest_line_i);
     }
 }

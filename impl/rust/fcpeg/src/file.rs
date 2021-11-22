@@ -9,17 +9,17 @@ use rustnutlib::fileman::*;
 pub type FCPEGFileResult<T> = Result<T, FCPEGFileError>;
 
 pub enum FCPEGFileError {
-    Unknown(),
-    FileErr(FileManError),
-    ConfigFileErr(ConfigFileError),
+    Unknown {},
+    FileError { err: FileManError },
+    ConfigFileError { err: ConfigFileError },
 }
 
 impl ConsoleLogger for FCPEGFileError {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            FCPEGFileError::Unknown() => log!(Error, "unknown"),
-            FCPEGFileError::FileErr(err) => err.get_log_data(),
-            FCPEGFileError::ConfigFileErr(err) => err.get_log(),
+            FCPEGFileError::Unknown {} => log!(Error, "unknown"),
+            FCPEGFileError::FileError { err } => err.get_log_data(),
+            FCPEGFileError::ConfigFileError { err } => err.get_log(),
         };
     }
 }
@@ -59,7 +59,7 @@ pub struct FCPEGFile {
 impl FCPEGFile {
     pub fn load(alias_name: String, file_path: String, filtered_alias_name: &mut Vec<String>) -> FCPEGFileResult<HashMap<String, FCPEGFile>> {
         let file_content = match FileMan::read_all(&file_path) {
-            Err(e) => return Err(FCPEGFileError::FileErr(e)),
+            Err(e) => return Err(FCPEGFileError::FileError { err: e }),
             Ok(v) => v,
         };
 
@@ -67,7 +67,7 @@ impl FCPEGFile {
         let config_file_path = FileMan::rename_ext(&file_path, "cfg");
 
         match config_file.load(config_file_path) {
-            Err(e) => return Err(FCPEGFileError::ConfigFileErr(e)),
+            Err(e) => return Err(FCPEGFileError::ConfigFileError { err: e }),
             Ok(()) => (),
         }
 
@@ -97,6 +97,10 @@ impl FCPEGFile {
 
         files.insert(alias_name.clone(), root_file);
         return Ok(files);
+    }
+
+    pub fn get_file_path(&self) -> String {
+        return self.file_path.clone();
     }
 
     pub fn get_file_content(&self) -> &String {

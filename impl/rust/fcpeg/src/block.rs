@@ -26,7 +26,7 @@ macro_rules! block {
 
 macro_rules! use_block {
     ($block_name:expr) => {
-        BlockCommand::Use(0, "".to_string(), $block_name.to_string(), $block_name.to_string())
+        BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: $block_name.to_string(), block_alias_name: $block_name.to_string() }
     };
 }
 
@@ -45,14 +45,14 @@ macro_rules! rule {
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
             let rule = Rule::new($rule_name.to_string(), vec![], Box::new(root_group));
-            BlockCommand::Define(0, rule)
+            BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule }
         }
     };
 }
 
 macro_rules! start_cmd {
     ($file_alias_name:expr, $block_name:expr, $rule_name:expr) => {
-        BlockCommand::Start(0, $file_alias_name.to_string(), $block_name.to_string(), $rule_name.to_string())
+        BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: $file_alias_name.to_string(), block_name: $block_name.to_string(), rule_name: $rule_name.to_string() }
     };
 }
 
@@ -61,7 +61,7 @@ macro_rules! choice {
         {
             let mut group = RuleGroup::new(RuleGroupKind::Sequence);
             group.sub_elems = vec![$($sub_elem,)*];
-            group.ast_reflection_style = ASTReflectionStyle::Reflection("".to_string());
+            group.ast_reflection_style = ASTReflectionStyle::Reflection(String::new());
 
             for opt in $options {
                 match opt {
@@ -82,11 +82,11 @@ macro_rules! choice {
 macro_rules! expr {
     ($kind:ident, $value:expr $(, $option:expr) *) => {
         {
-            let mut expr = RuleExpression::new(0, RuleExpressionKind::$kind, $value.to_string());
+            let mut expr = RuleExpression::new(CharacterPosition::get_empty(), RuleExpressionKind::$kind, $value.to_string());
 
             let leaf_name = match RuleExpressionKind::$kind {
                 RuleExpressionKind::ID => $value.to_string(),
-                _ => "".to_string(),
+                _ => String::new(),
             };
 
             expr.ast_reflection_style = ASTReflectionStyle::Reflection(leaf_name);
@@ -110,59 +110,58 @@ pub type BlockMap = HashMap<String, Block>;
 
 pub type BlockParseResult<T> = Result<T, BlockParseError>;
 
-#[derive(Debug)]
 pub enum BlockParseError {
     Unknown(),
-    BlockAliasNotFound(usize, String),
-    DuplicatedBlockAliasName(usize, String),
-    DuplicatedBlockName(usize, String),
-    DuplicatedGenericsArgumentID(String),
-    DuplicatedStartCmd(),
-    ExpectedBlockDef(usize),
-    ExpectedToken(usize, String),
-    InternalErr(String),
-    InvalidLoopCount(usize, String),
-    InvalidToken(usize, String),
-    MainBlockNotFound(),
-    NoChoiceOrExpressionContent(usize),
-    NoStartCmdInMainBlock(),
-    RuleHasNoChoice(String),
-    RuleInMainBlock(),
-    StartCmdOutsideMainBlock(),
-    TooBigNumber(usize, String),
-    UnexpectedEOF(usize, String),
-    UnexpectedToken(usize, String, String),
-    UnknownPragmaName(usize, String),
-    UnknownSyntax(usize, String),
-    UnknownToken(usize, String),
+    BlockAliasNotFound { pos: CharacterPosition, alias_name: String },
+    DuplicatedBlockAliasName { pos: CharacterPosition, alias_name: String },
+    DuplicatedBlockName { pos: CharacterPosition, block_name: String },
+    DuplicatedGenericsArgumentName { pos: CharacterPosition, arg_name: String },
+    DuplicatedStartCmd { pos: CharacterPosition },
+    ExpectedBlockDef { pos: CharacterPosition },
+    ExpectedToken { pos: CharacterPosition, expected_str: String },
+    InternalErr { msg: String },
+    InvalidLoopCount { pos: CharacterPosition, value: String },
+    InvalidToken { pos: CharacterPosition, value: String },
+    MainBlockNotFound {},
+    NoChoiceOrExpressionContent { pos: CharacterPosition },
+    NoStartCmdInMainBlock {},
+    RuleHasNoChoice { rule_name: String },
+    RuleInMainBlock { pos: CharacterPosition },
+    StartCmdOutsideMainBlock { pos: CharacterPosition },
+    TooBigNumber { pos: CharacterPosition, number: String },
+    UnexpectedEOF { pos: CharacterPosition, expected_str: String },
+    UnexpectedToken { pos: CharacterPosition, unexpected_token: String, expected_str: String },
+    UnknownPragmaName { pos: CharacterPosition, pragma_name: String },
+    UnknownSyntax { pos: CharacterPosition, target_token: String },
+    UnknownToken { pos: CharacterPosition, unknown_token: String },
 }
 
 impl ConsoleLogger for BlockParseError {
     fn get_log(&self) -> ConsoleLog {
         match self {
             BlockParseError::Unknown() => log!(Error, "unknown error"),
-            BlockParseError::BlockAliasNotFound(line, block_alias_name) => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("line:\t{}", line + 1)),
-            BlockParseError::DuplicatedBlockAliasName(line, block_alias_name) => log!(Error, &format!("duplicated block alias name '{}'", block_alias_name), format!("line:\t{}", line + 1)),
-            BlockParseError::DuplicatedBlockName(line, block_name) => log!(Error, &format!("duplicated block name '{}'", block_name), format!("line:\t{}", line + 1)),
-            BlockParseError::DuplicatedGenericsArgumentID(arg_name) => log!(Error, &format!("duplicated generics argument id '{}'", arg_name)),
-            BlockParseError::DuplicatedStartCmd() => log!(Error, "duplicated start command"),
-            BlockParseError::ExpectedBlockDef(line) => log!(Error, "expected block definition", format!("line:\t{}", line + 1)),
-            BlockParseError::ExpectedToken(line, expected_str) => log!(Error, &format!("expected token {}", expected_str), format!("line:\t{}", line + 1)),
-            BlockParseError::InternalErr(err_name) => log!(Error, &format!("internal error: {}", err_name)),
-            BlockParseError::InvalidLoopCount(line, value) => log!(Error, &format!("invalid loop count: {}", value), format!("line:\t{}", line + 1)),
-            BlockParseError::InvalidToken(line, value) => log!(Error, &format!("invalid token '{}'", value), format!("line:\t{}", line + 1)),
-            BlockParseError::MainBlockNotFound() => log!(Error, "main block not found"),
-            BlockParseError::NoChoiceOrExpressionContent(line) => log!(Error, "no choice or expression content", format!("line:\t{}", line + 1)),
-            BlockParseError::NoStartCmdInMainBlock() => log!(Error, "no start command in main block"),
-            BlockParseError::RuleHasNoChoice(rule_name) => log!(Error, &format!("rule '{}' has no choice", rule_name)),
-            BlockParseError::RuleInMainBlock() => log!(Error, "rule in main block"),
-            BlockParseError::StartCmdOutsideMainBlock() => log!(Error, "start command outside main block"),
-            BlockParseError::TooBigNumber(line, number) => log!(Error, &format!("too big number {}", number), format!("line:\t{}", line + 1)),
-            BlockParseError::UnexpectedEOF(line, expected_str) => log!(Error, &format!("unexpected EOF, expected {}", expected_str), format!("line:\t{}", line + 1)),
-            BlockParseError::UnexpectedToken(line, unexpected_token, expected_str) => log!(Error, &format!("unexpected token '{}', expected {}", unexpected_token, expected_str), format!("line:\t{}", line + 1)),
-            BlockParseError::UnknownPragmaName(line, unknown_pragma_name) => log!(Error, "unknown pragma name", format!("line:\t{}", line + 1), format!("pragma name:\t{}", unknown_pragma_name)),
-            BlockParseError::UnknownSyntax(line, target_token) => log!(Error, "unknown syntax", format!("line: {}", line + 1), format!("target token:\t'{}'", target_token)),
-            BlockParseError::UnknownToken(line, unknown_token) => log!(Error, &format!("unknown token '{}'", unknown_token), format!("line:\t{}", line + 1)),
+            BlockParseError::BlockAliasNotFound { pos, alias_name } => log!(Error, &format!("block alias '{}' not found", alias_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedBlockAliasName { pos, alias_name } => log!(Error, &format!("duplicated block alias name '{}'", alias_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedGenericsArgumentName { pos, arg_name } => log!(Error, &format!("duplicated generics argument id '{}'", arg_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedStartCmd { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
+            BlockParseError::ExpectedBlockDef { pos } => log!(Error, "expected block definition", format!("at:\t{}", pos)),
+            BlockParseError::ExpectedToken { pos, expected_str } => log!(Error, &format!("expected token {}", expected_str), format!("at:\t{}", pos)),
+            BlockParseError::InternalErr { msg } => log!(Error, &format!("internal error: {}", msg)),
+            BlockParseError::InvalidLoopCount { pos, value } => log!(Error, &format!("invalid loop count: {}", value), format!("at:\t{}", pos)),
+            BlockParseError::InvalidToken { pos, value } => log!(Error, &format!("invalid token '{}'", value), format!("at:\t{}", pos)),
+            BlockParseError::MainBlockNotFound {} => log!(Error, "main block not found"),
+            BlockParseError::NoChoiceOrExpressionContent { pos } => log!(Error, "no choice or expression content", format!("at:\t{}", pos)),
+            BlockParseError::NoStartCmdInMainBlock {} => log!(Error, "no start command in main block"),
+            BlockParseError::RuleHasNoChoice { rule_name } => log!(Error, &format!("rule '{}' has no choice", rule_name)),
+            BlockParseError::RuleInMainBlock { pos } => log!(Error, "rule in main block", format!("at:\t{}", pos)),
+            BlockParseError::StartCmdOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
+            BlockParseError::TooBigNumber { pos, number } => log!(Error, &format!("too big number {}", number), format!("at:\t{}", pos)),
+            BlockParseError::UnexpectedEOF { pos, expected_str } => log!(Error, &format!("unexpected EOF, expected {}", expected_str), format!("at:\t{}", pos)),
+            BlockParseError::UnexpectedToken { pos, unexpected_token, expected_str } => log!(Error, &format!("unexpected token '{}', expected {}", unexpected_token, expected_str), format!("at:\t{}", pos)),
+            BlockParseError::UnknownPragmaName { pos, pragma_name } => log!(Error, "unknown pragma name", format!("at:\t{}", pos), format!("pragma name:\t{}", pragma_name)),
+            BlockParseError::UnknownSyntax { pos, target_token } => log!(Error, "unknown syntax", format!("at:\t{}", pos), format!("target token:\t'{}'", target_token)),
+            BlockParseError::UnknownToken { pos, unknown_token } => log!(Error, &format!("unknown token '{}'", unknown_token), format!("at:\t{}", pos)),
         }
     }
 }
@@ -177,7 +176,7 @@ impl BlockParser {
 
         match rule_map.format_block_map(&String::new(), &mut block_map) {
             Ok(()) => (),
-            Err(e) => return Err(SyntaxParseError::BlockParseErr(e)),
+            Err(e) => return Err(SyntaxParseError::BlockParseErr { err: e }),
         };
 
         let mut parser = SyntaxParser::new(rule_map.clone())?;
@@ -185,7 +184,7 @@ impl BlockParser {
         let mut block_maps = HashMap::<String, BlockMap>::new();
 
         for (alias_name, fcpeg_file) in fcpeg_file_map.iter() {
-            let tree = BlockParser::to_syntax_tree(&mut parser, fcpeg_file.get_file_content())?;
+            let tree = BlockParser::to_syntax_tree(&mut parser, fcpeg_file.get_file_path(), fcpeg_file.get_file_content())?;
             block_maps.insert(alias_name.clone(), BlockParser::to_block_map(&tree)?);
         }
 
@@ -198,28 +197,28 @@ impl BlockParser {
                     Some(block) => {
                         for each_cmd in &block.cmds {
                             match each_cmd {
-                                BlockCommand::Start(_, file_alias_name, block_name, rule_name) => {
+                                BlockCommand::Start { pos: _, file_alias_name, block_name, rule_name } => {
                                     start_rule_id = Some(format!("{}.{}.{}", file_alias_name, block_name, rule_name));
                                 },
                                 _ => (),
                             }
                         }
                     },
-                    None => return Err(SyntaxParseError::InternalErr(format!("unknown rule id '{}'", main_block_id))),
+                    None => return Err(SyntaxParseError::InternalErr { msg: format!("unknown rule id '{}'", main_block_id) }),
                 }
             },
-            None => return Err(SyntaxParseError::InternalErr("main file alias not found".to_string())),
+            None => return Err(SyntaxParseError::InternalErr { msg: "main file alias not found".to_string() }),
         }
 
         let mut rule_map = match start_rule_id {
             Some(id) => RuleMap::new(id),
-            None => return Err(SyntaxParseError::InternalErr(format!("start declaration not found"))),
+            None => return Err(SyntaxParseError::InternalErr { msg: format!("start declaration not found") }),
         };
 
         for (file_alias_name, mut each_block_map) in block_maps.iter_mut() {
             match rule_map.format_block_map(&file_alias_name, &mut each_block_map) {
                 Ok(()) => (),
-                Err(e) => return Err(SyntaxParseError::BlockParseErr(e)),
+                Err(e) => return Err(SyntaxParseError::BlockParseErr { err: e }),
             }
         }
 
@@ -227,12 +226,9 @@ impl BlockParser {
     }
 
     // note: ブロックマップとファイルを元に 1 ファイルの FCPEG コードの構文木を取得する
-    fn to_syntax_tree(parser: &mut SyntaxParser, fcpeg_file_content: &String) -> SyntaxParseResult<SyntaxTree> {
-        let tree = parser.get_syntax_tree(fcpeg_file_content)?;
-
-        println!("print {}", fcpeg_file_content);
+    fn to_syntax_tree(parser: &mut SyntaxParser, src_file_path: String, fcpeg_file_content: &String) -> SyntaxParseResult<SyntaxTree> {
+        let tree = parser.get_syntax_tree(src_file_path, fcpeg_file_content)?;
         tree.print(true);
-
         return Ok(tree);
     }
 
@@ -262,7 +258,7 @@ impl BlockParser {
             block_map.insert(block_name.clone(), Block::new(block_name.clone(), cmds));
         }
 
-        block_map.insert("".to_string(), Block::new("Main".to_string(), vec![]));
+        block_map.insert(String::new(), Block::new("Main".to_string(), vec![]));
 
         for (_, each_block) in &block_map {
             each_block.print();
@@ -279,14 +275,14 @@ impl BlockParser {
                 "DefineCmd" => BlockParser::to_define_cmd(cmd_node),
                 "StartCmd" => BlockParser::to_start_cmd(cmd_node),
                 "UseCmd" => BlockParser::to_use_cmd(cmd_node),
-                _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("invalid node name '{}'", node_name))),
+                _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("invalid node name '{}'", node_name) }),
             },
-            _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure("invalid operation".to_string())),
+            _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
         };
     }
 
     fn to_comment_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
-        return Ok(BlockCommand::Comment(0, cmd_node.join_child_leaf_values()));
+        return Ok(BlockCommand::Comment { pos: CharacterPosition::get_empty(), value: cmd_node.join_child_leaf_values() });
     }
 
     fn to_define_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
@@ -299,11 +295,11 @@ impl BlockParser {
 
         let new_choice = match cmd_node.find_first_child_node(vec!["Rule.PureChoice"]) {
             Some(choice_node) => BlockParser::to_rule_choice_elem(choice_node, &generics_args)?,
-            None => return Err(SyntaxParseError::InternalErr("pure choice not found".to_string())),
+            None => return Err(SyntaxParseError::InternalErr { msg: "pure choice not found".to_string() }),
         };
 
         let rule = Rule::new(rule_name, generics_args, Box::new(new_choice));
-        return Ok(BlockCommand::Define(0, rule));
+        return Ok(BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule });
     }
 
     fn to_define_cmd_generics_ids(cmd_node: &SyntaxNode) -> SyntaxParseResult<Vec<String>> {
@@ -316,7 +312,9 @@ impl BlockParser {
                         let new_arg = each_node.join_child_leaf_values();
 
                         if args.contains(&new_arg) {
-                            return Err(SyntaxParseError::BlockParseErr(BlockParseError::DuplicatedGenericsArgumentID(new_arg.clone())));
+                            return Err(SyntaxParseError::BlockParseErr {
+                                err: BlockParseError::DuplicatedGenericsArgumentName { pos: each_node.get_position()?, arg_name: new_arg.clone() },
+                            });
                         }
 
                         args.push(new_arg);
@@ -334,9 +332,9 @@ impl BlockParser {
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
         let cmd = match divided_raw_id.len() {
-            2 => BlockCommand::Start(0, String::new(), divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
-            3 => BlockCommand::Start(0, divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), divided_raw_id.get(2).unwrap().to_string()),
-            _ => return Err(SyntaxParseError::InternalErr("invalid chain ID length on start command".to_string())),
+            2 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), rule_name: divided_raw_id.get(1).unwrap().to_string() },
+            3 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), rule_name: divided_raw_id.get(2).unwrap().to_string() },
+            _ => return Err(SyntaxParseError::InternalErr { msg: "invalid chain ID length on start command".to_string() }),
         };
 
         return Ok(cmd);
@@ -352,9 +350,9 @@ impl BlockParser {
         };
 
         return match divided_raw_id.len() {
-            1 => Ok(BlockCommand::Use(0, "".to_string(), divided_raw_id.get(0).unwrap().to_string(), block_alias_id)),
-            2 => Ok(BlockCommand::Use(0, divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), block_alias_id)),
-            _ => Err(SyntaxParseError::InternalErr("invalid chain ID length on use command".to_string())),
+            1 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
+            2 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
+            _ => Err(SyntaxParseError::InternalErr { msg: "invalid chain ID length on use command".to_string() }),
         };
     }
 
@@ -373,7 +371,7 @@ impl BlockParser {
                     match v.get_leaf_child_at(0)?.value.as_str() {
                         "&" => RuleElementLookaheadKind::Positive,
                         "!" => RuleElementLookaheadKind::Negative,
-                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("unknown lookahead kind"))),
+                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("unknown lookahead kind") }),
                     }
                 },
                 None => RuleElementLookaheadKind::None,
@@ -389,12 +387,16 @@ impl BlockParser {
                                 match min_str.parse::<usize>() {
                                     Ok(v) => {
                                         if v == 0 {
-                                            return Err(SyntaxParseError::BlockParseErr(BlockParseError::InvalidLoopCount(0, "zero specified at minimum count".to_string())));
+                                            return Err(SyntaxParseError::BlockParseErr {
+                                                err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "zero specified at minimum count".to_string() },
+                                            });
                                         }
 
                                         v
                                     },
-                                    Err(_) => return Err(SyntaxParseError::BlockParseErr(BlockParseError::InvalidLoopCount(0, "invalid minimum loop value".to_string()))),
+                                    Err(_) => return Err(SyntaxParseError::BlockParseErr {
+                                        err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "invalid minimum loop value".to_string() },
+                                    }),
                                 }
                             } else {
                                 0usize
@@ -404,7 +406,9 @@ impl BlockParser {
                             let max_num = if max_str != "" {
                                 match max_str.parse::<usize>() {
                                     Ok(v) => Infinitable::Normal(v),
-                                    Err(_) => return Err(SyntaxParseError::BlockParseErr(BlockParseError::InvalidLoopCount(0, "invalid maximum loop value".to_string()))),
+                                    Err(_) => return Err(SyntaxParseError::BlockParseErr {
+                                        err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "invalid maximum loop value".to_string() },
+                                    }),
                                 }
                             } else {
                                 Infinitable::Infinite
@@ -415,7 +419,7 @@ impl BlockParser {
                         SyntaxNodeElement::Leaf(leaf) => {
                             match leaf.value.as_str() {
                                 "?" | "*" | "+" => RuleElementLoopCount::from_symbol(&leaf.value),
-                                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("unknown lookahead kind"))),
+                                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("unknown lookahead kind") }),
                             }
                         }
                     }
@@ -444,7 +448,7 @@ impl BlockParser {
             // Choice または Expr ノード
             let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec!["Choice", "Expr"]) {
                 Some(v) => v,
-                None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("invalid operation".to_string())),
+                None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
             };
 
             match &choice_or_expr_node.ast_reflection_style {
@@ -464,12 +468,12 @@ impl BlockParser {
                             new_expr.ast_reflection_style = ast_reflection_style;
                             RuleElement::Expression(Box::new(new_expr))
                         },
-                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure(format!("invalid node name '{}'", name))),
+                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("invalid node name '{}'", name) }),
                     };
 
                     children.push(new_elem);
                 },
-                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure("invalid operation".to_string())),
+                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
             };
         }
 
@@ -516,11 +520,11 @@ impl BlockParser {
     fn to_rule_expr_elem(expr_node: &SyntaxNode, generics_args: &Vec<String>) -> SyntaxParseResult<RuleExpression> {
         let expr_child_node = expr_node.get_node_child_at(0)?;
 
-        let (kind, value) = match &expr_child_node.ast_reflection_style {
+        let (pos, kind, value) = match &expr_child_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(name) => {
                 match name.as_str() {
-                    "CharClass" => (RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
-                    "ID" => (RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_child_at(0)?)?),
+                    "CharClass" => (expr_child_node.get_position()?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
+                    "ID" => (expr_child_node.get_node_child_at(0)?.get_node_child_at(0)?.get_position()?, RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_child_at(0)?)?),
                     "Generics" => {
                         let args = BlockParser::to_rule_choice_elem(expr_child_node.get_node_child_at(1)?.get_node_child_at(0)?, generics_args)?.extract().sub_elems;
                         let boxed_args = args.iter().map(|e| match e {
@@ -532,19 +536,21 @@ impl BlockParser {
                             },
                         }).collect::<Vec<Box<RuleGroup>>>();
 
+                        let parent_node = expr_child_node.get_node_child_at(0)?.get_node_child_at(0)?;
+                        let pos = parent_node.get_position()?;
                         let generics = RuleExpressionKind::Generics(boxed_args);
-                        let arg_id = expr_child_node.get_node_child_at(0)?.get_node_child_at(0)?.join_child_leaf_values();
-                        (generics, arg_id)
+                        let arg_id = parent_node.join_child_leaf_values();
+                        (pos, generics, arg_id)
                     },
-                    "Str" => (RuleExpressionKind::String, BlockParser::to_string_value(expr_child_node)?),
-                    "Wildcard" => (RuleExpressionKind::Wildcard, ".".to_string()),
-                    _ => return Err(SyntaxParseError::InternalErr(format!("unknown expression name '{}'", name))),
+                    "Str" => (CharacterPosition::get_empty(), RuleExpressionKind::String, BlockParser::to_string_value(expr_child_node)?),
+                    "Wildcard" => (expr_child_node.get_position()?, RuleExpressionKind::Wildcard, ".".to_string()),
+                    _ => return Err(SyntaxParseError::InternalErr { msg: format!("unknown expression name '{}'", name) }),
                 }
             },
-            _ => return Err(SyntaxParseError::InternalErr("invalid operation".to_string())),
+            _ => return Err(SyntaxParseError::InternalErr { msg: "invalid operation".to_string() }),
         };
 
-        let expr = RuleExpression::new(0, kind, value);
+        let expr = RuleExpression::new(pos, kind, value);
         return Ok(expr);
     }
 
@@ -562,7 +568,7 @@ impl BlockParser {
                                 "n" => "\n",
                                 "t" => "\t",
                                 "z" => "\0",
-                                _ => return Err(SyntaxParseError::InternalErr("unknown escape sequence character".to_string())),
+                                _ => return Err(SyntaxParseError::InternalErr { msg: "unknown escape sequence character".to_string() }),
                             };
                         },
                         _ => (),
@@ -1234,12 +1240,12 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Wildcard <- "."#,
+        // code: Wildcard <- ".",
         let wildcard_rule = rule!{
             "Wildcard",
             choice!{
                 vec![],
-                expr!(String, ".", "#"),
+                expr!(String, "."),
             },
         };
 
