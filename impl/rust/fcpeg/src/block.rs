@@ -118,13 +118,14 @@ pub enum BlockParseError {
     DuplicatedGenericsArgumentName { pos: CharacterPosition, arg_name: String },
     DuplicatedRuleName { pos: CharacterPosition, rule_name: String },
     DuplicatedStartCommand { pos: CharacterPosition },
-    ExpectedToken { pos: CharacterPosition, expected_str: String },
     InternalError { msg: String },
+    InvalidID { pos: CharacterPosition, id: String },
     InvalidLoopCount { pos: CharacterPosition },
     MainBlockNotDefined {},
     NoStartCommandInMainBlock {},
     RuleInMainBlock { pos: CharacterPosition },
     StartCommandOutsideMainBlock { pos: CharacterPosition },
+    UnknownEscapeSequenceCharacter { pos: CharacterPosition },
 }
 
 impl ConsoleLogger for BlockParseError {
@@ -137,13 +138,14 @@ impl ConsoleLogger for BlockParseError {
             BlockParseError::DuplicatedGenericsArgumentName { pos, arg_name } => log!(Error, &format!("duplicated generics argument id '{}'", arg_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedRuleName { pos, rule_name } => log!(Error, &format!("duplicated rule name '{}'", rule_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedStartCommand { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
-            BlockParseError::ExpectedToken { pos, expected_str } => log!(Error, &format!("expected token {}", expected_str), format!("at:\t{}", pos)),
             BlockParseError::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
+            BlockParseError::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
             BlockParseError::InvalidLoopCount { pos } => log!(Error, &format!("invalid loop count"), format!("at:\t{}", pos)),
             BlockParseError::MainBlockNotDefined {} => log!(Error, "main block not defined"),
             BlockParseError::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
             BlockParseError::RuleInMainBlock { pos } => log!(Error, "rule in main block", format!("at:\t{}", pos)),
             BlockParseError::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
+            BlockParseError::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
         }
     }
 }
@@ -357,13 +359,16 @@ impl BlockParser {
     }
 
     fn to_start_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
-        let raw_id = BlockParser::to_chain_id(cmd_node.get_node_child_at(0)?)?;
+        let raw_id_node = cmd_node.get_node_child_at(0)?;
+        let raw_id = BlockParser::to_chain_id(&raw_id_node)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
         let cmd = match divided_raw_id.len() {
             2 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), rule_name: divided_raw_id.get(1).unwrap().to_string() },
             3 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), rule_name: divided_raw_id.get(2).unwrap().to_string() },
-            _ => return Err(SyntaxParseError::InternalError { msg: "invalid chain ID length on start command".to_string() }),
+            _ => return Err(SyntaxParseError::BlockParseError {
+                err: BlockParseError::InvalidID { pos: raw_id_node.get_node_child_at(0)?.get_position()?, id: raw_id },
+            }),
         };
 
         return Ok(cmd);
@@ -601,7 +606,9 @@ impl BlockParser {
                                 "n" => "\n",
                                 "t" => "\t",
                                 "z" => "\0",
-                                _ => return Err(SyntaxParseError::InternalError { msg: "unknown escape sequence character".to_string() }),
+                                _ => return Err(SyntaxParseError::BlockParseError {
+                                    err: BlockParseError::UnknownEscapeSequenceCharacter { pos: node.get_position()? },
+                                }),
                             };
                         },
                         _ => (),
