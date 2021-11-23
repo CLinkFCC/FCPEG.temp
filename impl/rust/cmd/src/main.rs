@@ -26,7 +26,7 @@ struct MainCommand {
     subcmd: Subcommand,
 }
 
-/// subcommand of cmd command
+/// subcommands of cmd command
 #[derive(FromArgs, PartialEq)]
 #[argh(subcommand)]
 enum Subcommand {
@@ -46,19 +46,19 @@ struct ParseSubcommand {
     input: String,
 
     /// whether to show help or not
-    #[argh(option, default = "false")]
+    #[argh(switch)]
     man: bool,
 
     /// whether to enable monitoring mode
-    #[argh(option, default = "false")]
+    #[argh(switch)]
     mon: bool,
 
     /// whether to output syntax tree
-    #[argh(option, short = 'o', default = "false")]
+    #[argh(switch, short = 'o')]
     output: bool,
 
     /// whether to output processing time
-    #[argh(option, default = "false")]
+    #[argh(switch, short = 't')]
     time: bool,
 }
 
