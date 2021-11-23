@@ -112,60 +112,38 @@ pub type BlockParseResult<T> = Result<T, BlockParseError>;
 
 pub enum BlockParseError {
     Unknown(),
-    BlockAliasNotFound { pos: CharacterPosition, alias_name: String },
-    DuplicatedBlockAliasName { pos: CharacterPosition, block_alias_name: String },
+    BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
     DuplicatedBlockName { pos: CharacterPosition, block_name: String },
     DuplicatedFileAliasName { file_alias_name: String },
     DuplicatedGenericsArgumentName { pos: CharacterPosition, arg_name: String },
     DuplicatedRuleName { pos: CharacterPosition, rule_name: String },
-    DuplicatedStartCmd { pos: CharacterPosition },
-    ExpectedBlockDef { pos: CharacterPosition },
+    DuplicatedStartCommand { pos: CharacterPosition },
     ExpectedToken { pos: CharacterPosition, expected_str: String },
     InternalError { msg: String },
-    InvalidLoopCount { pos: CharacterPosition, value: String },
-    InvalidToken { pos: CharacterPosition, value: String },
-    MainBlockNotFound {},
-    NoChoiceOrExpressionContent { pos: CharacterPosition },
-    NoStartCmdInMainBlock {},
-    RuleHasNoChoice { rule_name: String },
+    InvalidLoopCount { pos: CharacterPosition },
+    MainBlockNotDefined {},
+    NoStartCommandInMainBlock {},
     RuleInMainBlock { pos: CharacterPosition },
-    StartCmdOutsideMainBlock { pos: CharacterPosition },
-    TooBigNumber { pos: CharacterPosition, number: String },
-    UnexpectedEOF { pos: CharacterPosition, expected_str: String },
-    UnexpectedToken { pos: CharacterPosition, unexpected_token: String, expected_str: String },
-    UnknownPragmaName { pos: CharacterPosition, pragma_name: String },
-    UnknownSyntax { pos: CharacterPosition, target_token: String },
-    UnknownToken { pos: CharacterPosition, unknown_token: String },
+    StartCommandOutsideMainBlock { pos: CharacterPosition },
 }
 
 impl ConsoleLogger for BlockParseError {
     fn get_log(&self) -> ConsoleLog {
         match self {
             BlockParseError::Unknown() => log!(Error, "unknown error"),
-            BlockParseError::BlockAliasNotFound { pos, alias_name } => log!(Error, &format!("block alias '{}' not found", alias_name), format!("at:\t{}", pos)),
-            BlockParseError::DuplicatedBlockAliasName { pos, block_alias_name } => log!(Error, &format!("duplicated block alias name '{}'", block_alias_name), format!("at:\t{}", pos)),
+            BlockParseError::BlockAliasNotFound { pos, block_alias_name } => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedFileAliasName { file_alias_name } => log!(Error, &format!("duplicated file alias name '{}'", file_alias_name)),
             BlockParseError::DuplicatedGenericsArgumentName { pos, arg_name } => log!(Error, &format!("duplicated generics argument id '{}'", arg_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedRuleName { pos, rule_name } => log!(Error, &format!("duplicated rule name '{}'", rule_name), format!("at:\t{}", pos)),
-            BlockParseError::DuplicatedStartCmd { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
-            BlockParseError::ExpectedBlockDef { pos } => log!(Error, "expected block definition", format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedStartCommand { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
             BlockParseError::ExpectedToken { pos, expected_str } => log!(Error, &format!("expected token {}", expected_str), format!("at:\t{}", pos)),
             BlockParseError::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
-            BlockParseError::InvalidLoopCount { pos, value } => log!(Error, &format!("invalid loop count: {}", value), format!("at:\t{}", pos)),
-            BlockParseError::InvalidToken { pos, value } => log!(Error, &format!("invalid token '{}'", value), format!("at:\t{}", pos)),
-            BlockParseError::MainBlockNotFound {} => log!(Error, "main block not found"),
-            BlockParseError::NoChoiceOrExpressionContent { pos } => log!(Error, "no choice or expression content", format!("at:\t{}", pos)),
-            BlockParseError::NoStartCmdInMainBlock {} => log!(Error, "no start command in main block"),
-            BlockParseError::RuleHasNoChoice { rule_name } => log!(Error, &format!("rule '{}' has no choice", rule_name)),
+            BlockParseError::InvalidLoopCount { pos } => log!(Error, &format!("invalid loop count"), format!("at:\t{}", pos)),
+            BlockParseError::MainBlockNotDefined {} => log!(Error, "main block not defined"),
+            BlockParseError::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
             BlockParseError::RuleInMainBlock { pos } => log!(Error, "rule in main block", format!("at:\t{}", pos)),
-            BlockParseError::StartCmdOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
-            BlockParseError::TooBigNumber { pos, number } => log!(Error, &format!("too big number {}", number), format!("at:\t{}", pos)),
-            BlockParseError::UnexpectedEOF { pos, expected_str } => log!(Error, &format!("unexpected EOF, expected {}", expected_str), format!("at:\t{}", pos)),
-            BlockParseError::UnexpectedToken { pos, unexpected_token, expected_str } => log!(Error, &format!("unexpected token '{}', expected {}", unexpected_token, expected_str), format!("at:\t{}", pos)),
-            BlockParseError::UnknownPragmaName { pos, pragma_name } => log!(Error, "unknown pragma name", format!("at:\t{}", pos), format!("pragma name:\t{}", pragma_name)),
-            BlockParseError::UnknownSyntax { pos, target_token } => log!(Error, "unknown syntax", format!("at:\t{}", pos), format!("target token:\t'{}'", target_token)),
-            BlockParseError::UnknownToken { pos, unknown_token } => log!(Error, &format!("unknown token '{}'", unknown_token), format!("at:\t{}", pos)),
+            BlockParseError::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
         }
     }
 }
@@ -208,14 +186,21 @@ impl BlockParser {
                     Some(block) => {
                         for each_cmd in &block.cmds {
                             match each_cmd {
-                                BlockCommand::Start { pos: _, file_alias_name, block_name, rule_name } => {
+                                BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => {
+                                    if start_rule_id.is_some() {
+                                        return Err(SyntaxParseError::BlockParseError {
+                                            err: BlockParseError::DuplicatedStartCommand { pos: pos.clone() },
+                                        });
+                                    }
                                     start_rule_id = Some(format!("{}.{}.{}", file_alias_name, block_name, rule_name));
                                 },
                                 _ => (),
                             }
                         }
                     },
-                    None => return Err(SyntaxParseError::InternalError { msg: format!("unknown rule id '{}'", main_block_id) }),
+                    None => return Err(SyntaxParseError::BlockParseError {
+                        err: BlockParseError::MainBlockNotDefined {},
+                    }),
                 }
             },
             None => return Err(SyntaxParseError::InternalError { msg: "main file alias not found".to_string() }),
@@ -223,7 +208,9 @@ impl BlockParser {
 
         let mut rule_map = match start_rule_id {
             Some(id) => RuleMap::new(id),
-            None => return Err(SyntaxParseError::InternalError { msg: format!("start declaration not found") }),
+            None => return Err(SyntaxParseError::BlockParseError {
+                err: BlockParseError::NoStartCommandInMainBlock {},
+            }),
         };
 
         for (file_alias_name, mut each_block_map) in block_maps.iter_mut() {
@@ -424,36 +411,40 @@ impl BlockParser {
                 Some(v) => {
                     match v.get_child_at(0)? {
                         SyntaxNodeElement::Node(node) => {
-                            let min_str = node.get_leaf_child_at(0)?.value.clone();
-                            let min_num = if min_str != "" {
-                                match min_str.parse::<usize>() {
-                                    Ok(v) => {
-                                        if v == 0 {
-                                            return Err(SyntaxParseError::BlockParseError {
-                                                err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "zero specified at minimum count".to_string() },
-                                            });
-                                        }
+                            let min_num = match node.get_child_at(0)? {
+                                SyntaxNodeElement::Node(min_node) => {
+                                    let min_str = min_node.join_child_leaf_values();
 
-                                        v
-                                    },
-                                    Err(_) => return Err(SyntaxParseError::BlockParseError {
-                                        err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "invalid minimum loop value".to_string() },
-                                    }),
-                                }
-                            } else {
-                                0usize
+                                    match min_str.parse::<usize>() {
+                                        Ok(v) => {
+                                            if v == 0 {
+                                                return Err(SyntaxParseError::BlockParseError {
+                                                    err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty() },
+                                                });
+                                            }
+
+                                            v
+                                        },
+                                        Err(_) => return Err(SyntaxParseError::BlockParseError {
+                                            err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty() },
+                                        }),
+                                    }
+                                },
+                                SyntaxNodeElement::Leaf(_) => 0usize,
                             };
 
-                            let max_str = node.get_leaf_child_at(1)?.value.clone();
-                            let max_num = if max_str != "" {
-                                match max_str.parse::<usize>() {
-                                    Ok(v) => Infinitable::Normal(v),
-                                    Err(_) => return Err(SyntaxParseError::BlockParseError {
-                                        err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "invalid maximum loop value".to_string() },
-                                    }),
-                                }
-                            } else {
-                                Infinitable::Infinite
+                            let max_num = match node.get_child_at(1)? {
+                                SyntaxNodeElement::Node(max_node) => {
+                                    let max_str = max_node.join_child_leaf_values();
+
+                                    match max_str.parse::<usize>() {
+                                        Ok(v) => Infinitable::Normal(v),
+                                        Err(_) => return Err(SyntaxParseError::BlockParseError {
+                                            err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty() },
+                                        }),
+                                    }
+                                },
+                                SyntaxNodeElement::Leaf(_) => Infinitable::Infinite,
                             };
 
                             RuleElementLoopCount::new(min_num, max_num)
@@ -1078,7 +1069,7 @@ impl FCPEGBlock {
                 choice!{
                     vec![":"],
                     choice!{
-                        vec!["##"],
+                        vec![],
                         expr!(ID, "Num", "##"),
                     },
                     choice!{
@@ -1090,7 +1081,7 @@ impl FCPEGBlock {
                 choice!{
                     vec![":"],
                     choice!{
-                        vec!["##"],
+                        vec![],
                         expr!(ID, "Num", "##"),
                     },
                     choice!{

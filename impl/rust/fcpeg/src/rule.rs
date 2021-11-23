@@ -28,68 +28,6 @@ impl RuleMap {
         return self.rule_map.get(rule_id);
     }
 
-    // ここでは規則 ID の存在チェックは行われない
-    pub fn get_from_root_fcpeg_file_man(file_alias_name: &String, block_map: &mut BlockMap) -> BlockParseResult<RuleMap> {
-        let main_block = match block_map.get("Main") {
-            Some(v) => v,
-            None => return Err(BlockParseError::MainBlockNotFound {}),
-        };
-
-        let mut has_start_cmd = false;
-        let mut start_rule_id = String::new();
-
-        // <block_alias_name, block_id>
-        let mut block_alias_map = HashMap::<String, String>::new();
-
-        // メインブロックの use コマンドを処理する
-        // define ブロックがあればエラー
-        for each_cmd in &main_block.cmds {
-            match each_cmd {
-                BlockCommand::Define { pos, rule: _ } => {
-                    return Err(BlockParseError::RuleInMainBlock { pos: pos.clone() });
-                },
-                BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
-                    if block_alias_map.contains_key(&block_alias_name.clone()) {
-                        return Err(BlockParseError::DuplicatedBlockAliasName { pos: pos.clone(), block_alias_name: block_alias_name.clone() });
-                    }
-
-                    let rule_id = format!("{}.{}", file_alias_name, block_name);
-                    block_alias_map.insert(block_alias_name.clone(), rule_id);
-                },
-                _ => (),
-            }
-        }
-
-        // start コマンドを処理する
-        for each_cmd in &main_block.cmds {
-            match each_cmd {
-                BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => {
-                    if has_start_cmd {
-                        return Err(BlockParseError::DuplicatedStartCmd { pos: pos.clone() });
-                    }
-
-                    has_start_cmd = true;
-
-                    if file_alias_name == "" && block_alias_map.contains_key(block_name) {
-                        start_rule_id = format!("{}.{}", block_alias_map.get(block_name).unwrap(), rule_name);
-                    } else {
-                        start_rule_id = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
-                    }
-                },
-                _ => (),
-            }
-        }
-
-        if !has_start_cmd {
-            return Err(BlockParseError::NoStartCmdInMainBlock {});
-        }
-
-        let mut rule_map = RuleMap::new(start_rule_id);
-        rule_map.format_block_map(file_alias_name, block_map)?;
-
-        return Ok(rule_map);
-    }
-
     pub fn format_block_map(&mut self, file_alias_name: &String, block_map: &mut BlockMap) -> BlockParseResult<()> {
         for (block_name, each_block) in block_map {
             if block_name == "Main" {
@@ -101,12 +39,8 @@ impl RuleMap {
             // start コマンドを排除しながら use コマンドを処理する
             for each_cmd in &each_block.cmds {
                 match each_cmd {
-                    BlockCommand::Start { pos, file_alias_name: _, block_name: _, rule_name: _ } => return Err(BlockParseError::StartCmdOutsideMainBlock { pos: pos.clone() }),
-                    BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
-                        if block_alias_map.contains_key(&block_alias_name.clone()) {
-                            return Err(BlockParseError::DuplicatedBlockAliasName { pos: pos.clone(), block_alias_name: block_alias_name.clone() });
-                        }
-
+                    BlockCommand::Start { pos, file_alias_name: _, block_name: _, rule_name: _ } => return Err(BlockParseError::StartCommandOutsideMainBlock { pos: pos.clone() }),
+                    BlockCommand::Use { pos: _, file_alias_name, block_name, block_alias_name } => {
                         let rule_id = format!("{}.{}", file_alias_name.clone(), block_name.clone());
                         block_alias_map.insert(block_alias_name.clone(), rule_id);
                     },
@@ -165,7 +99,7 @@ impl RuleMap {
                             expr.value = format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name);
                         } else {
                             // ブロック名がエイリアスでない場合
-                            return Err(BlockParseError::BlockAliasNotFound { pos: expr.pos.clone(), alias_name: block_name.to_string() });
+                            return Err(BlockParseError::BlockAliasNotFound { pos: expr.pos.clone(), block_alias_name: block_name.to_string() });
                         }
                     },
                     3 => {
@@ -263,14 +197,25 @@ impl Display for Rule {
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
-pub enum Infinitable<T: Clone + PartialEq + PartialOrd> {
+pub enum Infinitable<T: Clone + Display + PartialEq + PartialOrd> {
     Normal(T),
     Infinite,
 }
 
-impl<T: Clone + PartialEq + PartialOrd> Infinitable<T> {
+impl<T: Clone + Display + PartialEq + PartialOrd> Infinitable<T> {
     pub fn is_infinite(&self) -> bool {
         return *self == Infinitable::<T>::Infinite;
+    }
+}
+
+impl<T: Clone + Display + PartialEq + PartialOrd> Display for Infinitable<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let s = match self {
+            Infinitable::Normal(v) => v.to_string(),
+            Infinitable::Infinite => "Infinite".to_string(),
+        };
+
+        return write!(f, "{}", s);
     }
 }
 
