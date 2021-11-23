@@ -20,21 +20,21 @@ fn main() {
 }
 
 /// cmd command
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(FromArgs, PartialEq)]
 struct MainCommand {
     #[argh(subcommand)]
     subcmd: Subcommand,
 }
 
 /// subcommand of cmd command
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(FromArgs, PartialEq)]
 #[argh(subcommand)]
 enum Subcommand {
     Parse(ParseSubcommand),
 }
 
 /// parse subcommand
-#[derive(FromArgs, PartialEq, Debug)]
+#[derive(FromArgs, PartialEq)]
 #[argh(subcommand, name = "parse")]
 struct ParseSubcommand {
     /// file path of fcpeg source

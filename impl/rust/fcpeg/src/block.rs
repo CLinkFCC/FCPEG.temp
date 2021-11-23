@@ -44,7 +44,7 @@ macro_rules! rule {
             root_group.sub_elems = sub_elems;
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
-            let rule = Rule::new($rule_name.to_string(), vec![], Box::new(root_group));
+            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), vec![], Box::new(root_group));
             BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule }
         }
     };
@@ -113,13 +113,15 @@ pub type BlockParseResult<T> = Result<T, BlockParseError>;
 pub enum BlockParseError {
     Unknown(),
     BlockAliasNotFound { pos: CharacterPosition, alias_name: String },
-    DuplicatedBlockAliasName { pos: CharacterPosition, alias_name: String },
+    DuplicatedBlockAliasName { pos: CharacterPosition, block_alias_name: String },
     DuplicatedBlockName { pos: CharacterPosition, block_name: String },
+    DuplicatedFileAliasName { file_alias_name: String },
     DuplicatedGenericsArgumentName { pos: CharacterPosition, arg_name: String },
+    DuplicatedRuleName { pos: CharacterPosition, rule_name: String },
     DuplicatedStartCmd { pos: CharacterPosition },
     ExpectedBlockDef { pos: CharacterPosition },
     ExpectedToken { pos: CharacterPosition, expected_str: String },
-    InternalErr { msg: String },
+    InternalError { msg: String },
     InvalidLoopCount { pos: CharacterPosition, value: String },
     InvalidToken { pos: CharacterPosition, value: String },
     MainBlockNotFound {},
@@ -141,13 +143,15 @@ impl ConsoleLogger for BlockParseError {
         match self {
             BlockParseError::Unknown() => log!(Error, "unknown error"),
             BlockParseError::BlockAliasNotFound { pos, alias_name } => log!(Error, &format!("block alias '{}' not found", alias_name), format!("at:\t{}", pos)),
-            BlockParseError::DuplicatedBlockAliasName { pos, alias_name } => log!(Error, &format!("duplicated block alias name '{}'", alias_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedBlockAliasName { pos, block_alias_name } => log!(Error, &format!("duplicated block alias name '{}'", block_alias_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedFileAliasName { file_alias_name } => log!(Error, &format!("duplicated file alias name '{}'", file_alias_name)),
             BlockParseError::DuplicatedGenericsArgumentName { pos, arg_name } => log!(Error, &format!("duplicated generics argument id '{}'", arg_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedRuleName { pos, rule_name } => log!(Error, &format!("duplicated rule name '{}'", rule_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedStartCmd { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
             BlockParseError::ExpectedBlockDef { pos } => log!(Error, "expected block definition", format!("at:\t{}", pos)),
             BlockParseError::ExpectedToken { pos, expected_str } => log!(Error, &format!("expected token {}", expected_str), format!("at:\t{}", pos)),
-            BlockParseError::InternalErr { msg } => log!(Error, &format!("internal error: {}", msg)),
+            BlockParseError::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
             BlockParseError::InvalidLoopCount { pos, value } => log!(Error, &format!("invalid loop count: {}", value), format!("at:\t{}", pos)),
             BlockParseError::InvalidToken { pos, value } => log!(Error, &format!("invalid token '{}'", value), format!("at:\t{}", pos)),
             BlockParseError::MainBlockNotFound {} => log!(Error, "main block not found"),
@@ -176,16 +180,23 @@ impl BlockParser {
 
         match rule_map.format_block_map(&String::new(), &mut block_map) {
             Ok(()) => (),
-            Err(e) => return Err(SyntaxParseError::BlockParseErr { err: e }),
+            Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
         };
 
         let mut parser = SyntaxParser::new(rule_map.clone())?;
         // note: HashMap<エイリアス名, ブロックマップ>
         let mut block_maps = HashMap::<String, BlockMap>::new();
 
-        for (alias_name, fcpeg_file) in fcpeg_file_map.iter() {
-            let tree = BlockParser::to_syntax_tree(&mut parser, fcpeg_file.get_file_path(), fcpeg_file.get_file_content())?;
-            block_maps.insert(alias_name.clone(), BlockParser::to_block_map(&tree)?);
+        for (_, fcpeg_file) in fcpeg_file_map.iter() {
+            let tree = BlockParser::to_syntax_tree(&mut parser, fcpeg_file.file_path.clone(), &fcpeg_file.file_content)?;
+
+            if block_map.contains_key(&fcpeg_file.alias_name) {
+                return Err(SyntaxParseError::BlockParseError {
+                    err: BlockParseError::DuplicatedFileAliasName { file_alias_name: fcpeg_file.alias_name.clone() },
+                });
+            }
+
+            block_maps.insert(fcpeg_file.alias_name.clone(), BlockParser::to_block_map(&tree)?);
         }
 
         let main_block_id = "Main";
@@ -204,21 +215,21 @@ impl BlockParser {
                             }
                         }
                     },
-                    None => return Err(SyntaxParseError::InternalErr { msg: format!("unknown rule id '{}'", main_block_id) }),
+                    None => return Err(SyntaxParseError::InternalError { msg: format!("unknown rule id '{}'", main_block_id) }),
                 }
             },
-            None => return Err(SyntaxParseError::InternalErr { msg: "main file alias not found".to_string() }),
+            None => return Err(SyntaxParseError::InternalError { msg: "main file alias not found".to_string() }),
         }
 
         let mut rule_map = match start_rule_id {
             Some(id) => RuleMap::new(id),
-            None => return Err(SyntaxParseError::InternalErr { msg: format!("start declaration not found") }),
+            None => return Err(SyntaxParseError::InternalError { msg: format!("start declaration not found") }),
         };
 
         for (file_alias_name, mut each_block_map) in block_maps.iter_mut() {
             match rule_map.format_block_map(&file_alias_name, &mut each_block_map) {
                 Ok(()) => (),
-                Err(e) => return Err(SyntaxParseError::BlockParseErr { err: e }),
+                Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
             }
         }
 
@@ -240,15 +251,44 @@ impl BlockParser {
 
         for each_block_elem in &block_nodes {
             let each_block_node = each_block_elem.get_node()?;
-            let block_name = each_block_node.get_node_child_at(0)?.join_child_leaf_values();
+            let block_name_node = each_block_node.get_node_child_at(0)?;
+            let block_name = block_name_node.join_child_leaf_values();
+
+            if block_map.contains_key(&block_name) {
+                return Err(SyntaxParseError::BlockParseError {
+                    err: BlockParseError::DuplicatedBlockName { pos: block_name_node.get_position()?, block_name: block_name },
+                });
+            }
 
             let mut cmds = Vec::<BlockCommand>::new();
+            let mut rule_names = Vec::<String>::new();
 
             match each_block_node.get_node_child_at(1) {
                 Ok(cmd_elems) => {
                     for each_cmd_elem in &cmd_elems.get_reflectable_children() {
                         let each_cmd_node = each_cmd_elem.get_node()?.get_node_child_at(0)?;
                         let new_cmd = BlockParser::to_block_cmd(each_cmd_node)?;
+
+                        // ルール名の重複チェック
+                        match &new_cmd {
+                            BlockCommand::Define { pos: _, rule } => {
+                                if block_name == "Main" {
+                                    return Err(SyntaxParseError::BlockParseError {
+                                        err: BlockParseError::RuleInMainBlock { pos: rule.pos.clone() },
+                                    });
+                                }
+
+                                if rule_names.contains(&rule.name) {
+                                    return Err(SyntaxParseError::BlockParseError {
+                                        err: BlockParseError::DuplicatedRuleName { pos: rule.pos.clone(), rule_name: rule.name.clone() },
+                                    });
+                                }
+
+                                rule_names.push(rule.name.clone())
+                            },
+                            _ => (),
+                        }
+
                         cmds.push(new_cmd);
                     }
                 },
@@ -286,7 +326,9 @@ impl BlockParser {
     }
 
     fn to_define_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
-        let rule_name = cmd_node.get_node_child_at(0)?.join_child_leaf_values();
+        let rule_name_node = cmd_node.get_node_child_at(0)?;
+        let rule_pos = rule_name_node.get_position()?;
+        let rule_name = rule_name_node.join_child_leaf_values();
 
         let generics_args = match cmd_node.find_first_child_node(vec!["DefineCmdGenericsIDs"]) {
             Some(generics_ids_node) => BlockParser::to_define_cmd_generics_ids(generics_ids_node)?,
@@ -295,10 +337,10 @@ impl BlockParser {
 
         let new_choice = match cmd_node.find_first_child_node(vec!["Rule.PureChoice"]) {
             Some(choice_node) => BlockParser::to_rule_choice_elem(choice_node, &generics_args)?,
-            None => return Err(SyntaxParseError::InternalErr { msg: "pure choice not found".to_string() }),
+            None => return Err(SyntaxParseError::InternalError { msg: "pure choice not found".to_string() }),
         };
 
-        let rule = Rule::new(rule_name, generics_args, Box::new(new_choice));
+        let rule = Rule::new(rule_pos, rule_name, generics_args, Box::new(new_choice));
         return Ok(BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule });
     }
 
@@ -312,7 +354,7 @@ impl BlockParser {
                         let new_arg = each_node.join_child_leaf_values();
 
                         if args.contains(&new_arg) {
-                            return Err(SyntaxParseError::BlockParseErr {
+                            return Err(SyntaxParseError::BlockParseError {
                                 err: BlockParseError::DuplicatedGenericsArgumentName { pos: each_node.get_position()?, arg_name: new_arg.clone() },
                             });
                         }
@@ -334,7 +376,7 @@ impl BlockParser {
         let cmd = match divided_raw_id.len() {
             2 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), rule_name: divided_raw_id.get(1).unwrap().to_string() },
             3 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), rule_name: divided_raw_id.get(2).unwrap().to_string() },
-            _ => return Err(SyntaxParseError::InternalErr { msg: "invalid chain ID length on start command".to_string() }),
+            _ => return Err(SyntaxParseError::InternalError { msg: "invalid chain ID length on start command".to_string() }),
         };
 
         return Ok(cmd);
@@ -352,7 +394,7 @@ impl BlockParser {
         return match divided_raw_id.len() {
             1 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
             2 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
-            _ => Err(SyntaxParseError::InternalErr { msg: "invalid chain ID length on use command".to_string() }),
+            _ => Err(SyntaxParseError::InternalError { msg: "invalid chain ID length on use command".to_string() }),
         };
     }
 
@@ -387,14 +429,14 @@ impl BlockParser {
                                 match min_str.parse::<usize>() {
                                     Ok(v) => {
                                         if v == 0 {
-                                            return Err(SyntaxParseError::BlockParseErr {
+                                            return Err(SyntaxParseError::BlockParseError {
                                                 err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "zero specified at minimum count".to_string() },
                                             });
                                         }
 
                                         v
                                     },
-                                    Err(_) => return Err(SyntaxParseError::BlockParseErr {
+                                    Err(_) => return Err(SyntaxParseError::BlockParseError {
                                         err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "invalid minimum loop value".to_string() },
                                     }),
                                 }
@@ -406,7 +448,7 @@ impl BlockParser {
                             let max_num = if max_str != "" {
                                 match max_str.parse::<usize>() {
                                     Ok(v) => Infinitable::Normal(v),
-                                    Err(_) => return Err(SyntaxParseError::BlockParseErr {
+                                    Err(_) => return Err(SyntaxParseError::BlockParseError {
                                         err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty(), value: "invalid maximum loop value".to_string() },
                                     }),
                                 }
@@ -544,10 +586,10 @@ impl BlockParser {
                     },
                     "Str" => (CharacterPosition::get_empty(), RuleExpressionKind::String, BlockParser::to_string_value(expr_child_node)?),
                     "Wildcard" => (expr_child_node.get_position()?, RuleExpressionKind::Wildcard, ".".to_string()),
-                    _ => return Err(SyntaxParseError::InternalErr { msg: format!("unknown expression name '{}'", name) }),
+                    _ => return Err(SyntaxParseError::InternalError { msg: format!("unknown expression name '{}'", name) }),
                 }
             },
-            _ => return Err(SyntaxParseError::InternalErr { msg: "invalid operation".to_string() }),
+            _ => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
         };
 
         let expr = RuleExpression::new(pos, kind, value);
@@ -568,7 +610,7 @@ impl BlockParser {
                                 "n" => "\n",
                                 "t" => "\t",
                                 "z" => "\0",
-                                _ => return Err(SyntaxParseError::InternalErr { msg: "unknown escape sequence character".to_string() }),
+                                _ => return Err(SyntaxParseError::InternalError { msg: "unknown escape sequence character".to_string() }),
                             };
                         },
                         _ => (),

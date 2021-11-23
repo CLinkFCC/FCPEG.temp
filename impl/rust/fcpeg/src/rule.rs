@@ -23,10 +23,6 @@ impl RuleMap {
         return format!("{}.{}.{}", file_alias_name, block_name, rule_name);
     }
 
-    pub fn insert_rule(&mut self, rule_id: String, rule: Rule) {
-        self.rule_map.insert(rule_id, rule);
-    }
-
     #[inline(always)]
     pub fn get_rule(&mut self, rule_id: &String) -> Option<&Rule> {
         return self.rule_map.get(rule_id);
@@ -54,7 +50,7 @@ impl RuleMap {
                 },
                 BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
                     if block_alias_map.contains_key(&block_alias_name.clone()) {
-                        return Err(BlockParseError::DuplicatedBlockAliasName { pos: pos.clone(), alias_name: block_alias_name.clone() });
+                        return Err(BlockParseError::DuplicatedBlockAliasName { pos: pos.clone(), block_alias_name: block_alias_name.clone() });
                     }
 
                     let rule_id = format!("{}.{}", file_alias_name, block_name);
@@ -108,7 +104,7 @@ impl RuleMap {
                     BlockCommand::Start { pos, file_alias_name: _, block_name: _, rule_name: _ } => return Err(BlockParseError::StartCmdOutsideMainBlock { pos: pos.clone() }),
                     BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
                         if block_alias_map.contains_key(&block_alias_name.clone()) {
-                            return Err(BlockParseError::DuplicatedBlockAliasName { pos: pos.clone(), alias_name: block_alias_name.clone() });
+                            return Err(BlockParseError::DuplicatedBlockAliasName { pos: pos.clone(), block_alias_name: block_alias_name.clone() });
                         }
 
                         let rule_id = format!("{}.{}", file_alias_name.clone(), block_name.clone());
@@ -126,7 +122,7 @@ impl RuleMap {
                         each_rule.name = format!("{}.{}.{}", file_alias_name, each_block.name, each_rule.name);
                         self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &each_rule.generics_arg_ids, &block_alias_map)?;
                         let rule_id = RuleMap::get_rule_id(file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
-                        self.insert_rule(rule_id, each_rule);
+                        self.rule_map.insert(rule_id, each_rule);
                     },
                     _ => (),
                 }
@@ -179,7 +175,7 @@ impl RuleMap {
 
                         expr.value = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
                     },
-                    _ => return Err(BlockParseError::InternalErr { msg: format!("invalid id expression '{}'", expr.value) }),
+                    _ => return Err(BlockParseError::InternalError { msg: format!("invalid id expression '{}'", expr.value) }),
                 }
             },
             _ => (),
@@ -237,14 +233,16 @@ impl Display for RuleElementLookaheadKind {
 
 #[derive(Clone)]
 pub struct Rule {
+    pub pos: CharacterPosition,
     pub name: String,
     pub generics_arg_ids: Vec<String>,
     pub group: Box<RuleGroup>,
 }
 
 impl Rule {
-    pub fn new(name: String, generics_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
+    pub fn new(pos: CharacterPosition, name: String, generics_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
         return Rule {
+            pos: pos,
             name: name,
             generics_arg_ids: generics_arg_ids,
             group: group,

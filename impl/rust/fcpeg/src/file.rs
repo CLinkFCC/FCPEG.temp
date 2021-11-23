@@ -50,9 +50,9 @@ impl FCPEGFileMap {
 
 pub struct FCPEGFile {
     // note: ルートのエイリアス名は空文字
-    alias_name: String,
-    file_path: String,
-    file_content: String,
+    pub alias_name: String,
+    pub file_path: String,
+    pub file_content: String,
     config_file: ConfigFile,
 }
 
@@ -97,13 +97,5 @@ impl FCPEGFile {
 
         files.insert(alias_name.clone(), root_file);
         return Ok(files);
-    }
-
-    pub fn get_file_path(&self) -> String {
-        return self.file_path.clone();
-    }
-
-    pub fn get_file_content(&self) -> &String {
-        return &self.file_content;
     }
 }

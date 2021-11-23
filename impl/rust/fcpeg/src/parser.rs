@@ -13,8 +13,8 @@ pub type SyntaxParseResult<T> = Result<T, SyntaxParseError>;
 
 pub enum SyntaxParseError {
     Unknown {},
-    BlockParseErr { err: BlockParseError },
-    InternalErr { msg: String },
+    BlockParseError { err: BlockParseError },
+    InternalError { msg: String },
     InvalidCharClassFormat { value: String },
     InvalidGenericsArgumentLength { arg_ids: Vec<String> },
     InvalidSyntaxTreeStructure { cause: String },
@@ -29,8 +29,8 @@ impl ConsoleLogger for SyntaxParseError {
     fn get_log(&self) -> ConsoleLog {
         return match self {
             SyntaxParseError::Unknown {} => log!(Error, "unknown error"),
-            SyntaxParseError::BlockParseErr { err } => err.get_log(),
-            SyntaxParseError::InternalErr { msg } => log!(Error, &format!("internal error: {}", msg)),
+            SyntaxParseError::BlockParseError { err } => err.get_log(),
+            SyntaxParseError::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
             SyntaxParseError::InvalidCharClassFormat { value } => log!(Error, &format!("invalid character class format '{}'", value)),
             SyntaxParseError::InvalidGenericsArgumentLength { arg_ids } => log!(Error, &format!("invalid generics argument length ({:?})", arg_ids)),
             SyntaxParseError::InvalidSyntaxTreeStructure { cause } => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
@@ -203,7 +203,7 @@ impl SyntaxParser {
         };
 
         if max_count != -1 && min_count as i32 > max_count {
-            return Err(SyntaxParseError::InternalErr { msg: format!("invalid loop count {{{},{}}}", min_count, max_count) });
+            return Err(SyntaxParseError::InternalError { msg: format!("invalid loop count {{{},{}}}", min_count, max_count) });
         }
 
         let mut children = Vec::<SyntaxNodeElement>::new();
@@ -438,7 +438,7 @@ impl SyntaxParser {
         let (min_count, max_count) = expr.loop_count.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
-            return Err(SyntaxParseError::InternalErr { msg: format!("invalid loop count {{{},{}}}", min_count, max_count) });
+            return Err(SyntaxParseError::InternalError { msg: format!("invalid loop count {{{},{}}}", min_count, max_count) });
         }
 
         let mut children = Vec::<SyntaxNodeElement>::new();
@@ -533,7 +533,7 @@ impl SyntaxParser {
                 for i in 0..args.len() {
                     let new_arg_id = match new_arg_ids.get(i) {
                         Some(v) => v,
-                        None => return Err(SyntaxParseError::InternalErr { msg: "invalid operation".to_string() }),
+                        None => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
                     };
 
                     let new_arg = args.get(i).unwrap();
@@ -664,6 +664,12 @@ impl SyntaxParser {
     }
 
     fn get_char_position(&self) -> CharacterPosition {
-        return CharacterPosition::new(Some(self.src_path.clone()), self.src_i, self.src_line, self.src_i - self.src_latest_line_i);
+        // note: 検査に失敗すると src_i < src_latest_line_i になる; その場合は src_latest_line_i の値を使用する
+        let column = match self.src_i.checked_sub(self.src_latest_line_i) {
+            Some(v) => v,
+            None => self.src_latest_line_i,
+        };
+
+        return CharacterPosition::new(Some(self.src_path.clone()), self.src_i, self.src_line, column);
     }
 }
