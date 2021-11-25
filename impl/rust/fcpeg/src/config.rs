@@ -31,7 +31,7 @@ impl ConsoleLogger for ConfigFileError {
         return match self {
             ConfigFileError::Unknown {} => log!(Error, "unknown"),
             ConfigFileError::DuplicatedPropertyName { prop_name } => log!(Error, "duplicated property name", format!("property name:\t{}", prop_name)),
-            ConfigFileError::FileManError { err } => err.get_log_data(),
+            ConfigFileError::FileManError { err } => err.get_log(),
             ConfigFileError::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
             ConfigFileError::InvalidPropertyValueLength { prop_name } => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
             ConfigFileError::InvalidSyntax { line, msg } => log!(Error, "invalid syntax", format!("{}", msg), format!("line:\t{}", line)),

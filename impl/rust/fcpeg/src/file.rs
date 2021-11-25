@@ -18,7 +18,7 @@ impl ConsoleLogger for FCPEGFileError {
     fn get_log(&self) -> ConsoleLog {
         return match self {
             FCPEGFileError::Unknown {} => log!(Error, "unknown"),
-            FCPEGFileError::FileError { err } => err.get_log_data(),
+            FCPEGFileError::FileError { err } => err.get_log(),
             FCPEGFileError::ConfigFileError { err } => err.get_log(),
         };
     }
