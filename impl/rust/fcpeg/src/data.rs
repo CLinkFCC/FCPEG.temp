@@ -2,7 +2,6 @@ use std::fmt::*;
 use std::io::*;
 use std::io::Write;
 
-use crate::config::*;
 use crate::parser::*;
 use crate::rule::*;
 
@@ -55,20 +54,19 @@ pub enum ASTReflectionStyle {
 }
 
 impl ASTReflectionStyle {
-    pub fn from_config(is_reflectable: bool, elem_name: String) -> ASTReflectionStyle {
-        unsafe {
-            return if is_reflectable {
-                if CONFIG_DATA.reverse_ast_reflection {
-                    ASTReflectionStyle::Reflection(elem_name)
-                } else {
-                    ASTReflectionStyle::NoReflection
-                }
+    // todo: config データの扱いを修正
+    pub fn from_config(reverse_ast_reflection: bool, is_reflectable: bool, elem_name: String) -> ASTReflectionStyle {
+        return if is_reflectable {
+            if reverse_ast_reflection {
+                ASTReflectionStyle::Reflection(elem_name)
             } else {
-                if CONFIG_DATA.reverse_ast_reflection {
-                    ASTReflectionStyle::NoReflection
-                } else{
-                    ASTReflectionStyle::Reflection(elem_name)
-                }
+                ASTReflectionStyle::NoReflection
+            }
+        } else {
+            if reverse_ast_reflection {
+                ASTReflectionStyle::NoReflection
+            } else{
+                ASTReflectionStyle::Reflection(elem_name)
             }
         }
     }

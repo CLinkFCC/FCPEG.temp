@@ -4,14 +4,14 @@ use crate::config::*;
 
 use rustnutlib::*;
 use rustnutlib::console::*;
-use rustnutlib::fileman::*;
+use rustnutlib::file::*;
 
 pub type FCPEGFileResult<T> = Result<T, FCPEGFileError>;
 
 pub enum FCPEGFileError {
     Unknown {},
-    FileError { err: FileManError },
-    ConfigFileError { err: ConfigFileError },
+    FileError { err: FileError },
+    ConfigurationError { err: ConfigurationError },
 }
 
 impl ConsoleLogger for FCPEGFileError {
@@ -19,19 +19,20 @@ impl ConsoleLogger for FCPEGFileError {
         return match self {
             FCPEGFileError::Unknown {} => log!(Error, "unknown"),
             FCPEGFileError::FileError { err } => err.get_log(),
-            FCPEGFileError::ConfigFileError { err } => err.get_log(),
+            FCPEGFileError::ConfigurationError { err } => err.get_log(),
         };
     }
 }
 
 pub struct FCPEGFileMap {
-    file_map: HashMap<String, FCPEGFile>,
+    pub file_map: HashMap<String, FCPEGFile>,
 }
 
 impl FCPEGFileMap {
-    pub fn load(main_file_path: String) -> FCPEGFileResult<FCPEGFileMap> {
+    // todo: config 読んでサブファイル対応
+    pub fn load(fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> FCPEGFileResult<FCPEGFileMap> {
         // note: ルートファイルのエイリアス名は空文字; 除外エイリアスなし
-        let file_map = match FCPEGFile::load(String::new(), main_file_path, &mut vec![]) {
+        let file_map = match FCPEGFile::load(String::new(), fcpeg_file_path, lib_fcpeg_file_map, &mut vec![]) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
@@ -53,26 +54,26 @@ pub struct FCPEGFile {
     pub alias_name: String,
     pub file_path: String,
     pub file_content: String,
-    config_file: ConfigFile,
+    pub config: Configuration,
 }
 
 impl FCPEGFile {
-    pub fn load(alias_name: String, file_path: String, filtered_alias_name: &mut Vec<String>) -> FCPEGFileResult<HashMap<String, FCPEGFile>> {
+    // ret: サブファイルのマップ
+    pub fn load(alias_name: String, file_path: String, lib_fcpeg_file_map: HashMap<String, String>, filtered_alias_name: &mut Vec<String>) -> FCPEGFileResult<HashMap<String, FCPEGFile>> {
         let file_content = match FileMan::read_all(&file_path) {
             Err(e) => return Err(FCPEGFileError::FileError { err: e }),
             Ok(v) => v,
         };
 
-        let mut config_file = ConfigFile::new();
         let config_file_path = FileMan::rename_ext(&file_path, "cfg");
 
-        match config_file.load(config_file_path) {
-            Err(e) => return Err(FCPEGFileError::ConfigFileError { err: e }),
-            Ok(()) => (),
-        }
+        let config = match Configuration::load(&config_file_path) {
+            Ok(v) => v,
+            Err(e) => return Err(FCPEGFileError::ConfigurationError { err: e }),
+        };
 
         if cfg!(release) {
-            config_file.print();
+            config.print();
         }
 
         let mut files = HashMap::<String, FCPEGFile>::new();
@@ -80,8 +81,16 @@ impl FCPEGFile {
         // note: 無限再帰防止; 現在ロード中のエイリアスをロード対象から除外する
         filtered_alias_name.push(alias_name.clone());
 
-        for (sub_alias_name, sub_file_path) in config_file.file_alias_map.clone() {
-            let sub_file = FCPEGFile::load(sub_alias_name, sub_file_path, filtered_alias_name)?;
+        for (alias_name, file_path) in lib_fcpeg_file_map {
+            let sub_file = FCPEGFile::load(alias_name, file_path, HashMap::new(), filtered_alias_name)?;
+
+            for (v1, v2) in sub_file {
+                files.insert(v1, v2);
+            }
+        }
+
+        for (sub_alias_name, sub_file_path) in &config.file_alias_map {
+            let sub_file = FCPEGFile::load(sub_alias_name.clone(), sub_file_path.clone(), HashMap::new(), filtered_alias_name)?;
 
             for (v1, v2) in sub_file {
                 files.insert(v1, v2);
@@ -92,7 +101,7 @@ impl FCPEGFile {
             alias_name: alias_name.clone(),
             file_path: file_path,
             file_content: file_content,
-            config_file: config_file,
+            config: config,
         };
 
         files.insert(alias_name.clone(), root_file);

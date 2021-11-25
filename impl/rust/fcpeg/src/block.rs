@@ -153,7 +153,7 @@ impl ConsoleLogger for BlockParseError {
 pub struct BlockParser {}
 
 impl BlockParser {
-    // note: FileMan から最終的な RuleMap を取得する
+    // note: FileMap から最終的な RuleMap を取得する
     pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> SyntaxParseResult<RuleMap> {
         let mut block_map = FCPEGBlock::get_block_map();
         let mut rule_map = RuleMap::new(".Syntax.FCPEG".to_string());
@@ -477,10 +477,10 @@ impl BlockParser {
                                 ASTReflectionStyle::Reflection(v.value.clone())
                             }
                         },
-                        Err(_) => ASTReflectionStyle::from_config(true, String::new()),
+                        Err(_) => ASTReflectionStyle::from_config(false, true, String::new()),
                     }
                 },
-                None => ASTReflectionStyle::from_config(false, String::new()),
+                None => ASTReflectionStyle::from_config(false, false, String::new()),
             };
 
             // Choice または Expr ノード

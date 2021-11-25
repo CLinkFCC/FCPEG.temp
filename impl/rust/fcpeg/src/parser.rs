@@ -100,7 +100,7 @@ impl SyntaxParser {
         let start_rule_id = self.rule_map.start_rule_id.clone();
 
         if self.src_content.chars().count() == 0 {
-            return Ok(SyntaxTree::from_node_args(vec![], ASTReflectionStyle::from_config(false, String::new())));
+            return Ok(SyntaxTree::from_node_args(vec![], ASTReflectionStyle::Reflection(String::new())));
         }
 
         self.recursion_count += 1;
@@ -144,7 +144,8 @@ impl SyntaxParser {
                 match &ast_reflection_style {
                     ASTReflectionStyle::Reflection(elem_name) => {
                         if *elem_name == String::new() {
-                            ast_reflection_style = ASTReflectionStyle::from_config(true, rule_id.clone())
+                            // todo: 構成ファイルを ASTReflection に反映
+                            ast_reflection_style = ASTReflectionStyle::from_config(false, true, rule_id.clone());
                         }
                     },
                     _ => (),
