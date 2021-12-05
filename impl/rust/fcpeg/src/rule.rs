@@ -1,13 +1,12 @@
 use std::collections::*;
 use std::fmt::*;
-use std::option::*;
 
 use crate::block::*;
 use crate::data::*;
 
 #[derive(Clone)]
 pub struct RuleMap {
-    pub rule_map: HashMap<String, Rule>,
+    pub rule_map: HashMap<String, Box<Rule>>,
     pub start_rule_id: String,
 }
 
@@ -21,11 +20,6 @@ impl RuleMap {
 
     pub fn get_rule_id(file_alias_name: String, block_name: String, rule_name: String) -> String {
         return format!("{}.{}.{}", file_alias_name, block_name, rule_name);
-    }
-
-    #[inline(always)]
-    pub fn get_rule(&mut self, rule_id: &String) -> Option<&Rule> {
-        return self.rule_map.get(rule_id);
     }
 
     pub fn format_block_map(&mut self, file_alias_name: &String, block_map: &mut BlockMap) -> BlockParseResult<()> {
@@ -56,7 +50,7 @@ impl RuleMap {
                         each_rule.name = format!("{}.{}.{}", file_alias_name, each_block.name, each_rule.name);
                         self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &each_rule.generics_arg_ids, &block_alias_map)?;
                         let rule_id = RuleMap::get_rule_id(file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
-                        self.rule_map.insert(rule_id, each_rule);
+                        self.rule_map.insert(rule_id, Box::new(each_rule));
                     },
                     _ => (),
                 }
@@ -93,6 +87,7 @@ impl RuleMap {
                     2 => {
                         let block_name = id_tokens.get(0).unwrap();
                         let rule_name = id_tokens.get(1).unwrap();
+                        println!("a {:?} {}", block_alias_map, rule_name);
 
                         if block_alias_map.contains_key(&block_name.to_string()) {
                             // ブロック名がエイリアスである場合

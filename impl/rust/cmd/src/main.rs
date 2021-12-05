@@ -15,7 +15,7 @@ fn main() {
     let cmd: MainCommand = argh::from_env();
 
     match cmd.subcmd {
-        Subcommand::Parse(subcmd) => proc_parse_subcmd(&subcmd),
+        Subcommand::Parse(subcmd) => spawn(move || proc_parse_subcmd(&subcmd)).join().unwrap(),
     }
 }
 
@@ -34,7 +34,7 @@ enum Subcommand {
 }
 
 /// parse subcommand
-#[derive(FromArgs, PartialEq)]
+#[derive(Clone, FromArgs, PartialEq)]
 #[argh(subcommand, name = "parse")]
 struct ParseSubcommand {
     /// file path of fcpeg source
@@ -112,7 +112,9 @@ fn show_parse_cmd_help(cons: &mut Console) {
 
 fn parse(fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool) -> FCPEGResult<()> {
     let start_count = Instant::now();
-    let mut parser = FCPEGParser::load(fcpeg_file_path, HashMap::new())?;
+    let mut file_alias_map = HashMap::<String, String>::new();
+    file_alias_map.insert("A".to_string(), "src/a.fcpeg".to_string());
+    let mut parser = FCPEGParser::load(fcpeg_file_path, file_alias_map)?;
     let tree = parser.parse(input_file_path.clone())?;
 
     let duration = start_count.elapsed();

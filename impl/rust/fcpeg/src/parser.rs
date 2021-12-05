@@ -18,11 +18,11 @@ pub enum SyntaxParseError {
     InvalidCharClassFormat { value: String },
     InvalidGenericsArgumentLength { arg_ids: Vec<String> },
     InvalidSyntaxTreeStructure { cause: String },
-    NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(usize, String)> },
+    NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Box<Vec<(usize, String)>> },
     TooDeepRecursion { max_recur_count: usize },
     TooLongRepetition { max_loop_count: usize },
     UnknownGenericsArgumentID { arg_id: String },
-    UnknownRuleID { rule_id: String },
+    UnknownRuleID { pos: CharacterPosition, rule_id: String },
 }
 
 impl ConsoleLogger for SyntaxParseError {
@@ -38,13 +38,13 @@ impl ConsoleLogger for SyntaxParseError {
             SyntaxParseError::TooDeepRecursion { max_recur_count } => log!(Error, &format!("too deep recursion over {}", max_recur_count)),
             SyntaxParseError::TooLongRepetition { max_loop_count } => log!(Error, &format!("too long repetition over {}", max_loop_count)),
             SyntaxParseError::UnknownGenericsArgumentID { arg_id } => log!(Error, &format!("unknown generics argument id '{}'", arg_id)),
-            SyntaxParseError::UnknownRuleID { rule_id } => log!(Error, &format!("unknown rule id '{}'", rule_id)),
+            SyntaxParseError::UnknownRuleID { pos, rule_id } => log!(Error, &format!("unknown rule id '{}'", rule_id), &format!("at: {}", pos)),
         };
     }
 }
 
 pub struct SyntaxParser {
-    rule_map: RuleMap,
+    rule_map: Box<RuleMap>,
     src_i: usize,
     src_line: usize,
     src_latest_line_i: usize,
@@ -53,12 +53,12 @@ pub struct SyntaxParser {
     recursion_count: usize,
     max_recursion_count: usize,
     max_loop_count: usize,
-    rule_stack: Vec<(usize, String)>,
-    regex_map: HashMap::<String, Regex>,
+    rule_stack: Box<Vec<(usize, String)>>,
+    regex_map: Box<HashMap::<String, Regex>>,
 }
 
 impl SyntaxParser {
-    pub fn new(rule_map: RuleMap) -> SyntaxParseResult<SyntaxParser> {
+    pub fn new(rule_map: Box<RuleMap>) -> SyntaxParseResult<SyntaxParser> {
         return Ok(SyntaxParser {
             rule_map: rule_map,
             src_i: 0,
@@ -69,13 +69,13 @@ impl SyntaxParser {
             recursion_count: 1,
             max_recursion_count: 65536,
             max_loop_count: 65536,
-            rule_stack: vec![],
-            regex_map: HashMap::new(),
+            rule_stack: Box::new(vec![]),
+            regex_map: Box::new(HashMap::new()),
         });
     }
 
-    pub fn get_syntax_tree(&mut self, src_path: String, src_content: &String) -> SyntaxParseResult<SyntaxTree> {
-        let mut tmp_src_content = src_content.clone();
+    pub fn get_syntax_tree(&mut self, src_path: String, src_content: &Box<String>) -> SyntaxParseResult<SyntaxTree> {
+        let mut tmp_src_content = *src_content.clone();
 
         // todo: 高速化: replace() と比べてどちらが速いか検証する
         // note: 余分な改行コード 0x0d を排除する
@@ -105,7 +105,8 @@ impl SyntaxParser {
 
         self.recursion_count += 1;
 
-        let mut root_node = match self.is_rule_successful(&HashMap::new(), &start_rule_id)? {
+        // todo: CharacterPosition を修正
+        let mut root_node = match self.is_rule_successful(&HashMap::new(), &start_rule_id, &CharacterPosition::get_empty())? {
             Some(v) => v,
             None => return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position(), rule_stack: self.rule_stack.clone() }),
         };
@@ -121,32 +122,30 @@ impl SyntaxParser {
         return Ok(SyntaxTree::from_node(root_node));
     }
 
-    fn is_rule_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, rule_id: &String) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
-        let rule = match self.rule_map.get_rule(rule_id) {
-            Some(v) => v.clone(),
-            None => return Err(SyntaxParseError::UnknownRuleID { rule_id: rule_id.clone() }),
+    fn is_rule_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, rule_id: &String, pos: &CharacterPosition) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
+        let rule_group = match self.rule_map.rule_map.get(rule_id) {
+            Some(rule) => rule.group.clone(),
+            None => return Err(SyntaxParseError::UnknownRuleID { pos: pos.clone(), rule_id: rule_id.clone() }),
         };
 
         self.rule_stack.push((self.src_i, rule_id.clone()));
 
-        return match self.is_choice_successful(generics_args, &rule.group.elem_order, &rule.group)? {
+        return match self.is_choice_successful(generics_args, &rule_group.elem_order, &rule_group)? {
             Some(v) => {
-                let mut ast_reflection_style = match &rule.group.sub_elems.get(0) {
+                let mut ast_reflection_style = match &rule_group.sub_elems.get(0) {
                     Some(v) => {
                         match v {
                             RuleElement::Group(sub_choice) => sub_choice.ast_reflection_style.clone(),
-                            RuleElement::Expression(_) => rule.group.ast_reflection_style.clone(),
+                            RuleElement::Expression(_) => rule_group.ast_reflection_style.clone(),
                         }
                     },
-                    _ => rule.group.ast_reflection_style.clone(),
+                    _ => rule_group.ast_reflection_style.clone(),
                 };
 
                 match &ast_reflection_style {
-                    ASTReflectionStyle::Reflection(elem_name) => {
-                        if *elem_name == String::new() {
-                            // todo: 構成ファイルを ASTReflection に反映
-                            ast_reflection_style = ASTReflectionStyle::from_config(false, true, rule_id.clone());
-                        }
+                    ASTReflectionStyle::Reflection(elem_name) if *elem_name == String::new() => {
+                        // todo: 構成ファイルを ASTReflection に反映
+                        ast_reflection_style = ASTReflectionStyle::from_config(false, true, rule_id.clone());
                     },
                     _ => (),
                 };
@@ -522,9 +521,9 @@ impl SyntaxParser {
                 let rule_id = &expr.value;
 
                 let mut new_args = HashMap::<String, Box::<RuleGroup>>::new();
-                let new_arg_ids = match self.rule_map.get_rule(rule_id) {
+                let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
                     Some(rule) => &rule.generics_arg_ids,
-                    None => return Err(SyntaxParseError::UnknownRuleID { rule_id: rule_id.clone() }),
+                    None => return Err(SyntaxParseError::UnknownRuleID { pos: expr.pos.clone(), rule_id: rule_id.clone() }),
                 };
 
                 if args.len() != new_arg_ids.len() {
@@ -587,7 +586,7 @@ impl SyntaxParser {
     }
 
     fn is_rule_expr_matched(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        match self.is_rule_successful(generics_args, &expr.value)? {
+        match self.is_rule_successful(generics_args, &expr.value, &expr.pos)? {
             Some(node_elem) => {
                 self.recursion_count += 1;
 

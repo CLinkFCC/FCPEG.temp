@@ -94,17 +94,17 @@ impl Display for ASTReflectionStyle {
 
 #[derive(Clone)]
 pub enum SyntaxNodeElement {
-    Node(SyntaxNode),
-    Leaf(SyntaxLeaf),
+    Node(Box<SyntaxNode>),
+    Leaf(Box<SyntaxLeaf>),
 }
 
 impl SyntaxNodeElement {
     pub fn from_node_args(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNodeElement {
-        return SyntaxNodeElement::Node(SyntaxNode::new(sub_elems, ast_reflection_style));
+        return SyntaxNodeElement::Node(Box::new(SyntaxNode::new(sub_elems, ast_reflection_style)));
     }
 
     pub fn from_leaf_args(pos: CharacterPosition, value: String, ast_reflection: ASTReflectionStyle) -> SyntaxNodeElement {
-        return SyntaxNodeElement::Leaf(SyntaxLeaf::new(pos, value, ast_reflection));
+        return SyntaxNodeElement::Leaf(Box::new(SyntaxLeaf::new(pos, value, ast_reflection)));
     }
 
     pub fn get_node(&self) -> SyntaxParseResult<&SyntaxNode> {
@@ -171,7 +171,7 @@ impl SyntaxTree {
 
     pub fn from_node_args(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxTree {
         return SyntaxTree {
-            child: SyntaxNodeElement::Node(SyntaxNode::new(sub_elems, ast_reflection_style)),
+            child: SyntaxNodeElement::Node(Box::new(SyntaxNode::new(sub_elems, ast_reflection_style))),
         };
     }
 
@@ -199,12 +199,12 @@ impl SyntaxNode {
     }
 
     // note: 子要素をフィルタリングする
-    pub fn filter_children(&self, f: fn(&SyntaxNodeElement) -> bool) -> Vec<Box<&SyntaxNodeElement>> {
-        let mut elems = Vec::<Box::<&SyntaxNodeElement>>::new();
+    pub fn filter_children(&self, f: fn(&SyntaxNodeElement) -> bool) -> Vec<&SyntaxNodeElement> {
+        let mut elems = Vec::<&SyntaxNodeElement>::new();
 
         for each_elem in &self.sub_elems {
             if f(each_elem) {
-                elems.push(Box::new(each_elem));
+                elems.push(each_elem);
             }
         }
 
@@ -212,7 +212,7 @@ impl SyntaxNode {
     }
 
     // note: Reflectable な子要素のみを取得する
-    pub fn get_reflectable_children(&self) -> Vec<Box<&SyntaxNodeElement>> {
+    pub fn get_reflectable_children(&self) -> Vec<&SyntaxNodeElement> {
         return self.filter_children(|each_elem| each_elem.is_reflectable());
     }
 

@@ -50,11 +50,9 @@ impl FCPEGParser {
             Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
         };
 
-        if cfg!(release) {
-            println!("--- rule map ---");
-            println!("{}", rule_map);
-            println!("rule map {}", rule_map);
-        }
+        println!("--- rule map ---");
+        println!("{}", rule_map);
+        println!("rule map {}", rule_map);
 
         let syntax_parser = match SyntaxParser::new(rule_map) {
             Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
@@ -70,7 +68,7 @@ impl FCPEGParser {
 
     pub fn parse(&mut self, input_file_path: String) -> FCPEGResult<SyntaxTree> {
         let input_file_content = match FileMan::read_all(&input_file_path) {
-            Ok(v) => v,
+            Ok(v) => Box::new(v),
             Err(e) => return Err(FCPEGError::FCPEGFileError {
                 err: FCPEGFileError::FileError { err: e },
             }),

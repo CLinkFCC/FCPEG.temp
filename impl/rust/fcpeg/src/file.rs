@@ -53,7 +53,7 @@ pub struct FCPEGFile {
     // note: ルートのエイリアス名は空文字
     pub alias_name: String,
     pub file_path: String,
-    pub file_content: String,
+    pub file_content: Box<String>,
     pub config: Configuration,
 }
 
@@ -100,7 +100,7 @@ impl FCPEGFile {
         let root_file = FCPEGFile {
             alias_name: alias_name.clone(),
             file_path: file_path,
-            file_content: file_content,
+            file_content: Box::new(file_content),
             config: config,
         };
 

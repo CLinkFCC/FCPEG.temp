@@ -12,7 +12,7 @@ macro_rules! block_map {
     ($($block_name:expr => $func_name:ident), *,) => {
         {
             let mut block_map = BlockMap::new();
-            $(block_map.insert($block_name.to_string(), FCPEGBlock::$func_name());)*
+            $(block_map.insert($block_name.to_string(), Box::new(FCPEGBlock::$func_name()));)*
             block_map
         }
     };
@@ -40,11 +40,11 @@ macro_rules! rule {
                 }
             )*];
 
-            let mut root_group = RuleGroup::new(RuleGroupKind::Choice);
+            let mut root_group = Box::new(RuleGroup::new(RuleGroupKind::Choice));
             root_group.sub_elems = sub_elems;
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
-            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), vec![], Box::new(root_group));
+            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), vec![], root_group);
             BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule }
         }
     };
@@ -106,7 +106,7 @@ macro_rules! expr {
     };
 }
 
-pub type BlockMap = HashMap<String, Block>;
+pub type BlockMap = HashMap<String, Box<Block>>;
 
 pub type BlockParseResult<T> = Result<T, BlockParseError>;
 
@@ -150,33 +150,36 @@ impl ConsoleLogger for BlockParseError {
     }
 }
 
-pub struct BlockParser {}
+pub struct BlockParser {
+    file_alias_name: String,
+    file_path: String,
+    file_content: Box<String>,
+}
 
 impl BlockParser {
     // note: FileMap から最終的な RuleMap を取得する
-    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> SyntaxParseResult<RuleMap> {
+    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> SyntaxParseResult<Box<RuleMap>> {
         let mut block_map = FCPEGBlock::get_block_map();
-        let mut rule_map = RuleMap::new(".Syntax.FCPEG".to_string());
+        let mut rule_map = Box::new(RuleMap::new(".Syntax.FCPEG".to_string()));
 
         match rule_map.format_block_map(&String::new(), &mut block_map) {
             Ok(()) => (),
             Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
         };
 
-        let mut parser = SyntaxParser::new(rule_map.clone())?;
+        let mut parser = SyntaxParser::new(rule_map)?;
         // note: HashMap<エイリアス名, ブロックマップ>
         let mut block_maps = HashMap::<String, BlockMap>::new();
 
-        for (_, fcpeg_file) in fcpeg_file_map.iter() {
-            let tree = BlockParser::to_syntax_tree(&mut parser, fcpeg_file.file_path.clone(), &fcpeg_file.file_content)?;
+        for (file_alias_name, fcpeg_file) in fcpeg_file_map.iter() {
+            let block_parser = BlockParser {
+                file_alias_name: file_alias_name.clone(),
+                file_path: fcpeg_file.file_path.clone(),
+                file_content: fcpeg_file.file_content.clone(),
+            };
 
-            if block_map.contains_key(&fcpeg_file.alias_name) {
-                return Err(SyntaxParseError::BlockParseError {
-                    err: BlockParseError::DuplicatedFileAliasName { file_alias_name: fcpeg_file.alias_name.clone() },
-                });
-            }
-
-            block_maps.insert(fcpeg_file.alias_name.clone(), BlockParser::to_block_map(&tree)?);
+            let tree = Box::new(block_parser.to_syntax_tree(&mut parser)?);
+            block_maps.insert(fcpeg_file.alias_name.clone(), block_parser.to_block_map(tree)?);
         }
 
         let main_block_id = "Main";
@@ -209,7 +212,7 @@ impl BlockParser {
         }
 
         let mut rule_map = match start_rule_id {
-            Some(id) => RuleMap::new(id),
+            Some(id) => Box::new(RuleMap::new(id)),
             None => return Err(SyntaxParseError::BlockParseError {
                 err: BlockParseError::NoStartCommandInMainBlock {},
             }),
@@ -226,14 +229,14 @@ impl BlockParser {
     }
 
     // note: ブロックマップとファイルを元に 1 ファイルの FCPEG コードの構文木を取得する
-    fn to_syntax_tree(parser: &mut SyntaxParser, src_file_path: String, fcpeg_file_content: &String) -> SyntaxParseResult<SyntaxTree> {
-        let tree = parser.get_syntax_tree(src_file_path, fcpeg_file_content)?;
+    fn to_syntax_tree(&self, parser: &mut SyntaxParser) -> SyntaxParseResult<SyntaxTree> {
+        let tree = parser.get_syntax_tree(self.file_path.clone(), &self.file_content)?;
         tree.print(true);
         return Ok(tree);
     }
 
     // note: FCPEG コードの構文木 → ブロックマップの変換
-    fn to_block_map(tree: &SyntaxTree) -> SyntaxParseResult<BlockMap> {
+    fn to_block_map(&self, tree: Box<SyntaxTree>) -> SyntaxParseResult<BlockMap> {
         let mut block_map = BlockMap::new();
         let root = tree.clone_child();
         let block_nodes = root.get_node()?.get_node_child_at(0)?.get_reflectable_children();
@@ -256,7 +259,7 @@ impl BlockParser {
                 Ok(cmd_elems) => {
                     for each_cmd_elem in &cmd_elems.get_reflectable_children() {
                         let each_cmd_node = each_cmd_elem.get_node()?.get_node_child_at(0)?;
-                        let new_cmd = BlockParser::to_block_cmd(each_cmd_node)?;
+                        let new_cmd = self.to_block_cmd(each_cmd_node)?;
 
                         // ルール名の重複チェック
                         match &new_cmd {
@@ -284,10 +287,10 @@ impl BlockParser {
                 Err(_) => (),
             }
 
-            block_map.insert(block_name.clone(), Block::new(block_name.clone(), cmds));
+            block_map.insert(block_name.clone(), Box::new(Block::new(block_name.clone(), cmds)));
         }
 
-        block_map.insert(String::new(), Block::new("Main".to_string(), vec![]));
+        block_map.insert(String::new(), Box::new(Block::new("Main".to_string(), vec![])));
 
         for (_, each_block) in &block_map {
             each_block.print();
@@ -297,13 +300,13 @@ impl BlockParser {
         return Ok(block_map);
     }
 
-    fn to_block_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
+    fn to_block_cmd(&self, cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
         return match &cmd_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(node_name) => match node_name.as_str() {
                 "CommentCmd" => BlockParser::to_comment_cmd(cmd_node),
                 "DefineCmd" => BlockParser::to_define_cmd(cmd_node),
                 "StartCmd" => BlockParser::to_start_cmd(cmd_node),
-                "UseCmd" => BlockParser::to_use_cmd(cmd_node),
+                "UseCmd" => self.to_use_cmd(cmd_node),
                 _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("invalid node name '{}'", node_name) }),
             },
             _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
@@ -325,11 +328,11 @@ impl BlockParser {
         };
 
         let new_choice = match cmd_node.find_first_child_node(vec!["Rule.PureChoice"]) {
-            Some(choice_node) => BlockParser::to_rule_choice_elem(choice_node, &generics_args)?,
+            Some(choice_node) => Box::new(BlockParser::to_rule_choice_elem(choice_node, &generics_args)?),
             None => return Err(SyntaxParseError::InternalError { msg: "pure choice not found".to_string() }),
         };
 
-        let rule = Rule::new(rule_pos, rule_name, generics_args, Box::new(new_choice));
+        let rule = Rule::new(rule_pos, rule_name, generics_args, new_choice);
         return Ok(BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule });
     }
 
@@ -360,7 +363,7 @@ impl BlockParser {
 
     fn to_start_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
         let raw_id_node = cmd_node.get_node_child_at(0)?;
-        let raw_id = BlockParser::to_chain_id(&raw_id_node)?;
+        let raw_id = BlockParser::to_chain_id(raw_id_node)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
         let cmd = match divided_raw_id.len() {
@@ -374,18 +377,24 @@ impl BlockParser {
         return Ok(cmd);
     }
 
-    fn to_use_cmd(cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
+    fn to_use_cmd(&self, cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
         let raw_id = BlockParser::to_chain_id(cmd_node.get_node_child_at(0)?)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
-        let block_alias_id = match cmd_node.find_first_child_node(vec!["UseCmdBlockAlias"]) {
-            Some(v) => v.get_node_child_at(0)?.join_child_leaf_values(),
-            None => divided_raw_id.join("."),
+        let (file_alias_name, block_alias_id) = match cmd_node.find_first_child_node(vec!["UseCmdBlockAlias"]) {
+            Some(v) => (divided_raw_id.get(0).unwrap().to_string(), v.get_node_child_at(0)?.join_child_leaf_values()),
+            None => {
+                match divided_raw_id.len() {
+                    1 => (self.file_alias_name.clone(), divided_raw_id.get(0).unwrap().to_string()),
+                    2 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
+                    _ => return Err(SyntaxParseError::InternalError { msg: "invalid chain ID length on use command".to_string() }),
+                }
+            }
         };
 
         return match divided_raw_id.len() {
-            1 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
-            2 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
+            1 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: file_alias_name, block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
+            2 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: file_alias_name, block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
             _ => Err(SyntaxParseError::InternalError { msg: "invalid chain ID length on use command".to_string() }),
         };
     }
@@ -493,18 +502,18 @@ impl BlockParser {
                 ASTReflectionStyle::Reflection(name) => {
                     let new_elem = match name.as_str() {
                         "Choice" => {
-                            let mut new_choice = BlockParser::to_rule_choice_elem(choice_or_expr_node.get_node_child_at(0)?, generics_args)?;
+                            let mut new_choice = Box::new(BlockParser::to_rule_choice_elem(choice_or_expr_node.get_node_child_at(0)?, generics_args)?);
                             new_choice.lookahead_kind = lookahead_kind;
                             new_choice.loop_count = loop_count;
                             new_choice.ast_reflection_style = ast_reflection_style;
-                            RuleElement::Group(Box::new(new_choice))
+                            RuleElement::Group(new_choice)
                         },
                         "Expr" => {
-                            let mut new_expr = BlockParser::to_rule_expr_elem(choice_or_expr_node, generics_args)?;
+                            let mut new_expr = Box::new(BlockParser::to_rule_expr_elem(choice_or_expr_node, generics_args)?);
                             new_expr.lookahead_kind = lookahead_kind;
                             new_expr.loop_count = loop_count;
                             new_expr.ast_reflection_style = ast_reflection_style;
-                            RuleElement::Expression(Box::new(new_expr))
+                            RuleElement::Expression(new_expr)
                         },
                         _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("invalid node name '{}'", name) }),
                     };
@@ -515,9 +524,9 @@ impl BlockParser {
             };
         }
 
-        let mut seq = RuleGroup::new(RuleGroupKind::Sequence);
+        let mut seq = Box::new(RuleGroup::new(RuleGroupKind::Sequence));
         seq.sub_elems = children;
-        return Ok(RuleElement::Group(Box::new(seq)));
+        return Ok(RuleElement::Group(seq));
     }
 
     // note: Rule.PureChoice ノードの解析
@@ -527,9 +536,9 @@ impl BlockParser {
 
         // Seq ノードをループ
         for seq_elem in &choice_node.get_reflectable_children() {
-            match &seq_elem.as_ref() {
+            match &seq_elem {
                 SyntaxNodeElement::Node(node) => {
-                    match &seq_elem.as_ref().get_ast_reflection() {
+                    match &seq_elem.get_ast_reflection() {
                         ASTReflectionStyle::Reflection(name) => if name == "Seq" {
                             let new_child = BlockParser::to_seq_elem(node, generics_args)?;
                             children.push(new_child);
@@ -546,11 +555,11 @@ impl BlockParser {
             }
         }
 
-        let mut group = RuleGroup::new(group_kind.clone());
+        let mut group = Box::new(RuleGroup::new(group_kind.clone()));
         group.sub_elems = children;
 
         let mut tmp_root_group = RuleGroup::new(RuleGroupKind::Sequence);
-        tmp_root_group.sub_elems = vec![RuleElement::Group(Box::new(group))];
+        tmp_root_group.sub_elems = vec![RuleElement::Group(group)];
 
         return Ok(tmp_root_group);
     }
@@ -568,9 +577,9 @@ impl BlockParser {
                         let boxed_args = args.iter().map(|e| match e {
                             RuleElement::Group(group) => group.clone(),
                             RuleElement::Expression(_) => {
-                                let mut new_group = RuleGroup::new(RuleGroupKind::Choice);
+                                let mut new_group = Box::new(RuleGroup::new(RuleGroupKind::Choice));
                                 new_group.sub_elems = vec![e.clone()];
-                                Box::new(new_group)
+                                new_group
                             },
                         }).collect::<Vec<Box<RuleGroup>>>();
 
