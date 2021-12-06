@@ -239,7 +239,10 @@ impl BlockParser {
     fn to_block_map(&self, tree: Box<SyntaxTree>) -> SyntaxParseResult<BlockMap> {
         let mut block_map = BlockMap::new();
         let root = tree.clone_child();
-        let block_nodes = root.get_node()?.get_node_child_at(0)?.get_reflectable_children();
+        let block_nodes = match root.get_node()?.get_node_child_at(0) {
+            Ok(v) => v.get_reflectable_children(),
+            Err(_) => return Ok(block_map),
+        };
 
         for each_block_elem in &block_nodes {
             let each_block_node = each_block_elem.get_node()?;
@@ -342,7 +345,7 @@ impl BlockParser {
         for each_elem in &cmd_node.sub_elems {
             match each_elem {
                 SyntaxNodeElement::Node(each_node) => {
-                    if each_node.ast_reflection_style == ASTReflectionStyle::Reflection("Misc.SingleID".to_string()) {
+                    if each_node.ast_reflection_style == ASTReflectionStyle::Reflection("Rule.GenericsID".to_string()) {
                         let new_arg = each_node.join_child_leaf_values();
 
                         if args.contains(&new_arg) {
@@ -571,7 +574,6 @@ impl BlockParser {
             ASTReflectionStyle::Reflection(name) => {
                 match name.as_str() {
                     "CharClass" => (expr_child_node.get_position()?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
-                    "ID" => (expr_child_node.get_node_child_at(0)?.get_node_child_at(0)?.get_position()?, RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_child_at(0)?)?),
                     "Generics" => {
                         let args = BlockParser::to_rule_choice_elem(expr_child_node.get_node_child_at(1)?.get_node_child_at(0)?, generics_args)?.extract().sub_elems;
                         let boxed_args = args.iter().map(|e| match e {
@@ -589,6 +591,8 @@ impl BlockParser {
                         let arg_id = parent_node.join_child_leaf_values();
                         (pos, generics, arg_id)
                     },
+                    "GenericsID" => (expr_child_node.get_position()?, RuleExpressionKind::GenericsArgID, expr_child_node.join_child_leaf_values()),
+                    "ID" => (expr_child_node.get_node_child_at(0)?.get_node_child_at(0)?.get_position()?, RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_child_at(0)?)?),
                     "Str" => (CharacterPosition::get_empty(), RuleExpressionKind::String, BlockParser::to_string_value(expr_child_node)?),
                     "Wildcard" => (expr_child_node.get_position()?, RuleExpressionKind::Wildcard, ".".to_string()),
                     _ => return Err(SyntaxParseError::InternalError { msg: format!("unknown expression name '{}'", name) }),
@@ -846,18 +850,18 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmdGenericsIDs <- "("# Misc.SingleID (","# Symbol.Space# Misc.SingleID)*## ")"#,
+        // code: DefineCmdGenericsIDs <- "("# Rule.GenericsID (","# Symbol.Space# Rule.GenericsID)*## ")"#,
         let define_cmd_generics_ids_rule = rule!{
             "DefineCmdGenericsIDs",
             choice!{
                 vec![],
                 expr!(String, "(", "#"),
-                expr!(ID, "Misc.SingleID"),
+                expr!(ID, "Rule.GenericsID"),
                 choice!{
                     vec!["*", "##"],
                     expr!(String, ",", "#"),
                     expr!(ID, "Symbol.Space", "#"),
-                    expr!(ID, "Misc.SingleID"),
+                    expr!(ID, "Rule.GenericsID"),
                 },
                 expr!(String, ")", "#"),
             },
@@ -999,7 +1003,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Expr <- Generics : ID : Str : CharClass : Wildcard,
+        // code: Expr <- Generics : GenericsID : ID : Str : CharClass : Wildcard,
         let expr_rule = rule!{
             "Expr",
             choice!{
@@ -1009,6 +1013,10 @@ impl FCPEGBlock {
                     choice!{
                         vec![],
                         expr!(ID, "Generics"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, "GenericsID"),
                     },
                     choice!{
                         vec![],
@@ -1159,6 +1167,25 @@ impl FCPEGBlock {
             },
         };
 
+        // code: ID <- Misc.ChainID,
+        let id_rule = rule!{
+            "ID",
+            choice!{
+                vec![],
+                expr!(ID, "Misc.ChainID"),
+            },
+        };
+
+        // code: GenericsID <- "$"# Misc.SingleID##,
+        let generics_id_rule = rule!{
+            "GenericsID",
+            choice!{
+                vec![],
+                expr!(String, "$", "#"),
+                expr!(ID, "Misc.SingleID", "##"),
+            },
+        };
+
         // code: Generics <- ID## Choice,
         let generics_rule = rule!{
             "Generics",
@@ -1166,15 +1193,6 @@ impl FCPEGBlock {
                 vec![],
                 expr!(ID, "ID", "##"),
                 expr!(ID, "Choice"),
-            },
-        };
-
-        // code: ID <- Misc.ChainID,
-        let id_rule = rule!{
-            "ID",
-            choice!{
-                vec![],
-                expr!(ID, "Misc.ChainID"),
             },
         };
 
@@ -1298,6 +1316,6 @@ impl FCPEGBlock {
             },
         };
 
-        return block!("Rule", vec![misc_use, symbol_use, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, generics_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
+        return block!("Rule", vec![misc_use, symbol_use, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, generics_id_rule, generics_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }

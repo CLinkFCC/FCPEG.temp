@@ -29,7 +29,7 @@
     Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
     CommentCmd <- "%"# (!"," !Symbol.LineEnd .)*## ","#,
     DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? Symbol.Space*# "<-"# Symbol.Space*# Rule.PureChoice Symbol.Space*# ","#,
-    DefineCmdGenericsIDs <- "("# Misc.SingleID (","# Symbol.Space# Misc.SingleID)*## ")"#,
+    DefineCmdGenericsIDs <- "("# Rule.GenericsID (","# Symbol.Space# Rule.GenericsID)*## ")"#,
     StartCmd <- "+"# Symbol.Space*# "start"# Symbol.Space+# Misc.ChainID Symbol.Space*# ","#,
     UseCmd <- "+"# Symbol.Space*# "use"# Symbol.Space+# Misc.ChainID UseCmdBlockAlias? Symbol.Space*# ","#,
     UseCmdBlockAlias <- Symbol.Space+# "as" Symbol.Space+# Misc.SingleID,
@@ -44,7 +44,7 @@
     Seq <- SeqElem (Symbol.Space+# SeqElem)*##,
     % (Choice : Expr) に命名する,
     SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
-    Expr <- Generics : ID : Str : CharClass : Wildcard,
+    Expr <- Generics : GenericsID : ID : Str : CharClass : Wildcard,
 
     Lookahead <- "!" : "&",
     Loop <- "?" : "*" : "+" : LoopRange,
@@ -55,6 +55,7 @@
 
     Num <- [0-9]+,
     ID <- Misc.ChainID,
+    GenericsID <- "$"# Misc.SingleID##,
     Generics <- ID## Choice
     EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
     Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))+## "\""#,

@@ -79,7 +79,7 @@ impl RuleMap {
                 match id_tokens.len() {
                     1 => {
                         if generics_arg_ids.contains(&expr.value) {
-                            expr.kind = RuleExpressionKind::GenericsArgID;
+                            // expr.kind = RuleExpressionKind::GenericsArgID;
                         } else {
                             expr.value = format!("{}.{}.{}", file_alias_name, block_name, expr.value);
                         };
@@ -87,7 +87,6 @@ impl RuleMap {
                     2 => {
                         let block_name = id_tokens.get(0).unwrap();
                         let rule_name = id_tokens.get(1).unwrap();
-                        println!("a {:?} {}", block_alias_map, rule_name);
 
                         if block_alias_map.contains_key(&block_name.to_string()) {
                             // ブロック名がエイリアスである場合
@@ -184,7 +183,7 @@ impl Display for Rule {
         let generics_arg_id_text = if self.generics_arg_ids.len() == 0 {
             String::new()
         } else {
-            format!("({})", self.generics_arg_ids.join(", "))
+            format!("({})", self.generics_arg_ids.iter().map(|s| format!("${}", s)).collect::<Vec<String>>().join(", "))
         };
 
         return write!(f, "{}{} <- {}", self.name, generics_arg_id_text, self.group);
@@ -455,7 +454,7 @@ impl Display for RuleExpression {
                 
                 format!("{}({})", self.value, arg_text.join(", "))
             },
-            RuleExpressionKind::GenericsArgID => self.value.clone(),
+            RuleExpressionKind::GenericsArgID => format!("${}", self.value),
             RuleExpressionKind::ID => self.value.clone(),
             RuleExpressionKind::String => format!("\"{}\"", self.value),
             RuleExpressionKind::Wildcard => ".".to_string(),

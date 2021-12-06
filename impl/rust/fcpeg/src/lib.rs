@@ -52,7 +52,6 @@ impl FCPEGParser {
 
         println!("--- rule map ---");
         println!("{}", rule_map);
-        println!("rule map {}", rule_map);
 
         let syntax_parser = match SyntaxParser::new(rule_map) {
             Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
