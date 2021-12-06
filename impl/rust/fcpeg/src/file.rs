@@ -72,7 +72,7 @@ impl FCPEGFile {
             Err(e) => return Err(FCPEGFileError::ConfigurationError { err: e }),
         };
 
-        if cfg!(release) {
+        if cfg!(debug) {
             config.print();
         }
 

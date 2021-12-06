@@ -50,8 +50,10 @@ impl FCPEGParser {
             Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
         };
 
-        println!("--- rule map ---");
-        println!("{}", rule_map);
+        if cfg!(debug) {
+            println!("--- rule map ---");
+            println!("{}", rule_map);
+        }
 
         let syntax_parser = match SyntaxParser::new(rule_map) {
             Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),

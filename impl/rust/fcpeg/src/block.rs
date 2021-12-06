@@ -200,10 +200,13 @@ impl BlockParser {
         return Ok(rule_map);
     }
 
-    // note: ブロックマップとファイルを元に 1 ファイルの FCPEG コードの構文木を取得する
     fn to_syntax_tree(&mut self, parser: &mut SyntaxParser) -> SyntaxParseResult<SyntaxTree> {
         let tree = parser.get_syntax_tree(self.file_path.clone(), &self.file_content)?;
-        tree.print(true);
+
+        if cfg!(debug) {
+            tree.print(true);
+        }
+
         return Ok(tree);
     }
 
@@ -268,9 +271,11 @@ impl BlockParser {
 
         block_map.insert(String::new(), Box::new(Block::new("Main".to_string(), vec![])));
 
-        for (_, each_block) in &block_map {
-            each_block.print();
-            println!();
+        if cfg!(debug) {
+            for (_, each_block) in &block_map {
+                each_block.print();
+                println!();
+            }
         }
 
         return Ok(block_map);
@@ -626,7 +631,6 @@ impl BlockParser {
     }
 
     fn to_string_vec(str_vec_node: &SyntaxNode) -> SyntaxParseResult<Vec<String>> {
-        str_vec_node.print(true);
         let mut str_vec = Vec::<String>::new();
 
         for str_elem in str_vec_node.get_reflectable_children() {
