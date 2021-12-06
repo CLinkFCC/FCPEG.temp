@@ -19,7 +19,6 @@ pub enum SyntaxParseError {
     InvalidGenericsArgumentLength { arg_ids: Vec<String> },
     InvalidSyntaxTreeStructure { cause: String },
     NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Box<Vec<(usize, String)>> },
-    TooDeepRecursion { max_recur_count: usize },
     TooLongRepetition { max_loop_count: usize },
     UnknownGenericsArgumentID { arg_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
@@ -35,7 +34,6 @@ impl ConsoleLogger for SyntaxParseError {
             SyntaxParseError::InvalidGenericsArgumentLength { arg_ids } => log!(Error, &format!("invalid generics argument length ({:?})", arg_ids)),
             SyntaxParseError::InvalidSyntaxTreeStructure { cause } => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
             SyntaxParseError::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, &format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack: {:?}", rule_stack)),
-            SyntaxParseError::TooDeepRecursion { max_recur_count } => log!(Error, &format!("too deep recursion over {}", max_recur_count)),
             SyntaxParseError::TooLongRepetition { max_loop_count } => log!(Error, &format!("too long repetition over {}", max_loop_count)),
             SyntaxParseError::UnknownGenericsArgumentID { arg_id } => log!(Error, &format!("unknown generics argument id '{}'", arg_id)),
             SyntaxParseError::UnknownRuleID { pos, rule_id } => log!(Error, &format!("unknown rule id '{}'", rule_id), &format!("at: {}", pos)),
@@ -50,8 +48,6 @@ pub struct SyntaxParser {
     src_latest_line_i: usize,
     src_path: String,
     src_content: String,
-    recursion_count: usize,
-    max_recursion_count: usize,
     max_loop_count: usize,
     rule_stack: Box<Vec<(usize, String)>>,
     regex_map: Box<HashMap::<String, Regex>>,
@@ -66,8 +62,6 @@ impl SyntaxParser {
             src_latest_line_i: 0,
             src_path: String::new(),
             src_content: String::new(),
-            recursion_count: 1,
-            max_recursion_count: 65536,
             max_loop_count: 65536,
             rule_stack: Box::new(vec![]),
             regex_map: Box::new(HashMap::new()),
@@ -95,15 +89,12 @@ impl SyntaxParser {
         self.src_i = 0;
         self.src_path = src_path;
         self.src_content = tmp_src_content;
-        self.recursion_count = 1;
 
         let start_rule_id = self.rule_map.start_rule_id.clone();
 
         if self.src_content.chars().count() == 0 {
             return Ok(SyntaxTree::from_node_args(vec![], ASTReflectionStyle::Reflection(String::new())));
         }
-
-        self.recursion_count += 1;
 
         // todo: CharacterPosition を修正
         let mut root_node = match self.is_rule_successful(&HashMap::new(), &start_rule_id, &CharacterPosition::get_empty())? {
@@ -118,7 +109,6 @@ impl SyntaxParser {
             return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position(), rule_stack: self.rule_stack.clone() });
         }
 
-        self.recursion_count -= 1;
         return Ok(SyntaxTree::from_node(root_node));
     }
 
@@ -549,12 +539,6 @@ impl SyntaxParser {
                 };
             },
             RuleExpressionKind::ID => {
-                self.recursion_count += 1;
-
-                if self.max_recursion_count < self.recursion_count {
-                    return Err(SyntaxParseError::TooDeepRecursion { max_recur_count: self.max_recursion_count });
-                }
-
                 return self.is_rule_expr_matched(generics_args, expr);
             },
             RuleExpressionKind::String => {
@@ -588,8 +572,6 @@ impl SyntaxParser {
     fn is_rule_expr_matched(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         match self.is_rule_successful(generics_args, &expr.value, &expr.pos)? {
             Some(node_elem) => {
-                self.recursion_count += 1;
-
                 let conv_node_elems = match &node_elem {
                     SyntaxNodeElement::Node(node) => {
                         let sub_ast_reflection = match &expr.ast_reflection_style {
@@ -622,7 +604,6 @@ impl SyntaxParser {
                 return Ok(Some(conv_node_elems));
             },
             None => {
-                self.recursion_count -= 1;
                 return Ok(None);
             },
         };
