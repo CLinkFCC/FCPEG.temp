@@ -64,49 +64,9 @@ impl RuleMap {
         for each_elem in group.sub_elems.iter_mut() {
             match each_elem {
                 RuleElement::Group(each_group) => self.proc_define_cmd(each_group, rule_id, block_name, file_alias_name, generics_arg_ids, block_alias_map)?,
-                RuleElement::Expression(each_expr) => self.proc_expr(each_expr, block_name, file_alias_name, generics_arg_ids, block_alias_map)?,
+                // RuleElement::Expression(each_expr) => self.proc_expr(each_expr, block_name, file_alias_name, generics_arg_ids, block_alias_map)?,
+                _ => (),
             }
-        }
-
-        return Ok(());
-    }
-
-    pub fn proc_expr(&mut self, expr: &mut RuleExpression, block_name: &String, file_alias_name: &String, generics_arg_ids: &Vec<String>, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
-        match &expr.kind {
-            RuleExpressionKind::ID | RuleExpressionKind::Generics(_) => {
-                let id_tokens: Vec<&str> = expr.value.split(".").collect();
-
-                match id_tokens.len() {
-                    1 => {
-                        if generics_arg_ids.contains(&expr.value) {
-                            // expr.kind = RuleExpressionKind::GenericsArgID;
-                        } else {
-                            expr.value = format!("{}.{}.{}", file_alias_name, block_name, expr.value);
-                        };
-                    },
-                    2 => {
-                        let block_name = id_tokens.get(0).unwrap();
-                        let rule_name = id_tokens.get(1).unwrap();
-
-                        if block_alias_map.contains_key(&block_name.to_string()) {
-                            // ブロック名がエイリアスである場合
-                            expr.value = format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name);
-                        } else {
-                            // ブロック名がエイリアスでない場合
-                            return Err(BlockParseError::BlockAliasNotFound { pos: expr.pos.clone(), block_alias_name: block_name.to_string() });
-                        }
-                    },
-                    3 => {
-                        let file_alias_name = id_tokens.get(0).unwrap();
-                        let block_name = id_tokens.get(1).unwrap();
-                        let rule_name = id_tokens.get(2).unwrap();
-
-                        expr.value = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
-                    },
-                    _ => return Err(BlockParseError::InternalError { msg: format!("invalid id expression '{}'", expr.value) }),
-                }
-            },
-            _ => (),
         }
 
         return Ok(());

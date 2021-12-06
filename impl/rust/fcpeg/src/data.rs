@@ -151,8 +151,8 @@ impl SyntaxNodeElement {
 
     pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
         match self {
-            SyntaxNodeElement::Node(node) => node.print(nest, writer, ignore_hidden_elems),
-            SyntaxNodeElement::Leaf(leaf) => leaf.print(nest, writer, ignore_hidden_elems),
+            SyntaxNodeElement::Node(node) => node.print_with_details(nest, writer, ignore_hidden_elems),
+            SyntaxNodeElement::Leaf(leaf) => leaf.print_with_details(nest, writer, ignore_hidden_elems),
         }
     }
 }
@@ -309,7 +309,11 @@ impl SyntaxNode {
         return s;
     }
 
-    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
+    pub fn print(&self, ignore_hidden_elems: bool) {
+        self.print_with_details(0, &mut BufWriter::new(stdout().lock()), ignore_hidden_elems);
+    }
+
+    pub fn print_with_details(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
         if ignore_hidden_elems && !self.is_reflectable() {
             return;
         }
@@ -354,7 +358,11 @@ impl SyntaxLeaf {
         return self.ast_reflection_style.is_reflectable();
     }
 
-    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
+    pub fn print(&self, ignore_hidden_elems: bool) {
+        self.print_with_details(0, &mut BufWriter::new(stdout().lock()), ignore_hidden_elems);
+    }
+
+    pub fn print_with_details(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
         if !self.is_reflectable() && ignore_hidden_elems {
             return;
         }
