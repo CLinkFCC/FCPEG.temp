@@ -11,65 +11,32 @@ pub struct RuleMap {
 }
 
 impl RuleMap {
-    pub fn new(start_rule_id: String) -> RuleMap {
-        return RuleMap {
-            rule_map: HashMap::new(),
+    pub fn new(block_map: Vec<BlockMap>, start_rule_id: String) -> BlockParseResult<RuleMap> {
+        let rule_map = RuleMap {
+            rule_map: RuleMap::to_rule_map(block_map)?,
             start_rule_id: start_rule_id,
         };
+
+        return Ok(rule_map);
     }
 
-    pub fn get_rule_id(file_alias_name: String, block_name: String, rule_name: String) -> String {
-        return format!("{}.{}.{}", file_alias_name, block_name, rule_name);
-    }
+    fn to_rule_map(block_maps: Vec<BlockMap>) -> BlockParseResult<HashMap<String, Box<Rule>>> {
+        let mut rule_map = HashMap::<String, Box<Rule>>::new();
 
-    pub fn format_block_map(&mut self, file_alias_name: &String, block_map: &mut BlockMap) -> BlockParseResult<()> {
-        for (block_name, each_block) in block_map {
-            if block_name == "Main" {
-                continue;
-            }
-
-            let mut block_alias_map = HashMap::<String, String>::new();
-
-            // start コマンドを排除しながら use コマンドを処理する
-            for each_cmd in &each_block.cmds {
-                match each_cmd {
-                    BlockCommand::Start { pos, file_alias_name: _, block_name: _, rule_name: _ } => return Err(BlockParseError::StartCommandOutsideMainBlock { pos: pos.clone() }),
-                    BlockCommand::Use { pos: _, file_alias_name, block_name, block_alias_name } => {
-                        let rule_id = format!("{}.{}", file_alias_name.clone(), block_name.clone());
-                        block_alias_map.insert(block_alias_name.clone(), rule_id);
-                    },
-                    _ => (),
-                }
-            }
-
-            // define コマンドを処理する
-            for each_cmd in &each_block.cmds {
-                match each_cmd {
-                    BlockCommand::Define { pos: _, rule } => {
-                        let mut each_rule = rule.clone();
-                        each_rule.name = format!("{}.{}.{}", file_alias_name, each_block.name, each_rule.name);
-                        self.proc_define_cmd(&mut *each_rule.group, &each_rule.name, &each_block.name, file_alias_name, &each_rule.generics_arg_ids, &block_alias_map)?;
-                        let rule_id = RuleMap::get_rule_id(file_alias_name.clone(), each_block.name.clone(), rule.name.clone());
-                        self.rule_map.insert(rule_id, Box::new(each_rule));
-                    },
-                    _ => (),
+        for each_block_map in block_maps {
+            for (_, each_block) in each_block_map {
+                for each_cmd in each_block.cmds {
+                    match each_cmd {
+                        BlockCommand::Define { pos: _, rule } => {
+                            rule_map.insert(rule.id.clone(), Box::new(rule));
+                        },
+                        _ => (),
+                    }
                 }
             }
         }
 
-        return Ok(());
-    }
-
-    pub fn proc_define_cmd(&mut self, group: &mut RuleGroup, rule_id: &String, block_name: &String, file_alias_name: &String, generics_arg_ids: &Vec<String>, block_alias_map: &HashMap<String, String>) -> BlockParseResult<()> {
-        for each_elem in group.sub_elems.iter_mut() {
-            match each_elem {
-                RuleElement::Group(each_group) => self.proc_define_cmd(each_group, rule_id, block_name, file_alias_name, generics_arg_ids, block_alias_map)?,
-                // RuleElement::Expression(each_expr) => self.proc_expr(each_expr, block_name, file_alias_name, generics_arg_ids, block_alias_map)?,
-                _ => (),
-            }
-        }
-
-        return Ok(());
+        return Ok(rule_map);
     }
 }
 
@@ -122,15 +89,17 @@ impl Display for RuleElementLookaheadKind {
 #[derive(Clone)]
 pub struct Rule {
     pub pos: CharacterPosition,
+    pub id: String,
     pub name: String,
     pub generics_arg_ids: Vec<String>,
     pub group: Box<RuleGroup>,
 }
 
 impl Rule {
-    pub fn new(pos: CharacterPosition, name: String, generics_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
+    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
         return Rule {
             pos: pos,
+            id: id,
             name: name,
             generics_arg_ids: generics_arg_ids,
             group: group,
