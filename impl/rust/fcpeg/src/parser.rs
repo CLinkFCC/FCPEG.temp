@@ -41,6 +41,8 @@ impl ConsoleLogger for SyntaxParseError {
     }
 }
 
+pub type GenericsArgumentMap = HashMap<String, Box<RuleGroup>>;
+
 pub struct SyntaxParser {
     rule_map: Box<RuleMap>,
     src_i: usize,
@@ -97,7 +99,7 @@ impl SyntaxParser {
         }
 
         // todo: CharacterPosition を修正
-        let mut root_node = match self.is_rule_successful(&HashMap::new(), &start_rule_id, &CharacterPosition::get_empty())? {
+        let mut root_node = match self.is_rule_successful(&(&GenericsArgumentMap::new(), &GenericsArgumentMap::new()), &start_rule_id, &CharacterPosition::get_empty())? {
             Some(v) => v,
             None => return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position(), rule_stack: self.rule_stack.clone() }),
         };
@@ -112,7 +114,7 @@ impl SyntaxParser {
         return Ok(SyntaxTree::from_node(root_node));
     }
 
-    fn is_rule_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, rule_id: &String, pos: &CharacterPosition) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
+    fn is_rule_successful(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), rule_id: &String, pos: &CharacterPosition) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
         let rule_group = match self.rule_map.rule_map.get(rule_id) {
             Some(rule) => rule.group.clone(),
             None => return Err(SyntaxParseError::UnknownRuleID { pos: pos.clone(), rule_id: rule_id.clone() }),
@@ -148,11 +150,11 @@ impl SyntaxParser {
         }
     }
 
-    fn is_choice_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_choice_successful(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return self.is_lookahead_choice_successful(generics_args, parent_elem_order, group);
     }
 
-    fn is_lookahead_choice_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_lookahead_choice_successful(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return if group.lookahead_kind.is_none() {
             self.is_loop_choice_successful(generics_args, parent_elem_order, group)
         } else {
@@ -170,7 +172,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_loop_choice_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_loop_choice_successful(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = match parent_elem_order {
             RuleElementOrder::Random(tmp_occurrence_count) => {
                 let (mut tmp_min_count, mut tmp_max_count) = tmp_occurrence_count.to_tuple();
@@ -240,7 +242,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_choice_matched(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_each_choice_matched(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let mut children = Vec::<SyntaxNodeElement>::new();
 
         for each_elem in &group.sub_elems {
@@ -402,11 +404,11 @@ impl SyntaxParser {
         return Ok(Some(children));
     }
 
-    fn is_expr_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_expr_successful(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return self.is_lookahead_expr_successful(generics_args, expr);
     }
 
-    fn is_lookahead_expr_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_lookahead_expr_successful(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         return if expr.lookahead_kind.is_none() {
             self.is_loop_expr_successful(generics_args, expr)
         } else {
@@ -424,7 +426,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_loop_expr_successful(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_loop_expr_successful(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = expr.loop_count.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
@@ -471,7 +473,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_each_expr_matched(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_each_expr_matched(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         if self.src_i >= self.src_content.chars().count() {
             return Ok(None);
         }
@@ -526,20 +528,27 @@ impl SyntaxParser {
                         None => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
                     };
 
-                    let new_arg = args.get(i).unwrap();
+                    let new_arg = match args.get(i) {
+                        Some(v) => v,
+                        None => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
+                    };
+
                     new_args.insert(new_arg_id.clone(), new_arg.clone());
                 }
 
-                return self.is_rule_expr_matched(&new_args, expr);
+                return self.is_rule_expr_matched(&(&new_args, generics_args.0), expr);
             },
             RuleExpressionKind::GenericsArgID => {
-                return match generics_args.get(&expr.value) {
+                return match generics_args.0.get(&expr.value) {
                     Some(v) => self.is_choice_successful(generics_args, &RuleElementOrder::Sequential, v),
-                    None => Err(SyntaxParseError::UnknownGenericsArgumentID { arg_id: expr.value.clone() }),
+                    None => match generics_args.1.get(&expr.value) {
+                        Some(v) => self.is_choice_successful(generics_args, &RuleElementOrder::Sequential, v),
+                        None => Err(SyntaxParseError::UnknownGenericsArgumentID { arg_id: expr.value.clone() }),
+                    },
                 };
             },
             RuleExpressionKind::ID => {
-                return self.is_rule_expr_matched(generics_args, expr);
+                return self.is_rule_expr_matched(&(&generics_args.0, &GenericsArgumentMap::new()), expr);
             },
             RuleExpressionKind::String => {
                 if self.src_content.chars().count() < self.src_i + expr.value.chars().count() {
@@ -569,7 +578,7 @@ impl SyntaxParser {
         }
     }
 
-    fn is_rule_expr_matched(&mut self, generics_args: &HashMap<String, Box<RuleGroup>>, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn is_rule_expr_matched(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         match self.is_rule_successful(generics_args, &expr.value, &expr.pos)? {
             Some(node_elem) => {
                 let conv_node_elems = match &node_elem {
