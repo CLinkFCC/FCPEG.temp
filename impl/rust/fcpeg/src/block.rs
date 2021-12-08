@@ -588,19 +588,24 @@ impl BlockParser {
                 match name.as_str() {
                     ".Rule.CharClass" => (expr_child_node.get_position()?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
                     ".Rule.Generics" => {
-                        let args = self.to_rule_choice_elem(expr_child_node.get_node_child_at(1)?.get_node_child_at(0)?, generics_args)?.extract().sub_elems;
-                        let boxed_args = args.iter().map(|e| match e {
-                            RuleElement::Group(group) => group.clone(),
-                            RuleElement::Expression(_) => {
-                                let mut new_group = Box::new(RuleGroup::new(RuleGroupKind::Choice));
-                                new_group.sub_elems = vec![e.clone()];
-                                new_group
-                            },
-                        }).collect::<Vec<Box<RuleGroup>>>();
+                        let mut args = Vec::<Box<RuleGroup>>::new();
+                        for instant_pure_choice_node in expr_child_node.find_child_nodes(vec![".Rule.InstantPureChoice"]) {
+                            args.push(Box::new(self.to_rule_choice_elem(instant_pure_choice_node, generics_args)?));
+                        }
+
+                        // let args = self.to_rule_choice_elem(expr_child_node.get_node_child_at(1)?.get_node_child_at(0)?, generics_args)?.extract().sub_elems;
+                        // let boxed_args = args.iter().map(|e| match e {
+                        //     RuleElement::Group(group) => group.clone(),
+                        //     RuleElement::Expression(_) => {
+                        //         let mut new_group = Box::new(RuleGroup::new(RuleGroupKind::Choice));
+                        //         new_group.sub_elems = vec![e.clone()];
+                        //         new_group
+                        //     },
+                        // }).collect::<Vec<Box<RuleGroup>>>();
 
                         let parent_node = expr_child_node.get_node_child_at(0)?.get_node_child_at(0)?;
                         let pos = parent_node.get_position()?;
-                        let generics = RuleExpressionKind::Generics(boxed_args);
+                        let generics = RuleExpressionKind::Generics(args);
                         let id = match BlockParser::to_rule_id(&pos, &BlockParser::to_string_vec(expr_child_node.get_node_child_at(0)?)?, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
                             Ok(v) => v,
                             Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
@@ -906,12 +911,12 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmdGenericsIDs <- "("# Rule.GenericsID (","# Symbol.Space# Rule.GenericsID)*## ")"#,
+        // code: DefineCmdGenericsIDs <- "<"# Rule.GenericsID (","# Symbol.Space# Rule.GenericsID)*## ">"#,
         let define_cmd_generics_ids_rule = rule!{
             ".Block.DefineCmdGenericsIDs",
             choice!{
                 vec![],
-                expr!(String, "(", "#"),
+                expr!(String, "<", "#"),
                 expr!(ID, ".Rule.GenericsID"),
                 choice!{
                     vec!["*", "##"],
@@ -919,7 +924,7 @@ impl FCPEGBlock {
                     expr!(ID, ".Symbol.Space", "#"),
                     expr!(ID, ".Rule.GenericsID"),
                 },
-                expr!(String, ")", "#"),
+                expr!(String, ">", "#"),
             },
         };
 
@@ -970,6 +975,24 @@ impl FCPEGBlock {
     }
 
     fn get_rule_block() -> Block {
+        // code: InstantPureChoice <- Seq ":" Symbol.Space# Seq)*##,
+        let instant_pure_choice_rule = rule!{
+            ".Rule.InstantPureChoice",
+            choice!{
+                vec![],
+                expr!(ID, ".Rule.Seq"),
+                choice!{
+                    vec!["*", "##"],
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ":"),
+                        expr!(ID, ".Symbol.Space", "#"),
+                        expr!(ID, ".Rule.Seq"),
+                    },
+                },
+            },
+        };
+
         // code: PureChoice <- Seq ((Symbol.Space# ":" : ",")## Symbol.Space# Seq)*##,
         let pure_choice_rule = rule!{
             ".Rule.PureChoice",
@@ -1239,13 +1262,24 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Generics <- ID## Choice,
+        // code: Generics <- ID## "<"# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ">"#,
         let generics_rule = rule!{
             ".Rule.Generics",
             choice!{
                 vec![],
                 expr!(ID, ".Rule.ID", "##"),
-                expr!(ID, ".Rule.Choice"),
+                expr!(String, "<", "#"),
+                expr!(ID, ".Rule.InstantPureChoice"),
+                choice!{
+                    vec!["*", "##"],
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ",", "#"),
+                        expr!(ID, ".Symbol.Space", "#"),
+                        expr!(ID, ".Rule.InstantPureChoice"),
+                    },
+                },
+                expr!(String, ">", "#"),
             },
         };
 
@@ -1369,6 +1403,6 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Rule", vec![pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, generics_id_rule, generics_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
+        return block!(".Rule", vec![instant_pure_choice_rule, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, generics_id_rule, generics_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }
