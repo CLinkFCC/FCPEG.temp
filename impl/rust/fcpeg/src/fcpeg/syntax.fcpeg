@@ -28,8 +28,9 @@
     Block <- "["# Symbol.Space*# Misc.SingleID Symbol.Space*# "]"# Symbol.Space*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
     Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
     CommentCmd <- "%"# (!"," !Symbol.LineEnd .)*## ","#,
-    DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? Symbol.Space*# "<-"# Symbol.Space*# Rule.PureChoice Symbol.Space*# ","#,
-    DefineCmdGenericsIDs <- "<"# Rule.GenericsID (","# Symbol.Space# Rule.GenericsID)*## ">"#,
+    DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Space*# "<-"# Symbol.Space*# Rule.PureChoice Symbol.Space*# ","#,
+    DefineCmdGenericsIDs <- "<"# Rule.ArgID (","# Symbol.Space# Rule.ArgID)*## ">"#,
+    DefineCmdFuncIDs <- "("# Rule.ArgID (","# Symbol.Space# Rule.ArgID)*## ")"#,
     StartCmd <- "+"# Symbol.Space*# "start"# Symbol.Space+# Misc.ChainID Symbol.Space*# ","#,
     UseCmd <- "+"# Symbol.Space*# "use"# Symbol.Space+# Misc.ChainID UseCmdBlockAlias? Symbol.Space*# ","#,
     UseCmdBlockAlias <- Symbol.Space+# "as" Symbol.Space+# Misc.SingleID,
@@ -47,7 +48,7 @@
     % (Choice : Expr) に命名する,
     SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
 
-    Expr <- Generics : GenericsID : ID : Str : CharClass : Wildcard,
+    Expr <- Generics : ArgID : Func : ID : Str : CharClass : Wildcard,
 
     Lookahead <- "!" : "&",
     Loop <- "?" : "*" : "+" : LoopRange,
@@ -58,8 +59,9 @@
 
     Num <- [0-9]+,
     ID <- Misc.ChainID,
-    GenericsID <- "$"# Misc.SingleID##,
-    Generics <- ID## "<"# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ">"#,
+    ArgID <- "$"# Misc.SingleID##,
+    Generics <- Misc.ChainID "<"# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ">"#,
+    Func <- Misc.ChainID "("# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ")"#,
     EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
     Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))+## "\""#,
     CharClass <- "["# (!"[" !"]" !Symbol.LineEnd (("\\[" : "\\]" : "\\\\" : .))##)+## "]"#,

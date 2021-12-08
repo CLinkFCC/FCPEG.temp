@@ -92,16 +92,18 @@ pub struct Rule {
     pub id: String,
     pub name: String,
     pub generics_arg_ids: Vec<String>,
+    pub func_arg_ids: Vec<String>,
     pub group: Box<RuleGroup>,
 }
 
 impl Rule {
-    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
+    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, func_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
         return Rule {
             pos: pos,
             id: id,
             name: name,
             generics_arg_ids: generics_arg_ids,
+            func_arg_ids: func_arg_ids,
             group: group,
         };
     }
@@ -323,9 +325,10 @@ impl Display for RuleGroup {
 
 #[derive(Clone)]
 pub enum RuleExpressionKind {
+    ArgID,
     CharClass,
+    Func(Vec<Box<RuleGroup>>),
     Generics(Vec<Box<RuleGroup>>),
-    GenericsArgID,
     ID,
     String,
     Wildcard,
@@ -334,9 +337,10 @@ pub enum RuleExpressionKind {
 impl Display for RuleExpressionKind {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let s = match self {
+            RuleExpressionKind::ArgID => "ArgID",
             RuleExpressionKind::CharClass => "CharClass",
+            RuleExpressionKind::Func(_) => "Func",
             RuleExpressionKind::Generics(_) => "Generics",
-            RuleExpressionKind::GenericsArgID => "GenericsArgID",
             RuleExpressionKind::ID => "ID",
             RuleExpressionKind::String => "String",
             RuleExpressionKind::Wildcard => "Wildcard",
@@ -373,17 +377,16 @@ impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let loop_text = self.loop_count.to_string(true, "{", ",", "}");
         let value_text = match self.kind.clone() {
+            RuleExpressionKind::ArgID => format!("${}", self.value),
             RuleExpressionKind::CharClass => self.value.clone(),
-            RuleExpressionKind::Generics(args) => {
-                let mut arg_text = Vec::<String>::new();
-
-                for each_arg in &args {
-                    arg_text.push(each_arg.to_string());
-                }
-                
+            RuleExpressionKind::Func(args) => {
+                let arg_text = args.iter().map(|each_arg| each_arg.to_string()).collect::<Vec<String>>();
                 format!("{}({})", self.value, arg_text.join(", "))
             },
-            RuleExpressionKind::GenericsArgID => format!("${}", self.value),
+            RuleExpressionKind::Generics(args) => {
+                let arg_text = args.iter().map(|each_arg| each_arg.to_string()).collect::<Vec<String>>();
+                format!("{}<{}>", self.value, arg_text.join(", "))
+            },
             RuleExpressionKind::ID => self.value.clone(),
             RuleExpressionKind::String => format!("\"{}\"", self.value),
             RuleExpressionKind::Wildcard => ".".to_string(),
