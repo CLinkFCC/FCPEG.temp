@@ -149,7 +149,11 @@ impl SyntaxNodeElement {
         }
     }
 
-    pub fn print(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
+    pub fn print(&self, ignore_hidden_elems: bool) {
+        self.print_with_details(0, &mut BufWriter::new(stdout().lock()), ignore_hidden_elems)
+    }
+
+    pub fn print_with_details(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
         match self {
             SyntaxNodeElement::Node(node) => node.print_with_details(nest, writer, ignore_hidden_elems),
             SyntaxNodeElement::Leaf(leaf) => leaf.print_with_details(nest, writer, ignore_hidden_elems),
@@ -176,7 +180,7 @@ impl SyntaxTree {
     }
 
     pub fn print(&self, ignore_hidden_elems: bool) {
-        self.child.print(0, &mut BufWriter::new(stdout().lock()), ignore_hidden_elems)
+        self.child.print(ignore_hidden_elems)
     }
 
     pub fn clone_child(&self) -> SyntaxNodeElement {
@@ -333,7 +337,7 @@ impl SyntaxNode {
         writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
 
         for each_elem in &self.sub_elems {
-            each_elem.print(nest + 1, writer, ignore_hidden_elems);
+            each_elem.print_with_details(nest + 1, writer, ignore_hidden_elems);
         }
     }
 }

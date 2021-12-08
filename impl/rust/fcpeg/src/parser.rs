@@ -114,6 +114,7 @@ impl SyntaxParser {
         return Ok(SyntaxTree::from_node(root_node));
     }
 
+    // arg: generics_args: (現在の規則のジェネリクス引数, 親の規則のジェネリクス引数)
     fn is_rule_successful(&mut self, generics_args: &(&GenericsArgumentMap, &GenericsArgumentMap), rule_id: &String, pos: &CharacterPosition) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
         let rule_group = match self.rule_map.rule_map.get(rule_id) {
             Some(rule) => rule.group.clone(),
@@ -539,12 +540,35 @@ impl SyntaxParser {
                 return self.is_rule_expr_matched(&(&new_args, generics_args.0), expr);
             },
             RuleExpressionKind::GenericsArgID => {
-                return match generics_args.0.get(&expr.value) {
+                let result = match generics_args.0.get(&expr.value) {
                     Some(v) => self.is_choice_successful(generics_args, &RuleElementOrder::Sequential, v),
                     None => match generics_args.1.get(&expr.value) {
                         Some(v) => self.is_choice_successful(generics_args, &RuleElementOrder::Sequential, v),
                         None => Err(SyntaxParseError::UnknownGenericsArgumentID { arg_id: expr.value.clone() }),
                     },
+                };
+
+                return if !expr.ast_reflection_style.is_reflectable() {
+                    match &result {
+                        Ok(v) => {
+                            match v {
+                                Some(node_elems) => {
+                                    match node_elems.get(0) {
+                                        Some(each_node_elem) => {
+                                            let mut new_node_elem = each_node_elem.clone();
+                                            new_node_elem.set_ast_reflection(expr.ast_reflection_style.clone());
+                                            Ok(Some(vec![new_node_elem]))
+                                        },
+                                        _ => result,
+                                    }
+                                },
+                                None => result,
+                            }
+                        },
+                        Err(_) => result,
+                    }
+                } else {
+                    result
                 };
             },
             RuleExpressionKind::ID => {
@@ -583,7 +607,7 @@ impl SyntaxParser {
             Some(node_elem) => {
                 let conv_node_elems = match &node_elem {
                     SyntaxNodeElement::Node(node) => {
-                        let sub_ast_reflection = match &expr.ast_reflection_style {
+                        let sub_ast_reflection_style = match &expr.ast_reflection_style {
                             ASTReflectionStyle::Reflection(elem_name) => {
                                 let conv_elem_name = if elem_name == "" {
                                     expr.value.clone()
@@ -596,7 +620,7 @@ impl SyntaxParser {
                             _ => expr.ast_reflection_style.clone(),
                         };
 
-                        let node = SyntaxNodeElement::from_node_args(node.sub_elems.clone(), sub_ast_reflection);
+                        let node = SyntaxNodeElement::from_node_args(node.sub_elems.clone(), sub_ast_reflection_style);
 
                         if expr.ast_reflection_style.is_expandable() {
                             match node {
