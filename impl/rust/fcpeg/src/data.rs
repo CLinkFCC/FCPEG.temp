@@ -294,19 +294,21 @@ impl SyntaxNode {
         return self.ast_reflection_style.is_reflectable();
     }
 
-    // note: Reflectable な子ノードの値をすべて結合して返す
+    // note: Reflectable な子孫ノードの値をすべて結合して返す
     pub fn join_child_leaf_values(&self) -> String {
         let mut s = String::new();
 
         for each_elem in &self.sub_elems {
             match each_elem {
+                SyntaxNodeElement::Node(node) => {
+                    s += node.join_child_leaf_values().as_str();
+                },
                 SyntaxNodeElement::Leaf(leaf) => {
                     match leaf.ast_reflection_style {
                         ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
                         _ => (),
                     }
                 },
-                _ => (),
             }
         }
 

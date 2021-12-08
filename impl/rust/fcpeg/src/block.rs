@@ -144,6 +144,9 @@ impl ConsoleLogger for BlockParseError {
     }
 }
 
+// note: プリミティブ関数の名前一覧
+const PRIM_FUNC_NAMES: &[&'static str] = &["JOIN"];
+
 pub struct BlockParser {
     start_rule_id: Option<String>,
     file_alias_name: String,
@@ -608,9 +611,15 @@ impl BlockParser {
                             _ => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
                         };
 
-                        let id = match BlockParser::to_rule_id(&pos, &BlockParser::to_string_vec(expr_child_node.get_node_child_at(0)?)?, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
-                            Ok(v) => v,
-                            Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
+                        let raw_id = BlockParser::to_string_vec(expr_child_node.get_node_child_at(0)?)?;
+                        let joined_raw_id = raw_id.join(".");
+                        let id = if name == ".Rule.Func" && !PRIM_FUNC_NAMES.contains(&joined_raw_id.as_str()) {
+                            match BlockParser::to_rule_id(&pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
+                                Ok(v) => v,
+                                Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
+                            }
+                        } else {
+                            joined_raw_id.clone()
                         };
 
                         (pos, generics, id)

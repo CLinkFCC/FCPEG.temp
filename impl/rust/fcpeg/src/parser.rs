@@ -581,9 +581,36 @@ impl SyntaxParser {
 
                 return self.is_rule_expr_matched(&(&new_args, generics_args.0), &(&GenericsArgumentMap::new(), &GenericsArgumentMap::new()), expr);
             },
-            // todo: マクロ?関数の実装
             RuleExpressionKind::Func(args) => {
                 let rule_id = &expr.value;
+
+                // note: プリミティブ関数
+                match rule_id.as_str() {
+                    "JOIN" => {
+                        match args.get(0) {
+                            Some(tar_arg) if args.len() == 1 => {
+                                return match self.is_choice_successful(&(&GenericsArgumentMap::new(), &GenericsArgumentMap::new()), &(&GenericsArgumentMap::new(), &GenericsArgumentMap::new()), &RuleElementOrder::Sequential, tar_arg)? {
+                                    Some(result_elems) => {
+                                        let mut joined_str = String::new();
+
+                                        for each_elem in result_elems {
+                                            match each_elem {
+                                                SyntaxNodeElement::Node(node) => joined_str += &node.join_child_leaf_values(),
+                                                SyntaxNodeElement::Leaf(leaf) => joined_str += &leaf.value,
+                                            }
+                                        }
+
+                                        let new_leaf = SyntaxNodeElement::from_leaf_args(self.get_char_position(), joined_str, expr.ast_reflection_style.clone());
+                                        Ok(Some(vec![new_leaf]))
+                                    },
+                                    None => Ok(None),
+                                };
+                            },
+                            _ => return Err(SyntaxParseError::InvalidFunctionArgumentLength { arg_ids: vec!["Item".to_string()] }),
+                        }
+                    },
+                    _ => (),
+                }
 
                 let mut new_args = HashMap::<String, Box::<RuleGroup>>::new();
                 let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
@@ -608,7 +635,6 @@ impl SyntaxParser {
 
                     new_args.insert(new_arg_id.clone(), new_arg.clone());
                 }
-                println!("funccccccccccc");
 
                 return self.is_rule_expr_matched(&(&GenericsArgumentMap::new(), &GenericsArgumentMap::new()), &(&new_args, generics_args.0), expr);
             },
