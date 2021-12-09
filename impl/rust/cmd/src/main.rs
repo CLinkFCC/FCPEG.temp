@@ -86,7 +86,7 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand) {
     if is_monitored {
         cons.log(log!(Notice, "command help", "You can quit parsing with '^C'."), false);
 
-        match parse_with_monitoring(fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration) {
+        match parse_with_monitoring(&mut cons, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration) {
             Ok(()) => (),
             Err(e) => cons.log(e.get_log(), false),
         }
@@ -138,12 +138,15 @@ fn parse(fcpeg_file_path: String, input_file_path: String, output_tree: bool, co
     return Ok(());
 }
 
-fn parse_with_monitoring(fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool) -> FCPEGResult<()> {
+fn parse_with_monitoring(cons: &mut Console, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool) -> FCPEGResult<()> {
     let detector_target_file_paths = vec![fcpeg_file_path.clone(), input_file_path.clone()];
     let mut detector = FileChangeDetector::new(detector_target_file_paths);
     let mut loop_count = 0;
 
-    parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration)?;
+    match parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration) {
+        Ok(()) => (),
+        Err(e) => cons.log(e.get_log(), true),
+    }
 
     loop {
         match quit_limit_sec {
@@ -156,7 +159,10 @@ fn parse_with_monitoring(fcpeg_file_path: String, input_file_path: String, inter
         }
 
         if detector.detect_multiple_file_changes() {
-            parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration)?;
+            match parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration) {
+                Ok(()) => (),
+                Err(e) => cons.log(e.get_log(), true),
+            }
         }
 
         loop_count += 1;
