@@ -206,9 +206,10 @@ impl BlockParser {
     fn to_syntax_tree(&mut self, parser: &mut SyntaxParser) -> SyntaxParseResult<SyntaxTree> {
         let tree = parser.get_syntax_tree(self.file_path.clone(), &self.file_content)?;
 
-        if cfg!(debug) {
+        // if cfg!(debug) {
+            println!("{}", self.file_content);
             tree.print(true);
-        }
+        // }
 
         return Ok(tree);
     }

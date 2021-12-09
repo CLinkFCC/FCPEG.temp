@@ -691,7 +691,10 @@ impl SyntaxParser {
 
                 let expr_value = self.substring_src_content(self.src_i, 1);
                 let new_leaf = SyntaxNodeElement::from_leaf_args(self.get_char_position(), expr_value.clone(), expr.ast_reflection_style.clone());
+                println!("val |{}|", expr_value);
+                println!("bef {}", self.src_i);
                 self.add_source_index_by_string(&expr_value);
+                println!("aft {}", self.src_i);
 
                 return Ok(Some(vec![new_leaf]));
             },
@@ -742,7 +745,7 @@ impl SyntaxParser {
         return self.src_content.chars().skip(start_i).take(len).collect::<String>();
     }
 
-    // todo: 文字列と進めるインデックスのペアとしてキャッシュを取る
+    // todo: 文字列と進めるインデックスのペアとしてキャッシュを取る (メモ化で解決できる)
     fn add_source_index_by_string(&mut self, expr_str: &String) {
         let mut new_line_indexes = Vec::<usize>::new();
         let mut char_i = 0usize;
@@ -770,7 +773,7 @@ impl SyntaxParser {
             None => (),
         }
 
-        self.src_i += expr_str.len();
+        self.src_i += expr_str.chars().count();
     }
 
     fn get_char_position(&self) -> CharacterPosition {
