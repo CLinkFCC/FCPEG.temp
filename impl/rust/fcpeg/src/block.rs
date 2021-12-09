@@ -613,13 +613,13 @@ impl BlockParser {
 
                         let raw_id = BlockParser::to_string_vec(expr_child_node.get_node_child_at(0)?)?;
                         let joined_raw_id = raw_id.join(".");
-                        let id = if name == ".Rule.Func" && !PRIM_FUNC_NAMES.contains(&joined_raw_id.as_str()) {
+                        let id = if name == ".Rule.Func" && PRIM_FUNC_NAMES.contains(&joined_raw_id.as_str()) {
+                            joined_raw_id.clone()
+                        } else {
                             match BlockParser::to_rule_id(&pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
                                 Ok(v) => v,
                                 Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
                             }
-                        } else {
-                            joined_raw_id.clone()
                         };
 
                         (pos, generics, id)
@@ -663,10 +663,10 @@ impl BlockParser {
                 let rule_name = id_tokens.get(1).unwrap();
 
                 if block_alias_map.contains_key(&block_name.to_string()) {
-                    // ブロック名がエイリアスである場合
+                    // note: ブロック名がエイリアスである場合
                     format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name)
                 } else {
-                    // ブロック名がエイリアスでない場合
+                    // note: ブロック名がエイリアスでない場合
                     return Err(BlockParseError::BlockAliasNotFound { pos: pos.clone(), block_alias_name: block_name.to_string() });
                 }
             },
