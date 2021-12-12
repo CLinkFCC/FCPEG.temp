@@ -206,10 +206,9 @@ impl BlockParser {
     fn to_syntax_tree(&mut self, parser: &mut SyntaxParser) -> SyntaxParseResult<SyntaxTree> {
         let tree = parser.get_syntax_tree(self.file_path.clone(), &self.file_content)?;
 
-        // if cfg!(debug) {
-            println!("{}", self.file_content);
+        if cfg!(debug) {
             tree.print(true);
-        // }
+        }
 
         return Ok(tree);
     }
@@ -217,7 +216,7 @@ impl BlockParser {
     // note: FCPEG コードの構文木 → ブロックマップの変換
     fn to_block_map(&mut self, tree: Box<SyntaxTree>) -> SyntaxParseResult<BlockMap> {
         let mut block_map = BlockMap::new();
-        let root = tree.clone_child();
+        let root = tree.get_child_ref();
         let block_nodes = match root.get_node()?.get_node_child_at(0) {
             Ok(v) => v.get_reflectable_children(),
             Err(_) => return Ok(block_map),
@@ -427,7 +426,6 @@ impl BlockParser {
 
     // note: Seq を解析する
     fn to_seq_elem(&mut self, seq_node: &SyntaxNode, generics_args: &Vec<String>) -> SyntaxParseResult<RuleElement> {
-        // todo: 先読みなどの処理
         let mut children = Vec::<RuleElement>::new();
 
         // note: SeqElem ノードをループ
@@ -503,13 +501,13 @@ impl BlockParser {
             // note: ASTReflectionStyle ノード
             // todo: 構成ファイルによって切り替える
             let ast_reflection_style = match each_seq_elem_node.find_first_child_node(vec![".Rule.ASTReflectionStyle"]) {
-                Some(v) => {
-                    match v.get_leaf_child_at(0) {
-                        Ok(v) => {
-                            if v.value == "##" {
+                Some(style_node) => {
+                    match style_node.get_leaf_child_at(0) {
+                        Ok(leaf) => {
+                            if leaf.value == "##" {
                                 ASTReflectionStyle::Expansion
                             } else {
-                                ASTReflectionStyle::Reflection(v.value.clone())
+                                ASTReflectionStyle::Reflection(style_node.join_child_leaf_values())
                             }
                         },
                         Err(_) => ASTReflectionStyle::from_config(false, true, String::new()),
@@ -518,7 +516,7 @@ impl BlockParser {
                 None => ASTReflectionStyle::from_config(false, false, String::new()),
             };
 
-            // Choice または Expr ノード
+            // note: Choice または Expr ノード
             let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec![".Rule.Choice", ".Rule.Expr"]) {
                 Some(v) => v,
                 None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
@@ -564,7 +562,7 @@ impl BlockParser {
         for seq_elem in &choice_node.get_reflectable_children() {
             match &seq_elem {
                 SyntaxNodeElement::Node(node) => {
-                    match &seq_elem.get_ast_reflection() {
+                    match &seq_elem.get_ast_reflection_style() {
                         ASTReflectionStyle::Reflection(name) => if name == ".Rule.Seq" {
                             let new_child = self.to_seq_elem(node, generics_args)?;
                             children.push(new_child);

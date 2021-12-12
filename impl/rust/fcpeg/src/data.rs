@@ -135,14 +135,14 @@ impl SyntaxNodeElement {
         };
     }
 
-    pub fn get_ast_reflection(&self) -> ASTReflectionStyle {
+    pub fn get_ast_reflection_style(&self) -> ASTReflectionStyle {
         return match self {
             SyntaxNodeElement::Node(node) => node.ast_reflection_style.clone(),
             SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection_style.clone(),
         };
     }
 
-    pub fn set_ast_reflection(&mut self, ast_reflection_style: ASTReflectionStyle) {
+    pub fn set_ast_reflection_style(&mut self, ast_reflection_style: ASTReflectionStyle) {
         match self {
             SyntaxNodeElement::Node(node) => node.ast_reflection_style = ast_reflection_style,
             SyntaxNodeElement::Leaf(leaf) => leaf.ast_reflection_style = ast_reflection_style,
@@ -183,8 +183,8 @@ impl SyntaxTree {
         self.child.print(ignore_hidden_elems)
     }
 
-    pub fn clone_child(&self) -> SyntaxNodeElement {
-        return self.child.clone();
+    pub fn get_child_ref(&self) -> &SyntaxNodeElement {
+        return &self.child;
     }
 }
 
@@ -202,7 +202,10 @@ impl SyntaxNode {
         };
     }
 
-    // note: 子要素をフィルタリングする
+    pub fn exists_child_node(&self, patterns: Vec<&str>) -> bool {
+        return self.find_first_child_node(patterns).is_some();
+    }
+
     pub fn filter_children(&self, f: fn(&SyntaxNodeElement) -> bool) -> Vec<&SyntaxNodeElement> {
         let mut elems = Vec::<&SyntaxNodeElement>::new();
 
@@ -215,12 +218,11 @@ impl SyntaxNode {
         return elems;
     }
 
-    // note: Reflectable な子要素のみを取得する
     pub fn get_reflectable_children(&self) -> Vec<&SyntaxNodeElement> {
         return self.filter_children(|each_elem| each_elem.is_reflectable());
     }
 
-    // note: 子ノードを名前で検索する; 最初にマッチしたノードを返す
+    // ret: 最初にマッチした Reflectable な子ノード
     pub fn find_first_child_node(&self, patterns: Vec<&str>) -> Option<&SyntaxNode> {
         for each_elem in &self.sub_elems {
             match each_elem {
@@ -237,7 +239,7 @@ impl SyntaxNode {
         return None;
     }
 
-    // note: 子ノードを名前で検索する
+    // ret: すべてのマッチした Reflectable な子ノードの列
     pub fn find_child_nodes(&self, patterns: Vec<&str>) -> Vec<&SyntaxNode> {
         let mut nodes = Vec::<&SyntaxNode>::new();
 
@@ -256,8 +258,13 @@ impl SyntaxNode {
         return nodes;
     }
 
+    // todo: 最初に出現したリーフの位置を返す; Unreflectable なリーフも対象にする
     pub fn get_position(&self) -> SyntaxParseResult<CharacterPosition> {
         return Ok(self.get_leaf_child_at(0)?.pos.clone());
+    }
+
+    pub fn get_children(&self) -> &Vec<SyntaxNodeElement> {
+        return &self.sub_elems;
     }
 
     pub fn get_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxNodeElement> {

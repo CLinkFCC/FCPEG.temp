@@ -96,7 +96,6 @@ impl SyntaxParser {
     pub fn get_syntax_tree(&mut self, src_path: String, src_content: &Box<String>) -> SyntaxParseResult<SyntaxTree> {
         let mut tmp_src_content = *src_content.clone();
 
-        // todo: 高速化: replace() と比べてどちらが速いか検証する
         // note: 余分な改行コード 0x0d を排除する
         loop {
             match tmp_src_content.find(0x0d as char) {
@@ -128,7 +127,7 @@ impl SyntaxParser {
         };
 
         // ルートは常に Reflectable
-        root_node.set_ast_reflection(ASTReflectionStyle::Reflection(start_rule_id.clone()));
+        root_node.set_ast_reflection_style(ASTReflectionStyle::Reflection(start_rule_id.clone()));
 
         if self.src_i < self.src_content.chars().count() {
             return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position(), rule_stack: self.rule_stack.clone() });
@@ -530,7 +529,7 @@ impl SyntaxParser {
                                     match node_elems.get(0) {
                                         Some(each_node_elem) => {
                                             let mut new_node_elem = each_node_elem.clone();
-                                            new_node_elem.set_ast_reflection(expr.ast_reflection_style.clone());
+                                            new_node_elem.set_ast_reflection_style(expr.ast_reflection_style.clone());
                                             Ok(Some(vec![new_node_elem]))
                                         },
                                         _ => result,
@@ -691,10 +690,7 @@ impl SyntaxParser {
 
                 let expr_value = self.substring_src_content(self.src_i, 1);
                 let new_leaf = SyntaxNodeElement::from_leaf_args(self.get_char_position(), expr_value.clone(), expr.ast_reflection_style.clone());
-                println!("val |{}|", expr_value);
-                println!("bef {}", self.src_i);
                 self.add_source_index_by_string(&expr_value);
-                println!("aft {}", self.src_i);
 
                 return Ok(Some(vec![new_leaf]));
             },
