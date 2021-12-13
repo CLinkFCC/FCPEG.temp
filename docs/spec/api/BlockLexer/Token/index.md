@@ -1,4 +1,4 @@
-# API: Token 構造体
+# API: Token 構造体/クラス
 
 ## 概要
 

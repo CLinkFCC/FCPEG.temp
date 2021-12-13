@@ -1,4 +1,4 @@
-# API: CharacterPosition 構造体
+# API: CharacterPosition 構造体/クラス
 
 ## 概要
 

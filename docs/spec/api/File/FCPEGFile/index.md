@@ -1,4 +1,4 @@
-# FCPEGFile 構造体
+# FCPEGFile 構造体/クラス
 
 ## 概要
 

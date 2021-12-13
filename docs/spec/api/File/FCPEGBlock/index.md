@@ -1,4 +1,4 @@
-# FCPEGBlock 構造体
+# FCPEGBlock 構造体/クラス
 
 ## 概要
 

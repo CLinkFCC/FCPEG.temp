@@ -1,4 +1,4 @@
-# BlockParser 構造体
+# BlockParser 構造体/クラス
 
 ## 概要
 
