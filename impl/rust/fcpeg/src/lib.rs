@@ -5,81 +5,82 @@ pub mod file;
 pub mod parser;
 pub mod rule;
 
-use std::collections::*;
 use std::result::*;
 
 use crate::block::*;
-use crate::data::*;
 use crate::file::*;
-use crate::parser::*;
 
 use rustnutlib::console::*;
-use rustnutlib::file::*;
-
-pub type FCPEGResult<T> = Result<T, FCPEGError>;
+use rustnutlib::fileman::*;
 
 pub enum FCPEGError {
-    BlockParseError { err: BlockParseError },
-    FCPEGFileError { err: FCPEGFileError },
-    SyntaxParseError { err: SyntaxParseError },
+    BlockParseErr(BlockParseError),
+    FCPEGFileErr(FCPEGFileError),
+    SyntaxParseErr(parser::SyntaxParseError),
 }
 
-impl ConsoleLogger for FCPEGError {
-    fn get_log(&self) -> ConsoleLog {
+impl FCPEGError {
+    pub fn get_console_data(&self) -> ConsoleLogData {
         return match self {
-            FCPEGError::BlockParseError { err } => err.get_log(),
-            FCPEGError::FCPEGFileError { err } => err.get_log(),
-            FCPEGError::SyntaxParseError { err } => err.get_log(),
+            FCPEGError::BlockParseErr(e) => e.get_log_data(),
+            FCPEGError::FCPEGFileErr(e) => e.get_log_data(),
+            FCPEGError::SyntaxParseErr(e) => e.get_log_data(),
         };
     }
 }
 
-pub struct FCPEGParser {
-    syntax_parser: SyntaxParser,
-}
+pub struct FCPEG {}
 
-impl FCPEGParser {
-    pub fn load(fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> FCPEGResult<FCPEGParser> {
-        let mut fcpeg_file_map = match FCPEGFileMap::load(fcpeg_file_path, lib_fcpeg_file_map) {
+impl FCPEG {
+    pub fn parse_from_paths(fcpeg_file_path: &String, input_file_paths: &Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {
+        let mut input_srcs = Vec::<String>::new();
+
+        for each_path in input_file_paths {
+            let new_src = match FileMan::read_all(each_path) {
+                Err(e) => return Err(FCPEGError::FCPEGFileErr(FCPEGFileError::FileErr(e))),
+                Ok(v) => v,
+            };
+
+            input_srcs.push(new_src);
+        }
+
+        return FCPEG::parse_from_srcs(fcpeg_file_path.clone(), input_srcs);
+    }
+
+    pub fn parse_from_srcs(fcpeg_file_path: String, input_srcs: Vec<String>) -> Result<Vec<data::SyntaxTree>, FCPEGError> {
+        let mut fcpeg_file_map = match FCPEGFileMap::load(fcpeg_file_path) {
             Ok(v) => v,
-            Err(e) => return Err(FCPEGError::FCPEGFileError { err: e }),
+            Err(e) => return Err(FCPEGError::FCPEGFileErr(e)),
         };
 
         let rule_map = match BlockParser::get_rule_map(&mut fcpeg_file_map) {
             Ok(v) => v,
-            Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
+            Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
         };
 
-        if cfg!(debug) {
+        if cfg!(release) {
             println!("--- rule map ---");
             println!("{}", rule_map);
         }
 
-        let syntax_parser = match SyntaxParser::new(rule_map) {
-            Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
+        println!("rule map {}", rule_map);
+
+        let mut parser = match parser::SyntaxParser::new(rule_map) {
+            Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
             Ok(v) => v,
         };
 
-        let parser = FCPEGParser {
-            syntax_parser: syntax_parser,
-        };
+        let mut trees = Vec::<data::SyntaxTree>::new();
 
-        return Ok(parser);
-    }
+        for each_src in input_srcs {
+            let new_tree = match parser.get_syntax_tree(&each_src) {
+                Err(e) => return Err(FCPEGError::SyntaxParseErr(e)),
+                Ok(v) => v,
+            };
 
-    pub fn parse(&mut self, input_file_path: String) -> FCPEGResult<SyntaxTree> {
-        let input_file_content = match FileMan::read_all(&input_file_path) {
-            Ok(v) => Box::new(v),
-            Err(e) => return Err(FCPEGError::FCPEGFileError {
-                err: FCPEGFileError::FileError { err: e },
-            }),
-        };
+            trees.push(new_tree);
+        }
 
-        let tree = match self.syntax_parser.get_syntax_tree(input_file_path, &input_file_content) {
-            Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
-            Ok(v) => v,
-        };
-
-        return Ok(tree);
+        return Ok(trees);
     }
 }

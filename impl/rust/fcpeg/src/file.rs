@@ -2,37 +2,33 @@ use std::collections::*;
 
 use crate::config::*;
 
-use rustnutlib::*;
 use rustnutlib::console::*;
-use rustnutlib::file::*;
-
-pub type FCPEGFileResult<T> = Result<T, FCPEGFileError>;
+use rustnutlib::fileman::*;
 
 pub enum FCPEGFileError {
-    Unknown {},
-    FileError { err: FileError },
-    ConfigurationError { err: ConfigurationError },
+    Unknown(),
+    FileErr(FileManError),
+    ConfigFileErr(ConfigFileError),
 }
 
-impl ConsoleLogger for FCPEGFileError {
-    fn get_log(&self) -> ConsoleLog {
-        return match self {
-            FCPEGFileError::Unknown {} => log!(Error, "unknown"),
-            FCPEGFileError::FileError { err } => err.get_log(),
-            FCPEGFileError::ConfigurationError { err } => err.get_log(),
-        };
+impl FCPEGFileError {
+    pub fn get_log_data(&self) -> ConsoleLogData {
+        match self {
+            FCPEGFileError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
+            FCPEGFileError::FileErr(err) => err.get_log_data(),
+            FCPEGFileError::ConfigFileErr(err) => err.get_log_data(),
+        }
     }
 }
 
 pub struct FCPEGFileMap {
-    pub file_map: HashMap<String, FCPEGFile>,
+    file_map: HashMap<String, FCPEGFile>,
 }
 
 impl FCPEGFileMap {
-    // todo: config 読んでサブファイル対応
-    pub fn load(fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> FCPEGFileResult<FCPEGFileMap> {
+    pub fn load(main_file_path: String) -> Result<FCPEGFileMap, FCPEGFileError> {
         // note: ルートファイルのエイリアス名は空文字; 除外エイリアスなし
-        let file_map = match FCPEGFile::load(String::new(), fcpeg_file_path, lib_fcpeg_file_map, &mut vec![]) {
+        let file_map = match FCPEGFile::load(String::new(), main_file_path, &mut vec![]) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
@@ -51,29 +47,29 @@ impl FCPEGFileMap {
 
 pub struct FCPEGFile {
     // note: ルートのエイリアス名は空文字
-    pub alias_name: String,
-    pub file_path: String,
-    pub file_content: Box<String>,
-    pub config: Configuration,
+    alias_name: String,
+    file_path: String,
+    file_content: String,
+    config_file: ConfigFile,
 }
 
 impl FCPEGFile {
-    // ret: サブファイルのマップ
-    pub fn load(alias_name: String, file_path: String, lib_fcpeg_file_map: HashMap<String, String>, filtered_alias_name: &mut Vec<String>) -> FCPEGFileResult<HashMap<String, FCPEGFile>> {
+    pub fn load(alias_name: String, file_path: String, filtered_alias_name: &mut Vec<String>) -> Result<HashMap<String, FCPEGFile>, FCPEGFileError> {
         let file_content = match FileMan::read_all(&file_path) {
-            Err(e) => return Err(FCPEGFileError::FileError { err: e }),
+            Err(e) => return Err(FCPEGFileError::FileErr(e)),
             Ok(v) => v,
         };
 
+        let mut config_file = ConfigFile::new();
         let config_file_path = FileMan::rename_ext(&file_path, "cfg");
 
-        let config = match Configuration::load(&config_file_path) {
-            Ok(v) => v,
-            Err(e) => return Err(FCPEGFileError::ConfigurationError { err: e }),
-        };
+        match config_file.load(config_file_path) {
+            Err(e) => return Err(FCPEGFileError::ConfigFileErr(e)),
+            Ok(()) => (),
+        }
 
-        if cfg!(debug) {
-            config.print();
+        if cfg!(release) {
+            config_file.print();
         }
 
         let mut files = HashMap::<String, FCPEGFile>::new();
@@ -81,16 +77,8 @@ impl FCPEGFile {
         // note: 無限再帰防止; 現在ロード中のエイリアスをロード対象から除外する
         filtered_alias_name.push(alias_name.clone());
 
-        for (alias_name, file_path) in lib_fcpeg_file_map {
-            let sub_file = FCPEGFile::load(alias_name, file_path, HashMap::new(), filtered_alias_name)?;
-
-            for (v1, v2) in sub_file {
-                files.insert(v1, v2);
-            }
-        }
-
-        for (sub_alias_name, sub_file_path) in &config.file_alias_map {
-            let sub_file = FCPEGFile::load(sub_alias_name.clone(), sub_file_path.clone(), HashMap::new(), filtered_alias_name)?;
+        for (sub_alias_name, sub_file_path) in config_file.file_alias_map.clone() {
+            let sub_file = FCPEGFile::load(sub_alias_name, sub_file_path, filtered_alias_name)?;
 
             for (v1, v2) in sub_file {
                 files.insert(v1, v2);
@@ -100,11 +88,15 @@ impl FCPEGFile {
         let root_file = FCPEGFile {
             alias_name: alias_name.clone(),
             file_path: file_path,
-            file_content: Box::new(file_content),
-            config: config,
+            file_content: file_content,
+            config_file: config_file,
         };
 
         files.insert(alias_name.clone(), root_file);
         return Ok(files);
+    }
+
+    pub fn get_file_content(&self) -> &String {
+        return &self.file_content;
     }
 }

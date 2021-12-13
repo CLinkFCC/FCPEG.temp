@@ -1,39 +1,47 @@
 use std::collections::*;
 use std::fmt::*;
 
-use rustnutlib::*;
-use rustnutlib::console::*;
-use rustnutlib::file::*;
+use once_cell::sync::*;
 
-// note: HashMap<name, (values, sub_map)>
+use rustnutlib::console::*;
+use rustnutlib::fileman::*;
+
+pub static mut CONFIG_DATA: Lazy<ConfigData> = Lazy::new(|| ConfigData::new());
+
+// HashMap<name, (values, sub_map)>
 type PropertyMap = HashMap<String, (Vec<String>, PropertySubMap)>;
 type PropertySubMap = HashMap::<String, Vec<String>>;
 
-pub type ConfigurationResult<T> = std::result::Result<T, ConfigurationError>;
-
-pub enum ConfigurationError {
-    Unknown {},
-    DuplicatedPropertyName { prop_name: String },
-    FileError { err: FileError },
-    InvalidPropertyValue { prop_name: String, prop_value: String },
-    InvalidPropertyValueLength { prop_name: String },
-    InvalidSyntax { line: usize, msg: String },
-    UnknownPropertyName { prop_name: String },
-    UnknownRegexMode { input: String },
+#[derive(Debug)]
+pub enum ConfigFileError {
+    Unknown(),
+    DuplicatedPropName(String),
+    FileManError(FileManError),
+    InvalidPropValue(String, String),
+    InvalidPropValueLength(String),
+    InvalidSyntax(usize, String),
+    UnknownPropName(String),
+    UnknownRegexMode(String),
 }
 
-impl ConsoleLogger for ConfigurationError {
-    fn get_log(&self) -> ConsoleLog {
-        return match self {
-            ConfigurationError::Unknown {} => log!(Error, "unknown"),
-            ConfigurationError::DuplicatedPropertyName { prop_name } => log!(Error, "duplicated property name", format!("property name:\t{}", prop_name)),
-            ConfigurationError::FileError { err } => err.get_log(),
-            ConfigurationError::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
-            ConfigurationError::InvalidPropertyValueLength { prop_name } => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
-            ConfigurationError::InvalidSyntax { line, msg } => log!(Error, "invalid syntax", format!("{}", msg), format!("line:\t{}", line)),
-            ConfigurationError::UnknownPropertyName { prop_name } => log!(Error, &format!("unknown property name '{}'", prop_name)),
-            ConfigurationError::UnknownRegexMode { input } => log!(Error, &format!("unknown regex mode '{}'", input)),
-        };
+impl Display for ConfigFileError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        return write!(f, "[ConfigFileError]");
+    }
+}
+
+impl ConfigFileError {
+    pub fn get_log_data(&self) -> ConsoleLogData {
+        match self {
+            ConfigFileError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown", vec![], vec![]),
+            ConfigFileError::DuplicatedPropName(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, "duplicated property name", vec![], vec![format!("property name:\t{}", prop_name)]),
+            ConfigFileError::FileManError(err) => err.get_log_data(),
+            ConfigFileError::InvalidPropValue(prop_name, prop_value) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value", vec![], vec![format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)]),
+            ConfigFileError::InvalidPropValueLength(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid property value length", vec![], vec![format!("property name:\t{}", prop_name)]),
+            ConfigFileError::InvalidSyntax(line, msg) => ConsoleLogData::new(ConsoleLogKind::Error, "invalid syntax", vec![format!("{}", msg), format!("line:\t{}", line)], vec![]),
+            ConfigFileError::UnknownPropName(prop_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown property name '{}'", prop_name), vec![], vec![]),
+            ConfigFileError::UnknownRegexMode(input) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown regex mode '{}'", input), vec![], vec![]),
+        }
     }
 }
 
@@ -42,6 +50,16 @@ pub enum RegexMode {
     Default,
     Onise,
     Posix,
+}
+
+impl Display for RegexMode {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        return match self {
+            RegexMode::Default => write!(f, "Default"),
+            RegexMode::Onise => write!(f, "Onise"),
+            RegexMode::Posix => write!(f, "POSIX"),
+        };
+    }
 }
 
 impl RegexMode {
@@ -55,34 +73,42 @@ impl RegexMode {
     }
 }
 
-impl Display for RegexMode {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        return match self {
-            RegexMode::Default => write!(f, "Default"),
-            RegexMode::Onise => write!(f, "Onise"),
-            RegexMode::Posix => write!(f, "POSIX"),
+pub struct ConfigData {
+    pub regex_mode: RegexMode,
+    pub reverse_ast_reflection: bool,
+}
+
+impl ConfigData {
+    pub fn new() -> ConfigData {
+        return ConfigData {
+            regex_mode: RegexMode::Default,
+            reverse_ast_reflection: false,
         };
     }
 }
 
-pub struct Configuration {
+pub struct ConfigFile {
     pub file_alias_map: HashMap<String, String>,
     pub regex_mode: RegexMode,
     pub reverse_ast_reflection: bool,
 }
 
-impl Configuration {
-    pub fn load(file_path: &String) -> ConfigurationResult<Configuration> {
-        let lines = match FileMan::read_lines(file_path) {
-            Err(e) => return Err(ConfigurationError::FileError { err: e }),
+impl ConfigFile {
+    pub fn new() -> ConfigFile {
+        return ConfigFile {
+            file_alias_map: HashMap::new(),
+            regex_mode: RegexMode::Default,
+            reverse_ast_reflection: false,
+        }
+    }
+
+    pub fn load(&mut self, src_path: String) -> std::result::Result<(), ConfigFileError> {
+        let lines = match FileMan::read_lines(&src_path) {
+            Err(e) => return Err(ConfigFileError::FileManError(e)),
             Ok(v) => v,
         };
 
-        let mut file_alias_map = HashMap::<String, String>::new();
-        let mut reverse_ast_reflection = false;
-        let mut regex_mode = RegexMode::Default;
-
-        let prop_map = Configuration::get_prop_map(&lines)?;
+        let prop_map = ConfigFile::get_prop_map(&lines)?;
 
         for (prop_name, (prop_values, prop_sub_map)) in prop_map.iter() {
             match prop_name.as_str() {
@@ -91,12 +117,12 @@ impl Configuration {
 
                     let regex_mode_str = match prop_values.get(0) {
                         Some(v) => v,
-                        None => return Err(ConfigurationError::InvalidPropertyValueLength { prop_name: prop_name.clone() }),
+                        None => return Err(ConfigFileError::InvalidPropValueLength(prop_name.clone())),
                     };
 
-                    regex_mode = match RegexMode::get_regex_mode(regex_mode_str) {
+                    self.regex_mode = match RegexMode::get_regex_mode(regex_mode_str) {
                         Some(v) => v,
-                        None => return Err(ConfigurationError::UnknownRegexMode { input: regex_mode_str.clone() }),
+                        None => return Err(ConfigFileError::UnknownRegexMode(regex_mode_str.clone())),
                     }
                 },
                 "FileAliases" => {
@@ -105,10 +131,10 @@ impl Configuration {
                     for (alias_name, alias_path_vec) in prop_sub_map {
                         let alias_path = match alias_path_vec.get(0) {
                             Some(v) => v,
-                            None => return Err(ConfigurationError::InvalidPropertyValueLength { prop_name: alias_name.clone() }),
+                            None => return Err(ConfigFileError::InvalidPropValueLength(alias_name.clone())),
                         };
 
-                        file_alias_map.insert(alias_name.clone(), alias_path.clone());
+                        self.file_alias_map.insert(alias_name.clone(), alias_path.clone());
                     }
                 },
                 "ASTReflect" => {
@@ -116,29 +142,28 @@ impl Configuration {
 
                     let ast_reflect = match prop_values.get(0) {
                         Some(v) => v,
-                        None => return Err(ConfigurationError::InvalidPropertyValueLength { prop_name: prop_name.clone() }),
+                        None => return Err(ConfigFileError::InvalidPropValueLength(prop_name.clone())),
                     };
 
-                    reverse_ast_reflection = match ast_reflect.to_lowercase().as_str() {
+                    self.reverse_ast_reflection = match ast_reflect.to_lowercase().as_str() {
                         "normal" => false,
                         "reversed" => true,
-                        _ => return Err(ConfigurationError::InvalidPropertyValue { prop_name: prop_name.clone(), prop_value: ast_reflect.clone() }),
+                        _ => return Err(ConfigFileError::InvalidPropValue(prop_name.clone(), ast_reflect.clone())),
                     };
                 },
-                _ => return Err(ConfigurationError::UnknownPropertyName { prop_name: prop_name.clone() }),
+                _ => return Err(ConfigFileError::UnknownPropName(prop_name.clone())),
             }
         }
 
-        let config = Configuration {
-            file_alias_map: HashMap::new(),
-            regex_mode: regex_mode,
-            reverse_ast_reflection: reverse_ast_reflection,
-        };
+        unsafe {
+            CONFIG_DATA.regex_mode = self.regex_mode.clone();
+            CONFIG_DATA.reverse_ast_reflection = self.reverse_ast_reflection;
+        }
 
-        return Ok(config);
+        return Ok(());
     }
 
-    fn get_prop_map(lines: &Vec<String>) -> ConfigurationResult<PropertyMap> {
+    fn get_prop_map(lines: &Vec<String>) -> std::result::Result<PropertyMap, ConfigFileError> {
         let mut prop_map = PropertyMap::new();
 
         // ネスト用の一時的なプロップ名
@@ -163,25 +188,25 @@ impl Configuration {
                     let both_sides: Vec<&str> = pure_line.split(": ").collect();
 
                     if both_sides.len() != 2 {
-                        return Err(ConfigurationError::InvalidSyntax { line: line_i, msg: "expected ':'".to_string() });
+                        return Err(ConfigFileError::InvalidSyntax(line_i, "expected ':'".to_string()));
                     }
 
                     let prop_name = both_sides.get(0).unwrap().to_string();
 
                     if prop_map.contains_key(&prop_name) {
-                        return Err(ConfigurationError::DuplicatedPropertyName { prop_name: prop_name });
+                        return Err(ConfigFileError::DuplicatedPropName(prop_name))
                     }
 
                     let prop_values_orig: Vec<&str> = both_sides.get(1).unwrap().split(" ").collect();
                     let prop_values: Vec<String> = prop_values_orig.iter().map(|s| s.to_string()).collect();
 
                     if prop_values == vec![""] {
-                        return Err(ConfigurationError::InvalidSyntax { line: line_i, msg: "property value not found".to_string() });
+                        return Err(ConfigFileError::InvalidSyntax(line_i, "property value not found".to_string()));
                     }
 
                     if is_nested {
                         if tmp_prop_name.is_none() {
-                            return Err(ConfigurationError::InvalidSyntax { line: line_i, msg: "unexpected '||'".to_string() });
+                            return Err(ConfigFileError::InvalidSyntax(line_i, "unexpected '||'".to_string()));
                         }
 
                         tmp_prop_sub_map.insert(prop_name, prop_values);
@@ -202,7 +227,7 @@ impl Configuration {
                     let pure_line = each_line[..each_line.len() - 1].to_string();
                     tmp_prop_name = Some(pure_line.clone());
                 },
-                _ => return Err(ConfigurationError::InvalidSyntax { line: line_i, msg: "expected ',' and ':' at the end".to_string() }),
+                _ => return Err(ConfigFileError::InvalidSyntax(line_i, "expected ',' and ':' at the end".to_string())),
             }
         }
 
@@ -217,7 +242,7 @@ impl Configuration {
     }
 
     pub fn print(&self) {
-        println!("-- Config Data --");
+        println!("-- Config File Data --");
         println!();
         println!("regex mode: {}", self.regex_mode);
         println!("file aliases:");

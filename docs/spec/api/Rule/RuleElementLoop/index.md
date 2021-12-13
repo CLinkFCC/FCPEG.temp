@@ -1,21 +1,20 @@
-# API: RuleElementLoop 構造体
+# API: RuleElementLoop 列挙体
 
 ## 概要
 
 要素の繰り返し情報を表す。
 
-## フィールド
+## バリアント
 
-### min: RuleElementLoopMin
+### Loop(min_max: Tuple<int, int>) = 0
 
-繰り返しの最小回数。
+最小回数と最大回数の間で要素を繰り返す。
 
-### max: RuleElementLoopMax
+#### min_max
 
-繰り返しの最大回数。
+`<最小回数, 最大回数>` の数値を持つタプル。
+最大回数に `-1` を指定すると最大回数が無限になる。
 
-## メソッド
+### NoLoop = 1
 
-### new()
-
-### get_no_loop()
+要素を繰り返さない。
