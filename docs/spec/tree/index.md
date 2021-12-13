@@ -1,1 +1,1 @@
-# 仕様書: Syntax Tree
+# 仕様書: 構文木 - Syntax Tree
