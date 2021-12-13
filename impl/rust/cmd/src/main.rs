@@ -13,9 +13,17 @@ use rustnutlib::file::*;
 
 fn main() {
     let cmd: MainCommand = argh::from_env();
+    let mut cons = match Console::load(None) {
+        Ok(v) => v,
+        Err(_) => {
+            println!("[err] failed to launch parser: failure on loading console data");
+            return;
+        },
+    };
 
     match cmd.subcmd {
-        Subcommand::Parse(subcmd) => spawn(move || proc_parse_subcmd(&subcmd)).join().unwrap(),
+        Subcommand::Manual(subcmd) => spawn(move || proc_manual_subcommand(&subcmd, &mut cons)).join().unwrap(),
+        Subcommand::Parse(subcmd) => spawn(move || proc_parse_subcmd(&subcmd, &mut cons)).join().unwrap(),
     }
 }
 
@@ -30,8 +38,14 @@ struct MainCommand {
 #[derive(FromArgs, PartialEq)]
 #[argh(subcommand)]
 enum Subcommand {
+    Manual(ManualSubcommand),
     Parse(ParseSubcommand),
 }
+
+/// man subcommand
+#[derive(Clone, FromArgs, PartialEq)]
+#[argh(subcommand, name = "man")]
+struct ManualSubcommand {}
 
 /// parse subcommand
 #[derive(Clone, FromArgs, PartialEq)]
@@ -44,10 +58,6 @@ struct ParseSubcommand {
     /// file path of input source
     #[argh(option, short = 'i')]
     input: String,
-
-    /// whether to show help or not
-    #[argh(switch)]
-    man: bool,
 
     /// whether to enable monitoring mode
     #[argh(switch)]
@@ -62,21 +72,7 @@ struct ParseSubcommand {
     time: bool,
 }
 
-fn proc_parse_subcmd(subcmd: &ParseSubcommand) {
-    let mut cons = match Console::load(None) {
-        Ok(v) => v,
-        Err(_) => {
-            println!("[err] failed to launch parser: failure on loading console data");
-            return;
-        },
-    };
-
-    // note: マニュアルメッセージ
-    if subcmd.man {
-        show_parse_cmd_help(&mut cons);
-        return;
-    }
-
+fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: &mut Console) {
     let fcpeg_file_path = subcmd.fcpeg.clone();
     let input_file_path = subcmd.input.clone();
     let output_tree = subcmd.output;
@@ -86,7 +82,7 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand) {
     if is_monitored {
         cons.log(log!(Notice, "command help", "You can quit parsing with '^C'."), false);
 
-        match parse_with_monitoring(&mut cons, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration) {
+        match parse_with_monitoring(cons, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration) {
             Ok(()) => (),
             Err(e) => cons.log(e.get_log(), false),
         }
@@ -98,13 +94,15 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand) {
     }
 }
 
-fn show_parse_cmd_help(cons: &mut Console) {
+fn proc_manual_subcommand(_: &ManualSubcommand, cons: &mut Console) {
     let log = log!(Notice, "command help",
         "parse:\tparse specified files",
-        "\t-f:\tspecify .fcpeg file",
-        "\t-h:\tshow help",
-        "\t-i:\tspecify input files",
-        "\t-mon:\tmonitor source files"
+            "\t-f:\tspecify .fcpeg file",
+            "\t-i:\tspecify input files",
+            "\t-o:\toutput syntax trees",
+            "\t-t:\toutput processing time",
+            "\t--man:\tshow help",
+            "\t--mon:\tmonitor source files"
     );
 
     cons.log(log, false);
