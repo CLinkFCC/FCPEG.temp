@@ -5,14 +5,42 @@ use crate::rule::*;
 use rustnutlib::console::*;
 
 pub enum SyntaxParseError {
-    Unknown(),
-    BlockParseErr(BlockParseError),
-    InternalErr(String),
-    InvalidSyntaxTreeStruct(String),
-    NoSucceededRule(String, usize, Vec<(usize, String)>),
-    TooDeepRecursion(usize),
-    TooLongRepeat(usize),
-    UnknownRuleID(String),
+    Unknown {},
+    BlockParseError { err: BlockParseError },
+    InternalError { msg: String },
+    InvalidCharClassFormat { value: String },
+    InvalidGenericsArgumentLength { arg_ids: Vec<String> },
+    InvalidFunctionArgumentLength { arg_ids: Vec<String> },
+    InvalidSyntaxTreeStructure { cause: String },
+    NoSucceededRule { pos: CharacterPosition, rule_id: String },
+    TooLongRepetition { max_loop_count: usize },
+    UnknownArgumentID { arg_id: String },
+    UnknownRuleID { pos: CharacterPosition, rule_id: String },
+}
+
+impl ConsoleLogger for SyntaxParseError {
+    fn get_log(&self) -> ConsoleLog {
+        return match self {
+            SyntaxParseError::Unknown {} => log!(Error, "unknown error"),
+            SyntaxParseError::BlockParseError { err } => err.get_log(),
+            SyntaxParseError::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
+            SyntaxParseError::InvalidCharClassFormat { value } => log!(Error, &format!("invalid character class format '{}'", value)),
+            SyntaxParseError::InvalidGenericsArgumentLength { arg_ids } => log!(Error, &format!("invalid generics argument length ({:?})", arg_ids)),
+            SyntaxParseError::InvalidFunctionArgumentLength { arg_ids } => log!(Error, &format!("invalid function argument length ({:?})", arg_ids)),
+            SyntaxParseError::InvalidSyntaxTreeStructure { cause } => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
+            SyntaxParseError::NoSucceededRule { pos, rule_id } => log!(Error, &format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos)),
+            SyntaxParseError::TooLongRepetition { max_loop_count } => log!(Error, &format!("too long repetition over {}", max_loop_count)),
+            SyntaxParseError::UnknownArgumentID { arg_id } => log!(Error, &format!("unknown argument id '{}'", arg_id)),
+            SyntaxParseError::UnknownRuleID { pos, rule_id } => log!(Error, &format!("unknown rule id '{}'", rule_id), &format!("at: {}", pos)),
+        };
+    }
+}
+
+pub type ArgumentMap = HashMap<String, Argument>;
+
+pub struct Argument {
+    kind: ArgumentKind,
+    rule_group: Box<RuleGroup>,
 }
 
 impl SyntaxParseError {
@@ -37,7 +65,9 @@ pub struct SyntaxParser {
     recursion_count: usize,
     max_recursion_count: usize,
     max_loop_count: usize,
-    rule_stack: Vec<(usize, String)>,
+    arg_maps: Box<Vec<ArgumentMap>>,
+    // rule_stack: Box<Vec<(usize, String)>>,
+    regex_map: Box<HashMap::<String, Regex>>,
 }
 
 impl SyntaxParser {
@@ -49,7 +79,9 @@ impl SyntaxParser {
             recursion_count: 1,
             max_recursion_count: 128,
             max_loop_count: 65536,
-            rule_stack: vec![],
+            arg_maps: Box::new(Vec::new()),
+            // rule_stack: Box::new(vec![]),
+            regex_map: Box::new(HashMap::new()),
         });
     }
 
@@ -82,14 +114,14 @@ impl SyntaxParser {
 
         let mut root_node = match self.is_rule_successful(&start_rule_id)? {
             Some(v) => v,
-            None => return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i, self.rule_stack.clone())),
+            None => return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position() }),
         };
 
         // ルートは常に Reflectable
         root_node.set_ast_reflection(ASTReflectionStyle::Reflection(start_rule_id.clone()));
 
-        if self.src_i < self.src_content.len() {
-            return Err(SyntaxParseError::NoSucceededRule(start_rule_id.clone(), self.src_i, self.rule_stack.clone()));
+        if self.src_i < self.src_content.chars().count() {
+            return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position() });
         }
 
         self.recursion_count -= 1;
@@ -105,7 +137,7 @@ impl SyntaxParser {
             None => return Err(SyntaxParseError::UnknownRuleID(rule_id.clone())),
         };
 
-        self.rule_stack.push((self.src_i, rule_id.clone()));
+        // self.rule_stack.push((self.src_i, rule_id.clone()));
 
         return match self.is_choice_successful(&rule.group.elem_order, &rule.group)? {
             Some(v) => {
@@ -128,8 +160,8 @@ impl SyntaxParser {
                     _ => (),
                 };
 
-                self.rule_stack.pop().unwrap();
-                let new_node = SyntaxNodeElement::from_node_list_args(v, ast_reflection_style);
+                // self.rule_stack.pop().unwrap();
+                let new_node = SyntaxNodeElement::from_node_args(v, ast_reflection_style);
                 Ok(Some(new_node))
             },
             None => Ok(None),
@@ -494,21 +526,33 @@ impl SyntaxParser {
                     return Err(SyntaxParseError::TooDeepRecursion(self.max_recursion_count));
                 }
 
-                match self.is_rule_successful(&expr.value.clone())? {
-                    Some(node_elem) => {
-                        self.recursion_count -= 1;
+                self.arg_maps.push(new_arg_map);
+                let result = self.is_rule_expr_matched(expr);
+                self.arg_maps.pop();
+                return result;
+            },
+            RuleExpressionKind::Func(args) => {
+                let rule_id = &expr.value;
 
-                        let conv_node_elems = match &node_elem {
-                            SyntaxNodeElement::NodeList(node_list) => {
-                                let sub_ast_reflection = match &expr.ast_reflection_style {
-                                    ASTReflectionStyle::Reflection(elem_name) => {
-                                        let conv_elem_name = if elem_name == "" {
-                                            expr.value.clone()
-                                        } else {
-                                            elem_name.clone()
-                                        };
+                // note: プリミティブ関数
+                match rule_id.as_str() {
+                    "JOIN" => {
+                        match args.get(0) {
+                            Some(tar_arg) if args.len() == 1 => {
+                                return match self.is_choice_successful(&RuleElementOrder::Sequential, tar_arg)? {
+                                    Some(result_elems) => {
+                                        let mut joined_str = String::new();
 
-                                        ASTReflectionStyle::Reflection(conv_elem_name)
+                                        for each_elem in result_elems {
+                                            match each_elem {
+                                                SyntaxNodeElement::Node(node) if node.is_reflectable() => joined_str += &node.join_child_leaf_values(),
+                                                SyntaxNodeElement::Leaf(leaf) if leaf.is_reflectable() => joined_str += &leaf.value,
+                                                _ => (),
+                                            }
+                                        }
+
+                                        let new_leaf = SyntaxNodeElement::from_leaf_args(self.get_char_position(), joined_str, expr.ast_reflection_style.clone());
+                                        Ok(Some(vec![new_leaf]))
                                     },
                                     _ => expr.ast_reflection_style.clone(),
                                 };
