@@ -1,0 +1,19 @@
+[Main]{
+  % this is in "pegmain.fcpeg" file,
+  + import "./test.fcpeg" show {Test},
+  + use Syntax,
+  + start Syntax.Syntax,
+}
+
+[Syntax]{
+  + use {Yakumono} as {Yn},
+	Syntax <- `??`,
+  OpDevison <- ";" : (!Yn.OpenBlacket Yn.Bleak !Yn.Opr2},
+}
+[Yakumono]{
+  OpenBlacket <- "(" : "{" : "[",
+　% 開括弧,
+  Bleak <- "\r\n" : "\r" : "\n",
+　% 改行　,
+  Opr2 <- ".",
+}
