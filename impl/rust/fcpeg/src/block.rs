@@ -5,13 +5,14 @@ use crate::data::*;
 use crate::parser::*;
 use crate::rule::*;
 
+use rustnutlib::*;
 use rustnutlib::console::*;
 
 macro_rules! block_map {
     ($($block_name:expr => $func_name:ident), *,) => {
         {
             let mut block_map = BlockMap::new();
-            $(block_map.insert($block_name.to_string(), FCPEGBlock::$func_name());)*
+            $(block_map.insert($block_name.to_string(), Box::new(FCPEGBlock::$func_name()));)*
             block_map
         }
     };
@@ -20,12 +21,6 @@ macro_rules! block_map {
 macro_rules! block {
     ($block_name:expr, $cmds:expr) => {
         Block::new($block_name.to_string(), $cmds)
-    };
-}
-
-macro_rules! use_block {
-    ($block_name:expr) => {
-        BlockCommand::Use(0, "".to_string(), $block_name.to_string(), $block_name.to_string())
     };
 }
 
@@ -39,19 +34,19 @@ macro_rules! rule {
                 }
             )*];
 
-            let mut root_group = RuleGroup::new(RuleGroupKind::Choice);
+            let mut root_group = Box::new(RuleGroup::new(RuleGroupKind::Choice));
             root_group.sub_elems = sub_elems;
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
-            let rule = Rule::new($rule_name.to_string(), vec![], Box::new(root_group));
-            BlockCommand::Define(0, rule)
+            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), String::new(), vec![], vec![], root_group);
+            BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule }
         }
     };
 }
 
 macro_rules! start_cmd {
     ($file_alias_name:expr, $block_name:expr, $rule_name:expr) => {
-        BlockCommand::Start(0, $file_alias_name.to_string(), $block_name.to_string(), $rule_name.to_string())
+        BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: $file_alias_name.to_string(), block_name: $block_name.to_string(), rule_name: $rule_name.to_string() }
     };
 }
 
@@ -60,7 +55,7 @@ macro_rules! choice {
         {
             let mut group = RuleGroup::new(RuleGroupKind::Sequence);
             group.sub_elems = vec![$($sub_elem,)*];
-            group.ast_reflection_style = ASTReflectionStyle::Reflection("".to_string());
+            group.ast_reflection_style = ASTReflectionStyle::Reflection(String::new());
 
             for opt in $options {
                 match opt {
@@ -81,11 +76,11 @@ macro_rules! choice {
 macro_rules! expr {
     ($kind:ident, $value:expr $(, $option:expr) *) => {
         {
-            let mut expr = RuleExpression::new(0, RuleExpressionKind::$kind, $value.to_string());
+            let mut expr = RuleExpression::new(CharacterPosition::get_empty(), RuleExpressionKind::$kind, $value.to_string());
 
             let leaf_name = match RuleExpressionKind::$kind {
                 RuleExpressionKind::ID => $value.to_string(),
-                _ => "".to_string(),
+                _ => String::new(),
             };
 
             expr.ast_reflection_style = ASTReflectionStyle::Reflection(leaf_name);
@@ -105,259 +100,397 @@ macro_rules! expr {
     };
 }
 
-pub type BlockMap = HashMap<String, Block>;
+pub type BlockMap = HashMap<String, Box<Block>>;
 
-#[derive(Debug)]
+pub type BlockParseResult<T> = Result<T, BlockParseError>;
+
 pub enum BlockParseError {
     Unknown(),
-    BlockAliasNotFound(usize, String),
-    DuplicatedBlockAliasName(usize, String),
-    DuplicatedBlockName(usize, String),
-    DuplicatedStartCmd(),
-    ExpectedBlockDef(usize),
-    ExpectedToken(usize, String),
-    InternalErr(String),
-    InvalidCharClassFormat(usize, String),
-    InvalidToken(usize, String),
-    MainBlockNotFound(),
-    NoChoiceOrExpressionContent(usize),
-    NoStartCmdInMainBlock(),
-    RuleHasNoChoice(String),
-    RuleInMainBlock(),
-    StartCmdOutsideMainBlock(),
-    TooBigNumber(usize, String),
-    UnexpectedEOF(usize, String),
-    UnexpectedToken(usize, String, String),
-    UnknownPragmaName(usize, String),
-    UnknownSyntax(usize, String),
-    UnknownToken(usize, String),
+    BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
+    DuplicatedBlockName { pos: CharacterPosition, block_name: String },
+    DuplicatedFileAliasName { file_alias_name: String },
+    DuplicatedArgumentID { pos: CharacterPosition, arg_id: String },
+    DuplicatedRuleName { pos: CharacterPosition, rule_name: String },
+    DuplicatedStartCommand { pos: CharacterPosition },
+    InternalError { msg: String },
+    InvalidID { pos: CharacterPosition, id: String },
+    InvalidLoopCount { pos: CharacterPosition },
+    MainBlockNotDefined {},
+    NoStartCommandInMainBlock {},
+    RuleInMainBlock { pos: CharacterPosition },
+    StartCommandOutsideMainBlock { pos: CharacterPosition },
+    UnknownEscapeSequenceCharacter { pos: CharacterPosition },
 }
 
-impl BlockParseError {
-    pub fn get_log_data(&self) -> ConsoleLogData {
+impl ConsoleLogger for BlockParseError {
+    fn get_log(&self) -> ConsoleLog {
         match self {
-            BlockParseError::Unknown() => ConsoleLogData::new(ConsoleLogKind::Error, "unknown error", vec![], vec![]),
-            BlockParseError::BlockAliasNotFound(line, block_alias_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("block alias '{}' not found", block_alias_name), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::DuplicatedBlockAliasName(line, block_alias_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("duplicated block alias name '{}'", block_alias_name), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::DuplicatedBlockName(line, block_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("duplicated block name '{}'", block_name), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::DuplicatedStartCmd() => ConsoleLogData::new(ConsoleLogKind::Error, "duplicated start command", vec![], vec![]),
-            BlockParseError::ExpectedBlockDef(line) => ConsoleLogData::new(ConsoleLogKind::Error, "expected block definition", vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::ExpectedToken(line, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("expected token {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::InternalErr(err_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("internal error: {}", err_name), vec![], vec![]),
-            BlockParseError::InvalidCharClassFormat(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid character class format '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::InvalidToken(line, value) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("invalid token '{}'", value), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::MainBlockNotFound() => ConsoleLogData::new(ConsoleLogKind::Error, "main block not found", vec![], vec![]),
-            BlockParseError::NoChoiceOrExpressionContent(line) => ConsoleLogData::new(ConsoleLogKind::Error, "no choice or expression content", vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::NoStartCmdInMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "no start command in main block", vec![], vec![]),
-            BlockParseError::RuleHasNoChoice(rule_name) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("rule '{}' has no choice", rule_name), vec![], vec![]),
-            BlockParseError::RuleInMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "rule in main block", vec![], vec![]),
-            BlockParseError::StartCmdOutsideMainBlock() => ConsoleLogData::new(ConsoleLogKind::Error, "start command outside main block", vec![], vec![]),
-            BlockParseError::TooBigNumber(line, number) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("too big number {}", number), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::UnexpectedEOF(line, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unexpected EOF, expected {}", expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::UnexpectedToken(line, unexpected_token, expected_str) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unexpected token '{}', expected {}", unexpected_token, expected_str), vec![format!("line:\t{}", line + 1)], vec![]),
-            BlockParseError::UnknownPragmaName(line, unknown_pragma_name) => ConsoleLogData::new(ConsoleLogKind::Error, "unknown pragma name", vec![format!("line:\t{}", line + 1), format!("pragma name:\t{}", unknown_pragma_name)], vec![]),
-            BlockParseError::UnknownSyntax(line, target_token) => ConsoleLogData::new(ConsoleLogKind::Error, "unknown syntax", vec![format!("line: {}", line + 1), format!("target token:\t'{}'", target_token)], vec![]),
-            BlockParseError::UnknownToken(line, unknown_token) => ConsoleLogData::new(ConsoleLogKind::Error, &format!("unknown token '{}'", unknown_token), vec![format!("line:\t{}", line + 1)], vec![]),
+            BlockParseError::Unknown() => log!(Error, "unknown error"),
+            BlockParseError::BlockAliasNotFound { pos, block_alias_name } => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedFileAliasName { file_alias_name } => log!(Error, &format!("duplicated file alias name '{}'", file_alias_name)),
+            BlockParseError::DuplicatedArgumentID { pos, arg_id } => log!(Error, &format!("duplicated argument id '{}'", arg_id), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedRuleName { pos, rule_name } => log!(Error, &format!("duplicated rule name '{}'", rule_name), format!("at:\t{}", pos)),
+            BlockParseError::DuplicatedStartCommand { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
+            BlockParseError::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
+            BlockParseError::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
+            BlockParseError::InvalidLoopCount { pos } => log!(Error, &format!("invalid loop count"), format!("at:\t{}", pos)),
+            BlockParseError::MainBlockNotDefined {} => log!(Error, "main block not defined"),
+            BlockParseError::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
+            BlockParseError::RuleInMainBlock { pos } => log!(Error, "rule in main block", format!("at:\t{}", pos)),
+            BlockParseError::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
+            BlockParseError::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
         }
     }
 }
 
-pub struct BlockParser {}
+// note: プリミティブ関数の名前一覧
+const PRIM_FUNC_NAMES: &[&'static str] = &["JOIN"];
+
+pub struct BlockParser {
+    start_rule_id: Option<String>,
+    file_alias_name: String,
+    block_name: String,
+    block_alias_map: HashMap<String, String>,
+    file_path: String,
+    file_content: Box<String>,
+}
 
 impl BlockParser {
-    // note: FileMan から最終的な RuleMap を取得する
-    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> Result<RuleMap, SyntaxParseError> {
-        let mut block_map = FCPEGBlock::get_block_map();
-        let mut rule_map = RuleMap::new(".Syntax.FCPEG".to_string());
-        match rule_map.format_block_map(&String::new(), &mut block_map) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
-        let mut parser = SyntaxParser::new(rule_map.clone())?;
-        // note: HashMap<エイリアス名, ブロックマップ>
-        let mut block_maps = HashMap::<String, BlockMap>::new();
-
-        for (alias_name, fcpeg_file) in fcpeg_file_map.iter() {
-            let tree = BlockParser::to_syntax_tree(&mut parser, fcpeg_file.get_file_content())?;
-            block_maps.insert(alias_name.clone(), BlockParser::to_block_map(&tree)?);
-        }
-
-        let main_block_id = "Main";
-        let mut start_rule_id = Option::<String>::None;
-
-        match block_maps.get(&String::new()) {
-            Some(main_map) => {
-                match main_map.get(main_block_id) {
-                    Some(block) => {
-                        for each_cmd in &block.cmds {
-                            match each_cmd {
-                                BlockCommand::Start(_, file_alias_name, block_name, rule_name) => {
-                                    start_rule_id = Some(format!("{}.{}.{}", file_alias_name, block_name, rule_name));
-                                },
-                                _ => (),
-                            }
-                        }
-                    },
-                    None => return Err(SyntaxParseError::InternalErr(format!("unknown rule id '{}'", main_block_id))),
-                }
-            },
-            None => return Err(SyntaxParseError::InternalErr("main file alias not found".to_string())),
-        }
-
-        let mut rule_map = match start_rule_id {
-            Some(id) => RuleMap::new(id),
-            None => return Err(SyntaxParseError::InternalErr(format!("start declaration not found"))),
+    // note: FileMap から最終的な RuleMap を取得する
+    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> SyntaxParseResult<Box<RuleMap>> {
+        let block_map = FCPEGBlock::get_block_map();
+        let rule_map = match RuleMap::new(vec![block_map], ".Syntax.FCPEG".to_string()) {
+            Ok(v) => Box::new(v),
+            Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
         };
 
-        for (file_alias_name, mut each_block_map) in block_maps.iter_mut() {
-            match rule_map.format_block_map(&file_alias_name, &mut each_block_map) { Ok(()) => (), Err(e) => { let mut cons = Console::new(); cons.log(e.get_log_data(), false); panic!(); } };
+        let mut parser = SyntaxParser::new(rule_map)?;
+        // note: HashMap<エイリアス名, ブロックマップ>
+        let mut block_maps = Vec::<BlockMap>::new();
+        let mut start_rule_id = Option::<String>::None;
+
+        for (file_alias_name, fcpeg_file) in fcpeg_file_map.iter() {
+            let mut block_parser = BlockParser {
+                start_rule_id: None,
+                file_alias_name: file_alias_name.clone(),
+                block_name: String::new(),
+                block_alias_map: HashMap::new(),
+                file_path: fcpeg_file.file_path.clone(),
+                file_content: fcpeg_file.file_content.clone(),
+            };
+
+            let tree = Box::new(block_parser.to_syntax_tree(&mut parser)?);
+            block_maps.push(block_parser.to_block_map(tree)?);
+
+            if block_parser.file_alias_name == "" {
+                start_rule_id = block_parser.start_rule_id.clone();
+            }
         }
+
+        let rule_map = match start_rule_id {
+            Some(id) => {
+                match RuleMap::new(block_maps, id) {
+                    Ok(v) => Box::new(v),
+                    Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
+                }
+            },
+            None => return Err(SyntaxParseError::BlockParseError {
+                err: BlockParseError::NoStartCommandInMainBlock {},
+            }),
+        };
 
         return Ok(rule_map);
     }
 
-    // note: ブロックマップとファイルを元に 1 ファイルの FCPEG コードの構文木を取得する
-    fn to_syntax_tree(parser: &mut SyntaxParser, fcpeg_file_content: &String) -> Result<SyntaxTree, SyntaxParseError> {
-        let tree = parser.get_syntax_tree(fcpeg_file_content)?;
+    fn to_syntax_tree(&mut self, parser: &mut SyntaxParser) -> SyntaxParseResult<SyntaxTree> {
+        let tree = parser.get_syntax_tree(self.file_path.clone(), &self.file_content)?;
 
-        println!("print {}", fcpeg_file_content);
-        tree.print(true);
+        if cfg!(debug) {
+            tree.print(true);
+        }
 
         return Ok(tree);
     }
 
     // note: FCPEG コードの構文木 → ブロックマップの変換
-    fn to_block_map(tree: &SyntaxTree) -> Result<BlockMap, SyntaxParseError> {
+    fn to_block_map(&mut self, tree: Box<SyntaxTree>) -> SyntaxParseResult<BlockMap> {
         let mut block_map = BlockMap::new();
-
-        let root = tree.clone_child();
-
-        let block_nodes = root.get_node_list()?.get_node_list_child(0)?.filter_unreflectable_out();
+        let root = tree.get_child_ref();
+        let block_nodes = match root.get_node()?.get_node_child_at(0) {
+            Ok(v) => v.get_reflectable_children(),
+            Err(_) => return Ok(block_map),
+        };
 
         for each_block_elem in &block_nodes {
-            let each_block_node_list = each_block_elem.get_node_list()?;
-            let block_name = each_block_node_list.get_node_list_child(0)?.to_string();
+            let each_block_node = each_block_elem.get_node()?;
+            let block_name_node = each_block_node.get_node_child_at(0)?;
+            self.block_name = block_name_node.join_child_leaf_values();
+
+            if block_map.contains_key(&self.block_name) {
+                return Err(SyntaxParseError::BlockParseError {
+                    err: BlockParseError::DuplicatedBlockName { pos: block_name_node.get_position()?, block_name: self.block_name.clone() },
+                });
+            }
 
             let mut cmds = Vec::<BlockCommand>::new();
+            let mut rule_names = Vec::<String>::new();
 
-            match each_block_node_list.get_node_list_child(1) {
+            match each_block_node.get_node_child_at(1) {
                 Ok(cmd_elems) => {
-                    for each_cmd_elem in &cmd_elems.filter_unreflectable_out() {
-                        let each_cmd_node_list = each_cmd_elem.get_node_list()?.get_node_list_child(0)?;
-                        let new_cmd = BlockParser::to_block_cmd(each_cmd_node_list)?;
+                    for each_cmd_elem in &cmd_elems.get_reflectable_children() {
+                        let each_cmd_node = each_cmd_elem.get_node()?.get_node_child_at(0)?;
+                        let new_cmd = self.to_block_cmd(each_cmd_node)?;
+
+                        // ルール名の重複チェック
+                        match &new_cmd {
+                            BlockCommand::Define { pos: _, rule } => {
+                                if self.block_name == "Main" {
+                                    return Err(SyntaxParseError::BlockParseError {
+                                        err: BlockParseError::RuleInMainBlock { pos: rule.pos.clone() },
+                                    });
+                                }
+
+                                if rule_names.contains(&rule.name) {
+                                    return Err(SyntaxParseError::BlockParseError {
+                                        err: BlockParseError::DuplicatedRuleName { pos: rule.pos.clone(), rule_name: rule.name.clone() },
+                                    });
+                                }
+
+                                rule_names.push(rule.name.clone())
+                            },
+                            _ => (),
+                        }
+
                         cmds.push(new_cmd);
                     }
                 },
                 Err(_) => (),
             }
 
-            block_map.insert(block_name.clone(), Block::new(block_name.clone(), cmds));
+            block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds)));
+            self.block_alias_map.clear();
         }
 
-        block_map.insert("".to_string(), Block::new("Main".to_string(), vec![]));
+        block_map.insert(String::new(), Box::new(Block::new("Main".to_string(), vec![])));
 
-        for (_, each_block) in &block_map {
-            each_block.print();
-            println!();
+        if cfg!(debug) {
+            for (_, each_block) in &block_map {
+                each_block.print();
+                println!();
+            }
         }
 
         return Ok(block_map);
     }
 
-    fn to_block_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        return match &cmd_node_list.ast_reflection_style {
+    fn to_block_cmd(&mut self, cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
+        return match &cmd_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(node_name) => match node_name.as_str() {
-                "DefineCmd" => BlockParser::to_define_cmd(cmd_node_list),
-                "StartCmd" => BlockParser::to_start_cmd(cmd_node_list),
-                "UseCmd" => BlockParser::to_use_cmd(cmd_node_list),
-                _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid node name '{}'", node_name))),
+                ".Block.CommentCmd" => self.to_comment_cmd(cmd_node),
+                ".Block.DefineCmd" => self.to_define_cmd(cmd_node),
+                ".Block.StartCmd" => {
+                    let start_cmd = self.to_start_cmd(cmd_node)?;
+
+                    match start_cmd.clone() {
+                        BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => {
+                            if self.block_name != "Main" {
+                                return Err(SyntaxParseError::BlockParseError {
+                                    err: BlockParseError::StartCommandOutsideMainBlock { pos: pos },
+                                });
+                            }
+
+                            if self.file_alias_name == "" {
+                                if self.start_rule_id.is_some() {
+                                    return Err(SyntaxParseError::BlockParseError {
+                                        err: BlockParseError::DuplicatedStartCommand { pos: pos },
+                                    });
+                                }
+
+                                self.start_rule_id = Some(format!("{}.{}.{}", file_alias_name, block_name, rule_name));
+                            }
+                        }
+                        _ => (),
+                    }
+
+                    Ok(start_cmd)
+                },
+                ".Block.UseCmd" => {
+                    let use_cmd = self.to_use_cmd(cmd_node)?;
+
+                    match &use_cmd {
+                        BlockCommand::Use { pos: _, file_alias_name, block_name, block_alias_name } => {
+                            self.block_alias_map.insert(block_alias_name.clone(), format!("{}.{}", file_alias_name, block_name));
+                        },
+                        _ => (),
+                    }
+
+                    Ok(use_cmd)
+                },
+                _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("invalid node name '{}'", node_name) }),
             },
-            _ => Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+            _ => Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
         };
     }
 
-    fn to_define_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        let rule_name = cmd_node_list.get_node_list_child(0)?.to_string();
-        let choice_node_list = cmd_node_list.get_node_list_child(1)?;
-
-        let new_choice = BlockParser::to_rule_choice_elem(choice_node_list)?;
-        // let new_choice_elem = RuleElement::Group(Box::new(new_choice.clone()));
-
-        // let mut root_group = RuleGroup::new(RuleGroupKind::Choice);
-        // root_group.sub_elems = vec![new_choice_elem];
-        // root_group.ast_reflection_style = new_choice.ast_reflection_style.clone();
-        let rule = Rule::new(rule_name, vec![], Box::new(new_choice));
-        return Ok(BlockCommand::Define(0, rule));
+    fn to_comment_cmd(&mut self, cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
+        return Ok(BlockCommand::Comment { pos: CharacterPosition::get_empty(), value: cmd_node.join_child_leaf_values() });
     }
 
-    fn to_start_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        let raw_id = BlockParser::to_chain_id(cmd_node_list.get_node_list_child(0)?)?;
+    fn to_define_cmd(&mut self, cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
+        let rule_name_node = cmd_node.get_node_child_at(0)?;
+        let rule_pos = rule_name_node.get_position()?;
+        let rule_name = rule_name_node.join_child_leaf_values();
+
+        let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenericsIDs"]) {
+            Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
+            None => vec![],
+        };
+
+        let func_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdFuncIDs"]) {
+            Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
+            None => vec![],
+        };
+
+        let new_choice = match cmd_node.find_first_child_node(vec![".Rule.PureChoice"]) {
+            Some(choice_node) => Box::new(self.to_rule_choice_elem(choice_node, &generics_args)?),
+            None => return Err(SyntaxParseError::InternalError { msg: "pure choice not found".to_string() }),
+        };
+
+        let rule = Rule::new(rule_pos, format!("{}.{}.{}", self.file_alias_name, self.block_name, rule_name), rule_name, generics_args, func_args, new_choice);
+        return Ok(BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule });
+    }
+
+    fn to_define_cmd_arg_ids(&mut self, cmd_node: &SyntaxNode) -> SyntaxParseResult<Vec<String>> {
+        let mut args = Vec::<String>::new();
+
+        for each_elem in &cmd_node.sub_elems {
+            match each_elem {
+                SyntaxNodeElement::Node(each_node) => {
+                    if each_node.ast_reflection_style == ASTReflectionStyle::Reflection(".Rule.ArgID".to_string()) {
+                        let new_arg = each_node.join_child_leaf_values();
+
+                        if args.contains(&new_arg) {
+                            return Err(SyntaxParseError::BlockParseError {
+                                err: BlockParseError::DuplicatedArgumentID { pos: each_node.get_position()?, arg_id: new_arg.clone() },
+                            });
+                        }
+
+                        args.push(new_arg);
+                    }
+                },
+                _ => (),
+            }
+        }
+
+        return Ok(args);
+    }
+
+    fn to_start_cmd(&mut self, cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
+        let raw_id_node = cmd_node.get_node_child_at(0)?;
+        let raw_id = BlockParser::to_chain_id(raw_id_node)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
         let cmd = match divided_raw_id.len() {
-            2 => BlockCommand::Start(0, String::new(), divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
-            3 => BlockCommand::Start(0, divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), divided_raw_id.get(2).unwrap().to_string()),
-            _ => return Err(SyntaxParseError::InternalErr("invalid chain ID length on start command".to_string())),
+            2 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), rule_name: divided_raw_id.get(1).unwrap().to_string() },
+            3 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), rule_name: divided_raw_id.get(2).unwrap().to_string() },
+            _ => return Err(SyntaxParseError::BlockParseError {
+                err: BlockParseError::InvalidID { pos: raw_id_node.get_node_child_at(0)?.get_position()?, id: raw_id },
+            }),
         };
 
         return Ok(cmd);
     }
 
-    fn to_use_cmd(cmd_node_list: &SyntaxNodeList) -> Result<BlockCommand, SyntaxParseError> {
-        let raw_id = BlockParser::to_chain_id(cmd_node_list.get_node_list_child(0)?)?;
+    fn to_use_cmd(&mut self, cmd_node: &SyntaxNode) -> SyntaxParseResult<BlockCommand> {
+        let raw_id = BlockParser::to_chain_id(cmd_node.get_node_child_at(0)?)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
-        let block_alias_id = match cmd_node_list.find_first_child_node(vec!["UseCmdBlockAlias"]) {
-            Some(v) => v.get_node_list_child(0)?.to_string(),
-            None => divided_raw_id.join("."),
+        let (file_alias_name, block_alias_id) = match cmd_node.find_first_child_node(vec![".Block.UseCmdBlockAlias"]) {
+            Some(v) => (divided_raw_id.get(0).unwrap().to_string(), v.get_node_child_at(0)?.join_child_leaf_values()),
+            None => {
+                match divided_raw_id.len() {
+                    1 => (self.file_alias_name.clone(), divided_raw_id.get(0).unwrap().to_string()),
+                    2 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
+                    _ => return Err(SyntaxParseError::InternalError { msg: "invalid chain ID length on use command".to_string() }),
+                }
+            }
         };
 
         return match divided_raw_id.len() {
-            1 => Ok(BlockCommand::Use(0, "".to_string(), divided_raw_id.get(0).unwrap().to_string(), block_alias_id)),
-            2 => Ok(BlockCommand::Use(0, divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), block_alias_id)),
-            _ => Err(SyntaxParseError::InternalErr("invalid chain ID length on use command".to_string())),
+            1 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: file_alias_name, block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
+            2 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: file_alias_name, block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
+            _ => Err(SyntaxParseError::InternalError { msg: "invalid chain ID length on use command".to_string() }),
         };
     }
 
     // note: Seq を解析する
-    fn to_seq_elem(seq_node: &SyntaxNodeList) -> Result<RuleElement, SyntaxParseError> {
-        // todo: 先読みなどの処理
+    fn to_seq_elem(&mut self, seq_node: &SyntaxNode, generics_args: &Vec<String>) -> SyntaxParseResult<RuleElement> {
         let mut children = Vec::<RuleElement>::new();
 
         // note: SeqElem ノードをループ
-        for each_seq_elem_elem in &seq_node.filter_unreflectable_out() {
-            let each_seq_elem_node = each_seq_elem_elem.get_node_list()?;
+        for each_seq_elem_elem in &seq_node.get_reflectable_children() {
+            let each_seq_elem_node = each_seq_elem_elem.get_node()?;
 
             // note: Lookahead ノード
-            let lookahead_kind = match each_seq_elem_node.find_first_child_node(vec!["Lookahead"]) {
+            let lookahead_kind = match each_seq_elem_node.find_first_child_node(vec![".Rule.Lookahead"]) {
                 Some(v) => {
-                    match v.get_leaf_child(0)?.value.as_str() {
+                    match v.get_leaf_child_at(0)?.value.as_str() {
                         "&" => RuleElementLookaheadKind::Positive,
                         "!" => RuleElementLookaheadKind::Negative,
-                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("unknown lookahead kind"))),
+                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("unknown lookahead kind") }),
                     }
                 },
                 None => RuleElementLookaheadKind::None,
             };
 
             // note: Loop ノード
-            let loop_count = match each_seq_elem_node.find_first_child_node(vec!["Loop"]) {
+            let loop_count = match each_seq_elem_node.find_first_child_node(vec![".Rule.Loop"]) {
                 Some(v) => {
-                    match v.get_child(0)? {
-                        SyntaxNodeElement::NodeList(node) => {
-                            let min_num = match node.get_node_list_child(0)?.get_leaf_child(0)?.value.parse::<usize>() {
-                                Ok(v) => v,
-                                Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid minimum loop value"))),
+                    match v.get_child_at(0)? {
+                        SyntaxNodeElement::Node(node) => {
+                            let min_num = match node.get_child_at(0)? {
+                                SyntaxNodeElement::Node(min_node) => {
+                                    let min_str = min_node.join_child_leaf_values();
+
+                                    match min_str.parse::<usize>() {
+                                        Ok(v) => {
+                                            if v == 0 {
+                                                return Err(SyntaxParseError::BlockParseError {
+                                                    err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty() },
+                                                });
+                                            }
+
+                                            v
+                                        },
+                                        Err(_) => return Err(SyntaxParseError::BlockParseError {
+                                            err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty() },
+                                        }),
+                                    }
+                                },
+                                SyntaxNodeElement::Leaf(_) => 0usize,
                             };
 
-                            let max_num = match node.get_node_list_child(1)?.get_leaf_child(0)?.value.parse::<usize>() {
-                                Ok(v) => v,
-                                Err(_) => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid maximum loop value"))),
+                            let max_num = match node.get_child_at(1)? {
+                                SyntaxNodeElement::Node(max_node) => {
+                                    let max_str = max_node.join_child_leaf_values();
+
+                                    match max_str.parse::<usize>() {
+                                        Ok(v) => Infinitable::Normal(v),
+                                        Err(_) => return Err(SyntaxParseError::BlockParseError {
+                                            err: BlockParseError::InvalidLoopCount { pos: CharacterPosition::get_empty() },
+                                        }),
+                                    }
+                                },
+                                SyntaxNodeElement::Leaf(_) => Infinitable::Infinite,
                             };
 
-                            RuleElementLoopCount::new(min_num, Infinitable::Normal(max_num))
+                            RuleElementLoopCount::new(min_num, max_num)
                         },
                         SyntaxNodeElement::Leaf(leaf) => {
                             match leaf.value.as_str() {
                                 "?" | "*" | "+" => RuleElementLoopCount::from_symbol(&leaf.value),
-                                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("unknown lookahead kind"))),
+                                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("unknown lookahead kind") }),
                             }
                         }
                     }
@@ -367,111 +500,227 @@ impl BlockParser {
 
             // note: ASTReflectionStyle ノード
             // todo: 構成ファイルによって切り替える
-            let ast_reflection_style = match each_seq_elem_node.find_first_child_node(vec!["ASTReflectionStyle"]) {
-                Some(v) => {
-                    match v.get_leaf_child(0) {
-                        Ok(v) => {
-                            if v.value == "##" {
+            let ast_reflection_style = match each_seq_elem_node.find_first_child_node(vec![".Rule.ASTReflectionStyle"]) {
+                Some(style_node) => {
+                    match style_node.get_leaf_child_at(0) {
+                        Ok(leaf) => {
+                            if leaf.value == "##" {
                                 ASTReflectionStyle::Expansion
                             } else {
-                                ASTReflectionStyle::Reflection(v.value.clone())
+                                ASTReflectionStyle::Reflection(style_node.join_child_leaf_values())
                             }
                         },
-                        Err(_) => ASTReflectionStyle::from_config(true, String::new()),
+                        Err(_) => ASTReflectionStyle::from_config(false, true, String::new()),
                     }
                 },
-                None => ASTReflectionStyle::from_config(false, String::new()),
+                None => ASTReflectionStyle::from_config(false, false, String::new()),
             };
 
-            // Choice または Expr ノード
-            let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec!["Choice", "Expr"]) {
+            // note: Choice または Expr ノード
+            let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec![".Rule.Choice", ".Rule.Expr"]) {
                 Some(v) => v,
-                None => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+                None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
             };
 
             match &choice_or_expr_node.ast_reflection_style {
                 ASTReflectionStyle::Reflection(name) => {
                     let new_elem = match name.as_str() {
-                        "Choice" => {
-                            let mut new_choice = BlockParser::to_rule_choice_elem(choice_or_expr_node.get_node_list_child(0)?)?;
+                        ".Rule.Choice" => {
+                            let mut new_choice = Box::new(self.to_rule_choice_elem(choice_or_expr_node.get_node_child_at(0)?, generics_args)?);
                             new_choice.lookahead_kind = lookahead_kind;
                             new_choice.loop_count = loop_count;
                             new_choice.ast_reflection_style = ast_reflection_style;
-                            RuleElement::Group(Box::new(new_choice))
+                            RuleElement::Group(new_choice)
                         },
-                        "Expr" => {
-                            let mut new_expr = BlockParser::to_rule_expr_elem(choice_or_expr_node)?;
+                        ".Rule.Expr" => {
+                            let mut new_expr = Box::new(self.to_rule_expr_elem(choice_or_expr_node, generics_args)?);
                             new_expr.lookahead_kind = lookahead_kind;
                             new_expr.loop_count = loop_count;
                             new_expr.ast_reflection_style = ast_reflection_style;
-                            RuleElement::Expression(Box::new(new_expr))
+                            RuleElement::Expression(new_expr)
                         },
-                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct(format!("invalid node name '{}'", name))),
+                        _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("invalid node name '{}'", name) }),
                     };
 
                     children.push(new_elem);
                 },
-                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStruct("invalid operation".to_string())),
+                _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
             };
         }
 
-        let mut seq = RuleGroup::new(RuleGroupKind::Sequence);
+        let mut seq = Box::new(RuleGroup::new(RuleGroupKind::Sequence));
         seq.sub_elems = children;
-        return Ok(RuleElement::Group(Box::new(seq)));
+        return Ok(RuleElement::Group(seq));
     }
 
     // note: Rule.PureChoice ノードの解析
-    fn to_rule_choice_elem(choice_node: &SyntaxNodeList) -> Result<RuleGroup, SyntaxParseError> {
+    fn to_rule_choice_elem(&mut self, choice_node: &SyntaxNode, generics_args: &Vec<String>) -> SyntaxParseResult<RuleGroup> {
         let mut children = Vec::<RuleElement>::new();
         let mut group_kind = RuleGroupKind::Sequence;
 
         // Seq ノードをループ
-        for seq_elem in &choice_node.filter_unreflectable_out() {
-            match &seq_elem.as_ref() {
-                SyntaxNodeElement::NodeList(node) => {
-                    match &seq_elem.as_ref().get_ast_reflection() {
-                        ASTReflectionStyle::Reflection(name) => if name == "Seq" {
-                            let new_child = BlockParser::to_seq_elem(node)?;
+        for seq_elem in &choice_node.get_reflectable_children() {
+            match &seq_elem {
+                SyntaxNodeElement::Node(node) => {
+                    match &seq_elem.get_ast_reflection_style() {
+                        ASTReflectionStyle::Reflection(name) => if name == ".Rule.Seq" {
+                            let new_child = self.to_seq_elem(node, generics_args)?;
                             children.push(new_child);
                         },
                         _ => (),
                     }
                 },
-                SyntaxNodeElement::Leaf(leaf) if leaf.value == ":" => group_kind = RuleGroupKind::Choice,
-                _ => (),
+                SyntaxNodeElement::Leaf(leaf) => {
+                    match leaf.value.as_str() {
+                        ":" | "," => group_kind = RuleGroupKind::Choice,
+                        _ => (),
+                    }
+                },
             }
         }
 
-        let mut group = RuleGroup::new(group_kind);
+        let mut group = Box::new(RuleGroup::new(group_kind.clone()));
         group.sub_elems = children;
-        return Ok(group);
+
+        let mut tmp_root_group = RuleGroup::new(RuleGroupKind::Sequence);
+        tmp_root_group.sub_elems = vec![RuleElement::Group(group)];
+
+        return Ok(tmp_root_group);
     }
 
-    fn to_rule_expr_elem(expr_node_list: &SyntaxNodeList) -> Result<RuleExpression, SyntaxParseError> {
-        let expr_child_node = expr_node_list.get_node_list_child(0)?;
-
-        let (kind, value) = match &expr_child_node.ast_reflection_style {
+    fn to_rule_expr_elem(&mut self, expr_node: &SyntaxNode, generics_args: &Vec<String>) -> SyntaxParseResult<RuleExpression> {
+        let expr_child_node = expr_node.get_node_child_at(0)?;
+        let (pos, kind, value) = match &expr_child_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(name) => {
                 match name.as_str() {
-                    "CharClass" => (RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.to_string())),
-                    "ID" => (RuleExpressionKind::ID, BlockParser::to_chain_id(expr_child_node.get_node_list_child(0)?)?),
-                    "Str" => (RuleExpressionKind::String, expr_child_node.to_string()),
-                    "Wildcard" => (RuleExpressionKind::Wildcard, ".".to_string()),
-                    _ => return Err(SyntaxParseError::InternalErr(format!("unknown expression name '{}'", name))),
+                    ".Rule.ArgID" => (expr_child_node.get_position()?, RuleExpressionKind::ArgID, expr_child_node.join_child_leaf_values()),
+                    ".Rule.CharClass" => (expr_child_node.get_position()?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
+                    ".Rule.Generics" | ".Rule.Func" => {
+                        let mut args = Vec::<Box<RuleGroup>>::new();
+                        for instant_pure_choice_node in expr_child_node.find_child_nodes(vec![".Rule.InstantPureChoice"]) {
+                            args.push(Box::new(self.to_rule_choice_elem(instant_pure_choice_node, generics_args)?));
+                        }
+
+                        let parent_node = expr_child_node.get_node_child_at(0)?.get_node_child_at(0)?;
+                        let pos = parent_node.get_position()?;
+
+                        let generics = match name.as_str() {
+                            ".Rule.Generics" => RuleExpressionKind::Generics(args),
+                            ".Rule.Func" => RuleExpressionKind::Func(args),
+                            _ => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
+                        };
+
+                        let raw_id = BlockParser::to_string_vec(expr_child_node.get_node_child_at(0)?)?;
+                        let joined_raw_id = raw_id.join(".");
+                        let id = if name == ".Rule.Func" && PRIM_FUNC_NAMES.contains(&joined_raw_id.as_str()) {
+                            joined_raw_id.clone()
+                        } else {
+                            match BlockParser::to_rule_id(&pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
+                                Ok(v) => v,
+                                Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
+                            }
+                        };
+
+                        (pos, generics, id)
+                    },
+                    ".Rule.ID" => {
+                        let chain_id_node = expr_child_node.get_node_child_at(0)?;
+                        let id = match BlockParser::to_rule_id(&chain_id_node.get_node_child_at(0)?.get_position()?, &BlockParser::to_string_vec(chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
+                            Ok(v) => v,
+                            Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
+                        };
+
+                        (CharacterPosition::get_empty(), RuleExpressionKind::ID, id)
+                    },
+                    ".Rule.Str" => (CharacterPosition::get_empty(), RuleExpressionKind::String, BlockParser::to_string_value(expr_child_node)?),
+                    ".Rule.Wildcard" => (expr_child_node.get_position()?, RuleExpressionKind::Wildcard, ".".to_string()),
+                    _ => return Err(SyntaxParseError::InternalError { msg: format!("unknown expression name '{}'", name) }),
                 }
             },
-            _ => return Err(SyntaxParseError::InternalErr("invalid operation".to_string())),
+            _ => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
         };
 
-        let expr = RuleExpression::new(0, kind, value);
+        let expr = RuleExpression::new(pos, kind, value);
         return Ok(expr);
     }
 
-    fn to_chain_id(chain_id_node: &SyntaxNodeList) -> Result<String, SyntaxParseError> {
+    fn to_string_vec(str_vec_node: &SyntaxNode) -> SyntaxParseResult<Vec<String>> {
+        let mut str_vec = Vec::<String>::new();
+
+        for str_elem in str_vec_node.get_reflectable_children() {
+            str_vec.push(str_elem.get_node()?.join_child_leaf_values());
+        }
+
+        return Ok(str_vec);
+    }
+
+    fn to_rule_id(pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String) -> BlockParseResult<String> {
+        let new_id = match id_tokens.len() {
+            1 => format!("{}.{}.{}", file_alias_name.clone(), block_name.clone(), id_tokens.get(0).unwrap()),
+            2 => {
+                let block_name = id_tokens.get(0).unwrap();
+                let rule_name = id_tokens.get(1).unwrap();
+
+                if block_alias_map.contains_key(&block_name.to_string()) {
+                    // note: ブロック名がエイリアスである場合
+                    format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name)
+                } else {
+                    // note: ブロック名がエイリアスでない場合
+                    return Err(BlockParseError::BlockAliasNotFound { pos: pos.clone(), block_alias_name: block_name.to_string() });
+                }
+            },
+            3 => {
+                let file_alias_name = id_tokens.get(0).unwrap();
+                let block_name = id_tokens.get(1).unwrap();
+                let rule_name = id_tokens.get(2).unwrap();
+
+                format!("{}.{}.{}", file_alias_name, block_name, rule_name)
+            },
+            _ => return Err(BlockParseError::InternalError { msg: format!("invalid id expression") }),
+        };
+
+        return Ok(new_id);
+    }
+
+    fn to_string_value(str_node: &SyntaxNode) -> SyntaxParseResult<String> {
+        let mut s = String::new();
+
+        for each_elem in &str_node.sub_elems {
+            match each_elem {
+                SyntaxNodeElement::Node(node) => {
+                    match node.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(_) => {
+                            s += match node.get_leaf_child_at(0)?.value.as_str() {
+                                "\\" => "\\",
+                                "\"" => "\"",
+                                "n" => "\n",
+                                "t" => "\t",
+                                "z" => "\0",
+                                _ => return Err(SyntaxParseError::BlockParseError {
+                                    err: BlockParseError::UnknownEscapeSequenceCharacter { pos: node.get_position()? },
+                                }),
+                            };
+                        },
+                        _ => (),
+                    }
+                },
+                SyntaxNodeElement::Leaf(leaf) => {
+                    match leaf.ast_reflection_style {
+                        ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
+                        _ => (),
+                    }
+                },
+            }
+        }
+
+        return Ok(s);
+    }
+
+    fn to_chain_id(chain_id_node: &SyntaxNode) -> SyntaxParseResult<String> {
         let mut ids = Vec::<String>::new();
 
-        for chain_id_elem in &chain_id_node.filter_unreflectable_out() {
-            ids.push(chain_id_elem.get_node_list()?.to_string());
+        for chain_id_elem in &chain_id_node.get_reflectable_children() {
+            ids.push(chain_id_elem.get_node()?.join_child_leaf_values());
         }
 
         return Ok(ids.join("."));
@@ -498,36 +747,34 @@ impl FCPEGBlock {
     }
 
     fn get_syntax_block() -> Block {
-        let block_use = use_block!("Block");
-        let symbol_use = use_block!("Symbol");
-
-        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*#,
+        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*# Symbol.EOF#,
         let fcpeg_rule = rule!{
-            "FCPEG",
+            ".Syntax.FCPEG",
             choice!{
                 vec![],
-                expr!(ID, "Symbol.Space", "*", "#"),
-                expr!(ID, "Symbol.LineEnd", "*", "#"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.LineEnd", "*", "#"),
                 choice!{
                     vec!["*"],
                     choice!{
                         vec![],
-                        expr!(ID, "Block.Block"),
-                        expr!(ID, "Symbol.LineEnd", "+", "#"),
+                        expr!(ID, ".Block.Block"),
+                        expr!(ID, ".Symbol.LineEnd", "+", "#"),
                     },
                 },
-                expr!(ID, "Symbol.LineEnd", "*", "#"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.LineEnd", "*", "#"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(String, "\0", "#"),
             },
         };
 
-        return block!("Syntax", vec![block_use, symbol_use, fcpeg_rule]);
+        return block!(".Syntax", vec![fcpeg_rule]);
     }
 
     fn get_symbol_block() -> Block {
         // code: Space <- " ",
         let space_rule = rule!{
-            "Space",
+            ".Symbol.Space",
             choice!{
                 vec![],
                 expr!(String, " "),
@@ -536,22 +783,31 @@ impl FCPEGBlock {
 
         // code: LineEnd <- Space* "\n" Space*,
         let line_end_rule = rule!{
-            "LineEnd",
+            ".Symbol.LineEnd",
             choice!{
                 vec![],
-                expr!(ID, "Space", "*"),
+                expr!(ID, ".Symbol.Space", "*"),
                 expr!(String, "\n"),
-                expr!(ID, "Space", "*"),
+                expr!(ID, ".Symbol.Space", "*"),
             },
         };
 
-        return block!("Symbol", vec![space_rule, line_end_rule]);
+        // code: EOF <- "\z",
+        let eof_rule = rule!{
+            ".Symbol.EOF",
+            choice!{
+                vec![],
+                expr!(String, "\0", "#"),
+            },
+        };
+
+        return block!(".Symbol", vec![space_rule, line_end_rule, eof_rule]);
     }
 
     fn get_misc_block() -> Block {
         // code: SingleID <- [a-zA-Z_] [a-zA-Z0-9_]*,
         let single_id_rule = rule!{
-            "SingleID",
+            ".Misc.SingleID",
             choice!{
                 vec![],
                 expr!(CharClass, "[a-zA-Z_]"),
@@ -561,90 +817,86 @@ impl FCPEGBlock {
 
         // code: ChainID <- SingleID ("."# SingleID)*##,
         let chain_id_rule = rule!{
-            "ChainID",
+            ".Misc.ChainID",
             choice!{
                 vec![],
-                expr!(ID, "SingleID"),
+                expr!(ID, ".Misc.SingleID"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec![],
                         expr!(String, ".", "#"),
-                        expr!(ID, "SingleID"),
+                        expr!(ID, ".Misc.SingleID"),
                     },
                 },
             },
         };
 
-        return block!("Misc", vec![single_id_rule, chain_id_rule]);
+        return block!(".Misc", vec![single_id_rule, chain_id_rule]);
     }
 
     fn get_block_block() -> Block {
-        let misc_use = use_block!("Misc");
-        let rule_use = use_block!("Rule");
-        let symbol_use = use_block!("Symbol");
-
         // code: Block <- "["# Symbol.Space*# Misc.SingleID Symbol.Space*# "]"# Symbol.Space*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
         let block_rule = rule!{
-            "Block",
+            ".Block.Block",
             choice!{
                 vec![],
                 expr!(String, "[", "#"),
-                expr!(ID, "Symbol.Space", "*", "#"),
-                expr!(ID, "Misc.SingleID"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Misc.SingleID"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
                 expr!(String, "]", "#"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
                 expr!(String, "{", "#"),
-                expr!(ID, "Symbol.LineEnd", "+", "#"),
+                expr!(ID, ".Symbol.LineEnd", "+", "#"),
                 choice!{
                     vec!["*"],
                     choice!{
                         vec![],
-                        expr!(ID, "Cmd"),
-                        expr!(ID, "Symbol.LineEnd", "+", "#"),
+                        expr!(ID, ".Block.Cmd"),
+                        expr!(ID, ".Symbol.LineEnd", "+", "#"),
                     },
                 },
                 expr!(String, "}", "#"),
             },
         };
 
-        // code: Cmd <- Comment : DefineCmd : StartCmd : UseCmd,
+        // code: Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
         let cmd_rule = rule!{
-            "Cmd",
+            ".Block.Cmd",
             choice!{
                 vec![":"],
                 choice!{
                     vec![],
-                    expr!(ID, "Comment"),
+                    expr!(ID, ".Block.CommentCmd"),
                 },
                 choice!{
                     vec![],
-                    expr!(ID, "DefineCmd"),
+                    expr!(ID, ".Block.DefineCmd"),
                 },
                 choice!{
                     vec![],
-                    expr!(ID, "StartCmd"),
+                    expr!(ID, ".Block.StartCmd"),
                 },
                 choice!{
                     vec![],
-                    expr!(ID, "UseCmd"),
+                    expr!(ID, ".Block.UseCmd"),
                 },
             },
         };
 
-        // code: Comment <- "%"# (!"," !Symbol.LineEnd .)* ","#,
+        // code: CommentCmd <- "%"# (!"," !Symbol.LineEnd .)*## ","#,
         let comment_rule = rule!{
-            "Comment",
+            ".Block.CommentCmd",
             choice!{
                 vec![],
                 expr!(String, "%", "#"),
                 choice!{
-                    vec!["*"],
+                    vec!["*", "##"],
                     choice!{
                         vec![],
                         expr!(String, ",", "!"),
-                        expr!(ID, "Symbol.LineEnd", "!"),
+                        expr!(ID, ".Symbol.LineEnd", "!"),
                         expr!(Wildcard, "."),
                     },
                 },
@@ -652,112 +904,176 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmd <- Misc.SingleID Symbol.Space*# "<-"# Symbol.Space*# Rule.PureChoice Symbol.Space*# ","#,
+        // code: DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Space*# "<-"# Symbol.Space*# Rule.PureChoice Symbol.Space*# ","#,
         let define_cmd_rule = rule!{
-            "DefineCmd",
+            ".Block.DefineCmd",
             choice!{
                 vec![],
-                expr!(ID, "Misc.SingleID"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Misc.SingleID"),
+                expr!(ID, ".Block.DefineCmdGenericsIDs", "?"),
+                expr!(ID, ".Block.DefineCmdFuncIDs", "?"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
                 expr!(String, "<-", "#"),
-                expr!(ID, "Symbol.Space", "*", "#"),
-                expr!(ID, "Rule.PureChoice"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Rule.PureChoice"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
                 expr!(String, ",", "#"),
+            },
+        };
+
+        // code: DefineCmdGenericsIDs <- "<"# Rule.ArgID (","# Symbol.Space# Rule.ArgID)*## ">"#,
+        let define_cmd_generics_ids_rule = rule!{
+            ".Block.DefineCmdGenericsIDs",
+            choice!{
+                vec![],
+                expr!(String, "<", "#"),
+                expr!(ID, ".Rule.ArgID"),
+                choice!{
+                    vec!["*", "##"],
+                    expr!(String, ",", "#"),
+                    expr!(ID, ".Symbol.Space", "#"),
+                    expr!(ID, ".Rule.ArgID"),
+                },
+                expr!(String, ">", "#"),
+            },
+        };
+
+        // code: DefineCmdFuncIDs <- "("# Rule.ArgID (","# Symbol.Space# Rule.ArgID)*## ")"#,
+        let define_cmd_func_ids_rule = rule!{
+            ".Block.DefineCmdFuncIDs",
+            choice!{
+                vec![],
+                expr!(String, "(", "#"),
+                expr!(ID, ".Rule.ArgID"),
+                choice!{
+                    vec!["*", "##"],
+                    expr!(String, ",", "#"),
+                    expr!(ID, ".Symbol.Space", "#"),
+                    expr!(ID, ".Rule.ArgID"),
+                },
+                expr!(String, ")", "#"),
             },
         };
 
         // code: StartCmd <- "+"# Symbol.Space*# "start"# Symbol.Space+# Misc.ChainID Symbol.Space*# ","#,
         let start_cmd_rule = rule!{
-            "StartCmd",
+            ".Block.StartCmd",
             choice!{
                 vec![],
                 expr!(String, "+", "#"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
                 expr!(String, "start", "#"),
-                expr!(ID, "Symbol.Space", "+", "#"),
-                expr!(ID, "Misc.ChainID"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Space", "+", "#"),
+                expr!(ID, ".Misc.ChainID"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
                 expr!(String, ",", "#"),
             },
         };
 
         // code: UseCmd <- "+"# Symbol.Space*# "use"# Symbol.Space+# Misc.ChainID UseCmdBlockAlias? Symbol.Space*# ","#,
         let use_cmd_rule = rule!{
-            "UseCmd",
+            ".Block.UseCmd",
             choice!{
                 vec![],
                 expr!(String, "+", "#"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
                 expr!(String, "use", "#"),
-                expr!(ID, "Symbol.Space", "+", "#"),
-                expr!(ID, "Misc.ChainID"),
-                expr!(ID, "UseCmdBlockAlias", "?"),
-                expr!(ID, "Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Space", "+", "#"),
+                expr!(ID, ".Misc.ChainID"),
+                expr!(ID, ".Block.UseCmdBlockAlias", "?"),
+                expr!(ID, ".Symbol.Space", "*", "#"),
                 expr!(String, ",", "#"),
             },
         };
 
         // code: UseCmdBlockAlias <- Symbol.Space+# "as" Symbol.Space+# Misc.SingleID,
         let use_cmd_block_alias_rule = rule!{
-            "UseCmdBlockAlias",
+            ".Block.UseCmdBlockAlias",
             choice!{
                 vec![],
-                expr!(ID, "Symbol.Space", "+", "#"),
+                expr!(ID, ".Symbol.Space", "+", "#"),
                 expr!(String, "as", "#"),
-                expr!(ID, "Symbol.Space", "+", "#"),
-                expr!(ID, "Misc.SingleID"),
+                expr!(ID, ".Symbol.Space", "+", "#"),
+                expr!(ID, ".Misc.SingleID"),
             },
         };
 
-        return block!("Block", vec![misc_use, rule_use, symbol_use, block_rule, cmd_rule, comment_rule, define_cmd_rule, start_cmd_rule, use_cmd_rule, use_cmd_block_alias_rule]);
+        return block!(".Block", vec![block_rule, cmd_rule, comment_rule, define_cmd_rule, define_cmd_generics_ids_rule, define_cmd_func_ids_rule, start_cmd_rule, use_cmd_rule, use_cmd_block_alias_rule]);
     }
 
     fn get_rule_block() -> Block {
-        let misc_use = use_block!("Misc");
-        let symbol_use = use_block!("Symbol");
-
-        // code: PureChoice <- Seq (Symbol.Space# ":" Symbol.Space# Seq)*##,
-        let pure_choice_rule = rule!{
-            "PureChoice",
+        // code: InstantPureChoice <- Seq ":" Symbol.Space# Seq)*##,
+        let instant_pure_choice_rule = rule!{
+            ".Rule.InstantPureChoice",
             choice!{
                 vec![],
-                expr!(ID, "Seq"),
+                expr!(ID, ".Rule.Seq"),
                 choice!{
-                vec!["*", "##"],
-                    expr!(ID, "Symbol.Space", "#"),
-                    expr!(String, ":"),
-                    expr!(ID, "Symbol.Space", "#"),
-                    expr!(ID, "Seq"),
+                    vec!["*", "##"],
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ":"),
+                        expr!(ID, ".Symbol.Space", "#"),
+                        expr!(ID, ".Rule.Seq"),
+                    },
+                },
+            },
+        };
+
+        // code: PureChoice <- Seq ((Symbol.Space# ":" : ",")## Symbol.Space# Seq)*##,
+        let pure_choice_rule = rule!{
+            ".Rule.PureChoice",
+            choice!{
+                vec![],
+                expr!(ID, ".Rule.Seq"),
+                choice!{
+                    vec!["*", "##"],
+                    choice!{
+                        vec!["##"],
+                        choice!{
+                            vec![":"],
+                            choice!{
+                                vec!["##"],
+                                expr!(ID, ".Symbol.Space", "#"),
+                                expr!(String, ":"),
+                            },
+                            choice!{
+                                vec!["##"],
+                                expr!(String, ","),
+                            },
+                        },
+                        expr!(ID, ".Symbol.Space", "#"),
+                        expr!(ID, ".Rule.Seq"),
+                    },
                 },
             },
         };
 
         // code: Choice <- "("# PureChoice ")"#,
         let choice_rule = rule!{
-            "Choice",
+            ".Rule.Choice",
             choice!{
                 vec![],
                 expr!(String, "(", "#"),
-                expr!(ID, "PureChoice"),
+                expr!(ID, ".Rule.PureChoice"),
                 expr!(String, ")", "#"),
             },
         };
 
         // code: Seq <- SeqElem (Symbol.Space+# SeqElem)*##,
         let seq_rule = rule!{
-            "Seq",
+            ".Rule.Seq",
             choice!{
                 vec![],
-                expr!(ID, "SeqElem"),
+                expr!(ID, ".Rule.SeqElem"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec![],
                         choice!{
                             vec![],
-                            expr!(ID, "Symbol.Space", "+", "#"),
-                            expr!(ID, "SeqElem"),
+                            expr!(ID, ".Symbol.Space", "+", "#"),
+                            expr!(ID, ".Rule.SeqElem"),
                         },
                     },
                 },
@@ -766,52 +1082,64 @@ impl FCPEGBlock {
 
         // code: SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
         let seq_elem_rule = rule!{
-            "SeqElem",
+            ".Rule.SeqElem",
             choice!{
                 vec![],
-                expr!(ID, "Lookahead", "?"),
+                expr!(ID, ".Rule.Lookahead", "?"),
                 choice!{
                     vec!["##"],
                     choice!{
                         vec![":"],
                         choice!{
                             vec![],
-                            expr!(ID, "Choice"),
+                            expr!(ID, ".Rule.Choice"),
                         },
                         choice!{
                             vec![],
-                            expr!(ID, "Expr"),
+                            expr!(ID, ".Rule.Expr"),
                         },
                     },
                 },
-                expr!(ID, "Loop", "?"),
-                expr!(ID, "RandomOrder", "?"),
-                expr!(ID, "ASTReflectionStyle", "?"),
+                expr!(ID, ".Rule.Loop", "?"),
+                expr!(ID, ".Rule.RandomOrder", "?"),
+                expr!(ID, ".Rule.ASTReflectionStyle", "?"),
             },
         };
 
-        // code: Expr <- ID : Str : CharClass : Wildcard,
+        // code: Expr <- Generics : ArgID : Func : ID : Str : CharClass : Wildcard,
         let expr_rule = rule!{
-            "Expr",
+            ".Rule.Expr",
             choice!{
                 vec![],
                 choice!{
                     vec![":"],
                     choice!{
                         vec![],
-                        expr!(ID, "ID"),
+                        expr!(ID, ".Rule.ArgID"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, "Str"),
+                        expr!(ID, ".Rule.Generics"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, "CharClass"),
+                        expr!(ID, ".Rule.Func"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, "Wildcard"),
+                        expr!(ID, ".Rule.ID"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, ".Rule.Str"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, ".Rule.CharClass"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(ID, ".Rule.Wildcard"),
                     },
                 },
             },
@@ -819,7 +1147,7 @@ impl FCPEGBlock {
 
         // code: Lookahead <- "!" : "&",
         let lookahead_rule = rule!{
-            "Lookahead",
+            ".Rule.Lookahead",
             choice!{
                 vec![],
                 choice!{
@@ -838,7 +1166,7 @@ impl FCPEGBlock {
 
         // code: Loop <- "?" : "*" : "+" : LoopRange,
         let loop_rule = rule!{
-            "Loop",
+            ".Rule.Loop",
             choice!{
                 vec![],
                 choice!{
@@ -857,28 +1185,48 @@ impl FCPEGBlock {
                     },
                     choice!{
                         vec![],
-                        expr!(ID, "LoopRange"),
+                        expr!(ID, ".Rule.LoopRange"),
                     },
                 },
             },
         };
 
-        // code: LoopRange <- "{"# Num? ","# Num? "}"#,
+        // code: LoopRange <- "{"# (Num : "")## ","# (Num : "")## "}"#,
         let loop_range_rule = rule!{
-            "LoopRange",
+            ".Rule.LoopRange",
             choice!{
                 vec![],
                 expr!(String, "{", "#"),
-                expr!(ID, "Num", "?"),
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(ID, ".Rule.Num", "##"),
+                    },
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ""),
+                    },
+                },
                 expr!(String, ",", "#"),
-                expr!(ID, "Num", "?"),
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(ID, ".Rule.Num", "##"),
+                    },
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ""),
+                    },
+                },
                 expr!(String, "}", "#"),
             },
         };
 
         // expr: RandomOrder <- "^"# RandomOrderRange?,
         let random_order_rule = rule!{
-            "RandomOrder",
+            ".Rule.RandomOrder",
             choice!{
                 vec![],
                 expr!(String, "^", "#"),
@@ -888,18 +1236,18 @@ impl FCPEGBlock {
 
         // code: RandomOrderRange <- "["# Num? ","# Num? "]"#,
         let random_order_range_rule = rule!{
-            "RandomOrderRange",
+            ".Rule.RandomOrderRange",
             choice!{
                 vec![],
                 expr!(String, "[", "#"),
-                expr!(ID, "Num", "?"),
+                expr!(ID, ".Rule.Num", "?"),
                 expr!(String, "ID", "#"),
             },
         };
 
         // code: ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,
         let ast_reflection_rule = rule!{
-            "ASTReflectionStyle",
+            ".Rule.ASTReflectionStyle",
             choice!{
                 vec![],
                 choice!{
@@ -911,7 +1259,7 @@ impl FCPEGBlock {
                     choice!{
                         vec![],
                         expr!(String, "#", "#"),
-                        expr!(ID, "Misc.SingleID", "?", "##"),
+                        expr!(ID, ".Misc.SingleID", "?", "##"),
                     },
                 },
             },
@@ -919,7 +1267,7 @@ impl FCPEGBlock {
 
         // code: Num <- [0-9]+,
         let num_rule = rule!{
-            "Num",
+            ".Rule.Num",
             choice!{
                 vec![],
                 expr!(CharClass, "[0-9]+", "+"),
@@ -928,30 +1276,78 @@ impl FCPEGBlock {
 
         // code: ID <- Misc.ChainID,
         let id_rule = rule!{
-            "ID",
+            ".Rule.ID",
             choice!{
                 vec![],
-                expr!(ID, "Misc.ChainID"),
+                expr!(ID, ".Misc.ChainID"),
             },
         };
 
-        // code: EscSeq <- "\\" ("\\" : "0" : "\"" : "n"),
-        let esc_seq_rule = rule!{
-            "EscSeq",
+        // code: ArgID <- "$"# Misc.SingleID##,
+        let arg_id_rule = rule!{
+            ".Rule.ArgID",
             choice!{
                 vec![],
-                expr!(String, "\\"),
+                expr!(String, "$", "#"),
+                expr!(ID, ".Misc.SingleID", "##"),
+            },
+        };
+
+        // code: Generics <- Misc.ChainID "<"# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ">"#,
+        let generics_rule = rule!{
+            ".Rule.Generics",
+            choice!{
+                vec![],
+                expr!(ID, ".Misc.ChainID"),
+                expr!(String, "<", "#"),
+                expr!(ID, ".Rule.InstantPureChoice"),
                 choice!{
-                    vec![],
+                    vec!["*", "##"],
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ",", "#"),
+                        expr!(ID, ".Symbol.Space", "#"),
+                        expr!(ID, ".Rule.InstantPureChoice"),
+                    },
+                },
+                expr!(String, ">", "#"),
+            },
+        };
+
+        // code: Func <- Misc.ChainID "("# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ")"#,
+        let func_rule = rule!{
+            ".Rule.Func",
+            choice!{
+                vec![],
+                expr!(ID, ".Misc.ChainID"),
+                expr!(String, "(", "#"),
+                expr!(ID, ".Rule.InstantPureChoice"),
+                choice!{
+                    vec!["*", "##"],
+                    choice!{
+                        vec!["##"],
+                        expr!(String, ",", "#"),
+                        expr!(ID, ".Symbol.Space", "#"),
+                        expr!(ID, ".Rule.InstantPureChoice"),
+                    },
+                },
+                expr!(String, ")", "#"),
+            },
+        };
+
+        // code: EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
+        let esc_seq_rule = rule!{
+            ".Rule.EscSeq",
+            choice!{
+                vec![],
+                expr!(String, "\\", "#"),
+                choice!{
+                    vec!["##"],
                     choice!{
                         vec![":"],
                         choice!{
                             vec![],
                             expr!(String, "\\"),
-                        },
-                        choice!{
-                            vec![],
-                            expr!(String, "0"),
                         },
                         choice!{
                             vec![],
@@ -961,24 +1357,32 @@ impl FCPEGBlock {
                             vec![],
                             expr!(String, "n"),
                         },
+                        choice!{
+                            vec![],
+                            expr!(String, "t"),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, "z"),
+                        },
                     },
                 },
             },
         };
 
-        // code: Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))+## "\""#,
+        // code: Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))*## "\""#,
         let str_rule = rule!{
-            "Str",
+            ".Rule.Str",
             choice!{
                 vec![],
                 expr!(String, "\"", "#"),
                 choice!{
-                    vec!["+", "##"],
+                    vec!["*", "##"],
                     choice!{
                         vec![":"],
                         choice!{
                             vec![],
-                            expr!(ID, "EscSeq"),
+                            expr!(ID, ".Rule.EscSeq"),
                         },
                         choice!{
                             vec![],
@@ -1006,7 +1410,7 @@ impl FCPEGBlock {
 
         // code: CharClass <- "["# (!"[" !"]" !Symbol.LineEnd (("\\[" : "\\]" : "\\\\" : .))##)+## "]"#,
         let char_class_rule = rule!{
-            "CharClass",
+            ".Rule.CharClass",
             choice!{
                 vec![],
                 expr!(String, "[", "#"),
@@ -1014,7 +1418,7 @@ impl FCPEGBlock {
                     vec!["+", "##"],
                     expr!(String, "[", "!"),
                     expr!(String, "]", "!"),
-                    expr!(ID, "Symbol.LineEnd", "!"),
+                    expr!(ID, ".Symbol.LineEnd", "!"),
                     choice!{
                         vec!["##"],
                         choice!{
@@ -1042,15 +1446,15 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Wildcard <- "."#,
+        // code: Wildcard <- ".",
         let wildcard_rule = rule!{
-            "Wildcard",
+            ".Rule.Wildcard",
             choice!{
                 vec![],
-                expr!(String, ".", "#"),
+                expr!(String, "."),
             },
         };
 
-        return block!("Rule", vec![misc_use, symbol_use, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
+        return block!(".Rule", vec![instant_pure_choice_rule, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }
