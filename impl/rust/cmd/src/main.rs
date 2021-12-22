@@ -110,9 +110,9 @@ fn proc_manual_subcommand(_: &ManualSubcommand, cons: &mut Console) {
 
 fn parse(fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool) -> FCPEGResult<()> {
     let start_count = Instant::now();
-    let mut file_alias_map = HashMap::<String, String>::new();
-    file_alias_map.insert("A".to_string(), "src/a.fcpeg".to_string());
-    let mut parser = FCPEGParser::load(fcpeg_file_path, file_alias_map)?;
+    // let mut file_alias_map = HashMap::<String, String>::new();
+    // file_alias_map.insert("A".to_string(), "src/a.fcpeg".to_string());
+    let mut parser = FCPEGParser::load(fcpeg_file_path, HashMap::<String, String>::new())?;
     let tree = parser.parse(input_file_path.clone())?;
 
     let duration = start_count.elapsed();
