@@ -4,6 +4,8 @@ use std::fmt::*;
 use crate::block::*;
 use crate::data::*;
 
+use uuid::Uuid;
+
 #[derive(Clone)]
 pub struct RuleMap {
     pub rule_map: HashMap<String, Box<Rule>>,
@@ -259,6 +261,7 @@ impl Display for RuleGroupKind {
 
 #[derive(Clone)]
 pub struct RuleGroup {
+    pub uuid: Uuid,
     pub kind: RuleGroupKind,
     pub sub_elems: Vec<RuleElement>,
     pub ast_reflection_style: ASTReflectionStyle,
@@ -270,6 +273,7 @@ pub struct RuleGroup {
 impl RuleGroup {
     pub fn new(kind: RuleGroupKind) -> RuleGroup {
         return RuleGroup {
+            uuid: Uuid::new_v4(),
             kind: kind,
             sub_elems: vec![],
             lookahead_kind: RuleElementLookaheadKind::None,
