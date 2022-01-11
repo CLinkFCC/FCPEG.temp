@@ -68,45 +68,28 @@ pub enum ArgumentKind {
     Generics,
 }
 
-pub struct MemoizationList {
-    list: Vec<MemoizationListElement>,
+pub struct MemoizationMap {
+    // note: HashMap<(group_uuid, src_i), (src_len, result)>
+    map: HashMap<(Uuid, usize), (usize, Option<Vec<SyntaxNodeElement>>)>,
 }
 
-impl MemoizationList {
-    pub fn new() -> MemoizationList {
-        return MemoizationList {
-            list: Vec::new(),
+impl MemoizationMap {
+    pub fn new() -> MemoizationMap {
+        return MemoizationMap {
+            map: HashMap::new(),
         };
     }
 
-    pub fn push(&mut self, group_uuid: Uuid, src_content: String, result: Option<Vec<SyntaxNodeElement>>) {
-        let elem = MemoizationListElement {
-            group_uuid: group_uuid,
-            src_content: src_content,
-            result: result,
+    pub fn push(&mut self, group_uuid: Uuid, src_i: usize, src_len: usize, result: Option<Vec<SyntaxNodeElement>>) {
+        self.map.insert((group_uuid, src_i), (src_len, result));
+    }
+
+    pub fn find(&self, pattern: &Uuid, src_i: usize) -> Option<(usize, Option<Vec<SyntaxNodeElement>>)> {
+        return match self.map.get(&(*pattern, src_i)) {
+            Some((src_len, result)) => Some((*src_len, result.clone())),
+            None => None,
         };
-
-        self.list.push(elem);
     }
-
-    pub fn find(&self, pattern: &Uuid) -> Option<(String, Vec<SyntaxNodeElement>)> {
-        for elem in &self.list {
-            if *pattern == elem.group_uuid {
-                return match &elem.result {
-                    Some(result) => Some((elem.src_content.clone(), result.clone())),
-                    None => None,
-                }
-            }
-        }
-
-        return None;
-    }
-}
-
-pub struct MemoizationListElement {
-    pub group_uuid: Uuid,
-    pub src_content: String,
-    pub result: Option<Vec<SyntaxNodeElement>>,
 }
 
 pub struct SyntaxParser {
@@ -120,8 +103,7 @@ pub struct SyntaxParser {
     arg_maps: Box<Vec<ArgumentMap>>,
     // rule_stack: Box<Vec<(usize, String)>>,
     regex_map: Box<HashMap<String, Regex>>,
-    // todo: RuleGroup, Vec<SyntaxNodeElement> を参照化
-    memoized_list: Box<MemoizationList>,
+    memoized_map: Box<MemoizationMap>,
 }
 
 impl SyntaxParser {
@@ -137,7 +119,7 @@ impl SyntaxParser {
             arg_maps: Box::new(Vec::new()),
             // rule_stack: Box::new(vec![]),
             regex_map: Box::new(HashMap::new()),
-            memoized_list: Box::new(MemoizationList::new()),
+            memoized_map: Box::new(MemoizationMap::new()),
         });
     }
 
@@ -222,25 +204,21 @@ impl SyntaxParser {
     }
 
     fn is_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        match self.memoized_list.find(&group.uuid) {
-            Some((src, result)) => {
-                if self.src_i + src.len() < self.src_content.len()
-                        && self.src_content[self.src_i..self.src_i + src.len()].to_string() == src {
-                    // println!("[memo at {}] src: \"{}\";\tgroup: {}", self.src_i, src, group);
-                    self.src_i += src.len();
-                    return Ok(Some(result));
-                }
+        match self.memoized_map.find(&group.uuid, self.src_i) {
+            Some((src_len, result)) => {
+                // println!("[memo at {}] len \"{}\";\tgroup: {}", self.src_i, src_len, group);
+                self.src_i += src_len;
+                return Ok(result);
             },
             None => (),
         }
 
         let tmp_i = self.src_i;
-        // println!("tmp {}", tmp_i);
         let result = self.is_lookahead_choice_successful(parent_elem_order, group)?;
-        // println!("now {}", self.src_i);
 
         if self.src_i != tmp_i {
-            self.memoized_list.push(group.uuid.clone(), self.src_content[tmp_i..self.src_i].to_string(), result.clone());
+            // println!("add {}\t{} != {}\t{}", result.is_some(), self.src_i, tmp_i, group);
+            self.memoized_map.push(group.uuid.clone(), tmp_i, self.src_i - tmp_i, result.clone());
         }
 
         return Ok(result);
