@@ -75,7 +75,7 @@ impl FCPEGParser {
             }),
         };
 
-        let tree = match self.syntax_parser.get_syntax_tree(input_file_path, &input_file_content) {
+        let tree = match self.syntax_parser.parse(input_file_path, &input_file_content) {
             Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
             Ok(v) => v,
         };
