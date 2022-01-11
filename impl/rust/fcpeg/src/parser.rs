@@ -1,8 +1,8 @@
 use std::collections::*;
 
 use crate::block::*;
-use crate::data::*;
 use crate::rule::*;
+use crate::tree::*;
 
 use regex::*;
 
@@ -206,7 +206,6 @@ impl SyntaxParser {
     fn is_choice_successful(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
         match self.memoized_map.find(&group.uuid, self.src_i) {
             Some((src_len, result)) => {
-                // println!("[memo at {}] len \"{}\";\tgroup: {}", self.src_i, src_len, group);
                 self.src_i += src_len;
                 return Ok(result);
             },
@@ -217,7 +216,6 @@ impl SyntaxParser {
         let result = self.is_lookahead_choice_successful(parent_elem_order, group)?;
 
         if self.src_i != tmp_i {
-            // println!("add {}\t{} != {}\t{}", result.is_some(), self.src_i, tmp_i, group);
             self.memoized_map.push(group.uuid.clone(), tmp_i, self.src_i - tmp_i, result.clone());
         }
 
