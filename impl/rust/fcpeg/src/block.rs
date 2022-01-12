@@ -107,6 +107,7 @@ pub type BlockParseResult<T> = Result<T, BlockParseError>;
 pub enum BlockParseError {
     Unknown(),
     BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
+    CannotAccessPrivateItem { pos: CharacterPosition, item_id: String },
     DuplicatedBlockName { pos: CharacterPosition, block_name: String },
     DuplicatedFileAliasName { file_alias_name: String },
     DuplicatedArgumentID { pos: CharacterPosition, arg_id: String },
@@ -127,6 +128,7 @@ impl ConsoleLogger for BlockParseError {
         match self {
             BlockParseError::Unknown() => log!(Error, "unknown error"),
             BlockParseError::BlockAliasNotFound { pos, block_alias_name } => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
+            BlockParseError::CannotAccessPrivateItem { pos, item_id } => log!(Error, "cannot access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
             BlockParseError::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedFileAliasName { file_alias_name } => log!(Error, &format!("duplicated file alias name '{}'", file_alias_name)),
             BlockParseError::DuplicatedArgumentID { pos, arg_id } => log!(Error, &format!("duplicated argument id '{}'", arg_id), format!("at:\t{}", pos)),
@@ -655,15 +657,23 @@ impl BlockParser {
     }
 
     fn to_rule_id(pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String) -> BlockParseResult<String> {
-        let new_id = match id_tokens.len() {
-            1 => format!("{}.{}.{}", file_alias_name.clone(), block_name.clone(), id_tokens.get(0).unwrap()),
+        let (new_id, _id_file_alias_name, id_block_name, id_rule_name) = match id_tokens.len() {
+            1 => {
+                let id_rule_name = id_tokens.get(0).unwrap();
+                let new_id = format!("{}.{}.{}", file_alias_name, block_name, id_rule_name);
+
+                (new_id, file_alias_name.as_str(), block_name, id_rule_name.clone())
+            },
             2 => {
-                let block_name = id_tokens.get(0).unwrap();
-                let rule_name = id_tokens.get(1).unwrap();
+                let block_name = id_tokens.get(0).unwrap().to_string();
+                let rule_name = id_tokens.get(1).unwrap().to_string();
 
                 if block_alias_map.contains_key(&block_name.to_string()) {
+                    let block_name = block_alias_map.get(&block_name.to_string()).unwrap();
                     // note: ブロック名がエイリアスである場合
-                    format!("{}.{}", block_alias_map.get(&block_name.to_string()).unwrap(), rule_name)
+                    let new_id = format!("{}.{}", block_name, rule_name);
+
+                    (new_id, "", block_name, rule_name.clone())
                 } else {
                     // note: ブロック名がエイリアスでない場合
                     return Err(BlockParseError::BlockAliasNotFound { pos: pos.clone(), block_alias_name: block_name.to_string() });
@@ -673,11 +683,19 @@ impl BlockParser {
                 let file_alias_name = id_tokens.get(0).unwrap();
                 let block_name = id_tokens.get(1).unwrap();
                 let rule_name = id_tokens.get(2).unwrap();
+                let new_id = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
 
-                format!("{}.{}.{}", file_alias_name, block_name, rule_name)
+                (new_id, file_alias_name.as_str(), block_name, rule_name.to_string())
             },
             _ => return Err(BlockParseError::InternalError { msg: format!("invalid id expression") }),
         };
+
+        // note: プライベート規則の外部アクセスを除外
+        // todo: プライベートブロックに対応
+        // todo: 異なるファイルでの同ブロック名を除外
+        if id_rule_name.starts_with("_") && *block_name != *id_block_name {
+            return Err(BlockParseError::CannotAccessPrivateItem { pos: pos.clone(), item_id: new_id.clone() });
+        }
 
         return Ok(new_id);
     }
