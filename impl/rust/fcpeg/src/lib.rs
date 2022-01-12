@@ -39,13 +39,13 @@ pub struct FCPEGParser {
 }
 
 impl FCPEGParser {
-    pub fn load(fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> FCPEGResult<FCPEGParser> {
+    pub fn load(fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>, enable_memoization: bool) -> FCPEGResult<FCPEGParser> {
         let mut fcpeg_file_map = match FCPEGFileMap::load(fcpeg_file_path, lib_fcpeg_file_map) {
             Ok(v) => v,
             Err(e) => return Err(FCPEGError::FCPEGFileError { err: e }),
         };
 
-        let rule_map = match BlockParser::get_rule_map(&mut fcpeg_file_map) {
+        let rule_map = match BlockParser::get_rule_map(&mut fcpeg_file_map, true) {
             Ok(v) => v,
             Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
         };
@@ -55,7 +55,7 @@ impl FCPEGParser {
             println!("{}", rule_map);
         }
 
-        let syntax_parser = match SyntaxParser::new(rule_map) {
+        let syntax_parser = match SyntaxParser::new(rule_map, enable_memoization) {
             Err(e) => return Err(FCPEGError::SyntaxParseError { err: e }),
             Ok(v) => v,
         };

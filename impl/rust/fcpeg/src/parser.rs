@@ -104,10 +104,11 @@ pub struct SyntaxParser {
     // rule_stack: Box<Vec<(usize, String)>>,
     regex_map: Box<HashMap<String, Regex>>,
     memoized_map: Box<MemoizationMap>,
+    enable_memoization: bool,
 }
 
 impl SyntaxParser {
-    pub fn new(rule_map: Box<RuleMap>) -> SyntaxParseResult<SyntaxParser> {
+    pub fn new(rule_map: Box<RuleMap>, enable_memoization: bool) -> SyntaxParseResult<SyntaxParser> {
         return Ok(SyntaxParser {
             rule_map: rule_map,
             src_i: 0,
@@ -120,6 +121,7 @@ impl SyntaxParser {
             // rule_stack: Box::new(vec![]),
             regex_map: Box::new(HashMap::new()),
             memoized_map: Box::new(MemoizationMap::new()),
+            enable_memoization: enable_memoization,
         });
     }
 
@@ -203,19 +205,23 @@ impl SyntaxParser {
     }
 
     fn parse_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
-        match self.memoized_map.find(&group.uuid, self.src_i) {
-            Some((src_len, result)) => {
-                self.src_i += src_len;
-                return Ok(result);
-            },
-            None => (),
+        if self.enable_memoization {
+            match self.memoized_map.find(&group.uuid, self.src_i) {
+                Some((src_len, result)) => {
+                    self.src_i += src_len;
+                    return Ok(result);
+                },
+                None => (),
+            }
         }
 
         let tmp_i = self.src_i;
         let result = self.parse_lookahead_group(parent_elem_order, group)?;
 
-        if self.src_i != tmp_i {
-            self.memoized_map.push(group.uuid.clone(), tmp_i, self.src_i - tmp_i, result.clone());
+        if self.enable_memoization {
+            if self.src_i != tmp_i {
+                self.memoized_map.push(group.uuid.clone(), tmp_i, self.src_i - tmp_i, result.clone());
+            }
         }
 
         return Ok(result);

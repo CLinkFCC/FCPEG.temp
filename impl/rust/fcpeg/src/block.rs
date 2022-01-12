@@ -160,14 +160,14 @@ pub struct BlockParser {
 
 impl BlockParser {
     // note: FileMap から最終的な RuleMap を取得する
-    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap) -> SyntaxParseResult<Box<RuleMap>> {
+    pub fn get_rule_map(fcpeg_file_map: &mut FCPEGFileMap, enable_memoization: bool) -> SyntaxParseResult<Box<RuleMap>> {
         let block_map = FCPEGBlock::get_block_map();
         let rule_map = match RuleMap::new(vec![block_map], ".Syntax.FCPEG".to_string()) {
             Ok(v) => Box::new(v),
             Err(e) => return Err(SyntaxParseError::BlockParseError { err: e }),
         };
 
-        let mut parser = SyntaxParser::new(rule_map)?;
+        let mut parser = SyntaxParser::new(rule_map, enable_memoization)?;
         // note: HashMap<エイリアス名, ブロックマップ>
         let mut block_maps = Vec::<BlockMap>::new();
         let mut start_rule_id = Option::<String>::None;

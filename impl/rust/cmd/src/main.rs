@@ -63,6 +63,10 @@ struct ParseSubcommand {
     #[argh(switch)]
     mon: bool,
 
+    /// whether to disable optimization
+    #[argh(switch)]
+    noopt: bool,
+
     /// whether to output syntax tree
     #[argh(switch, short = 'o')]
     output: bool,
@@ -76,18 +80,19 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: &mut Console) {
     let fcpeg_file_path = subcmd.fcpeg.clone();
     let input_file_path = subcmd.input.clone();
     let output_tree = subcmd.output;
+    let disable_opt = subcmd.noopt;
     let is_monitored = subcmd.mon;
     let count_duration = subcmd.time;
 
     if is_monitored {
         cons.log(log!(Notice, "command help", "You can quit parsing with '^C'."), false);
 
-        match parse_with_monitoring(cons, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration) {
+        match parse_with_monitoring(cons, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt) {
             Ok(()) => (),
             Err(e) => cons.log(e.get_log(), false),
         }
     } else {
-        match parse(fcpeg_file_path, input_file_path, output_tree, count_duration) {
+        match parse(fcpeg_file_path, input_file_path, output_tree, count_duration, disable_opt) {
             Ok(()) => (),
             Err(e) => cons.log(e.get_log(), false),
         }
@@ -102,17 +107,18 @@ fn proc_manual_subcommand(_: &ManualSubcommand, cons: &mut Console) {
             "\t-o:\toutput syntax trees",
             "\t-t:\toutput processing time",
             "\t--man:\tshow help",
-            "\t--mon:\tmonitor source files"
+            "\t--mon:\tmonitor source files",
+            "\t--noopt:\tdisable optimization"
     );
 
     cons.log(log, false);
 }
 
-fn parse(fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool) -> FCPEGResult<()> {
+fn parse(fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool, disable_opt: bool) -> FCPEGResult<()> {
     let start_count = Instant::now();
     // let mut file_alias_map = HashMap::<String, String>::new();
     // file_alias_map.insert("A".to_string(), "src/a.fcpeg".to_string());
-    let mut parser = FCPEGParser::load(fcpeg_file_path, HashMap::<String, String>::new())?;
+    let mut parser = FCPEGParser::load(fcpeg_file_path, HashMap::<String, String>::new(), !disable_opt)?;
     let tree = parser.parse(input_file_path.clone())?;
 
     let duration = start_count.elapsed();
@@ -136,12 +142,12 @@ fn parse(fcpeg_file_path: String, input_file_path: String, output_tree: bool, co
     return Ok(());
 }
 
-fn parse_with_monitoring(cons: &mut Console, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool) -> FCPEGResult<()> {
+fn parse_with_monitoring(cons: &mut Console, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool, disable_opt: bool) -> FCPEGResult<()> {
     let detector_target_file_paths = vec![fcpeg_file_path.clone(), input_file_path.clone()];
     let mut detector = FileChangeDetector::new(detector_target_file_paths);
     let mut loop_count = 0;
 
-    match parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration) {
+    match parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt) {
         Ok(()) => (),
         Err(e) => cons.log(e.get_log(), true),
     }
@@ -157,7 +163,7 @@ fn parse_with_monitoring(cons: &mut Console, fcpeg_file_path: String, input_file
         }
 
         if detector.detect_multiple_file_changes() {
-            match parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration) {
+            match parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt) {
                 Ok(()) => (),
                 Err(e) => cons.log(e.get_log(), true),
             }
