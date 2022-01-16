@@ -117,8 +117,8 @@ pub enum BlockParseError {
     InvalidID { pos: CharacterPosition, id: String },
     InvalidLoopCount { pos: CharacterPosition },
     MainBlockNotDefined {},
+    NamingRuleViolation { pos: CharacterPosition, id: String },
     NoStartCommandInMainBlock {},
-    RuleInMainBlock { pos: CharacterPosition },
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
 }
@@ -138,8 +138,8 @@ impl ConsoleLogger for BlockParseError {
             BlockParseError::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
             BlockParseError::InvalidLoopCount { pos } => log!(Error, &format!("invalid loop count"), format!("at:\t{}", pos)),
             BlockParseError::MainBlockNotDefined {} => log!(Error, "main block not defined"),
+            BlockParseError::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
             BlockParseError::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
-            BlockParseError::RuleInMainBlock { pos } => log!(Error, "rule in main block", format!("at:\t{}", pos)),
             BlockParseError::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParseError::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
         }
@@ -222,7 +222,15 @@ impl BlockParser {
         for each_block_elem in &block_nodes {
             let each_block_node = each_block_elem.get_node(&self.cons)?;
             let block_name_node = each_block_node.get_node_child_at(&self.cons, 0)?;
+            let block_pos = block_name_node.get_position(&self.cons)?;
             self.block_name = block_name_node.join_child_leaf_values();
+
+            if !BlockParser::is_pascal_case(&self.block_name) {
+                self.cons.borrow_mut().append_log(BlockParseError::NamingRuleViolation {
+                    pos: block_pos.clone(),
+                    id: self.block_name.clone(),
+                }.get_log());
+            }
 
             if block_map.contains_key(&self.block_name) {
                 self.cons.borrow_mut().append_log(BlockParseError::DuplicatedBlockName {
@@ -235,6 +243,7 @@ impl BlockParser {
 
             let mut cmds = Vec::<BlockCommand>::new();
             let mut rule_names = Vec::<String>::new();
+            self.cons.borrow_mut().ignore_logs = true;
 
             match each_block_node.get_node_child_at(&self.cons, 1) {
                 Ok(cmd_elems) => {
@@ -245,14 +254,6 @@ impl BlockParser {
                         // ルール名の重複チェック
                         match &new_cmd {
                             BlockCommand::Define { pos: _, rule } => {
-                                if self.block_name == "Main" {
-                                    self.cons.borrow_mut().append_log(BlockParseError::RuleInMainBlock {
-                                        pos: rule.pos.clone(),
-                                    }.get_log());
-
-                                    return Err(());
-                                }
-
                                 if rule_names.contains(&rule.name) {
                                     self.cons.borrow_mut().append_log(BlockParseError::DuplicatedRuleName {
                                         pos: rule.pos.clone(),
@@ -273,6 +274,7 @@ impl BlockParser {
                 Err(()) => (),
             }
 
+            self.cons.borrow_mut().ignore_logs = false;
             block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds)));
             self.block_alias_map.clear();
         }
@@ -362,6 +364,13 @@ impl BlockParser {
         let rule_name_node = cmd_node.get_node_child_at(&self.cons, 0)?;
         let rule_pos = rule_name_node.get_position(&self.cons)?;
         let rule_name = rule_name_node.join_child_leaf_values();
+
+        if !BlockParser::is_pascal_case(&rule_name) {
+            self.cons.borrow_mut().append_log(BlockParseError::NamingRuleViolation {
+                pos: rule_pos.clone(),
+                id: rule_name.clone(),
+            }.get_log());
+        }
 
         let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenericsIDs"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
@@ -861,6 +870,14 @@ impl BlockParser {
         }
 
         return Ok(ids.join("."));
+    }
+
+    // ret: 空文字の場合は false
+    fn is_pascal_case(id: &String) -> bool {
+        return match id.chars().next() {
+            Some(v) => v.is_uppercase(),
+            None => false,
+        };
     }
 }
 
