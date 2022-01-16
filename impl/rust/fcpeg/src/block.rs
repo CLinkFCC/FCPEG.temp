@@ -107,7 +107,7 @@ pub type BlockMap = HashMap<String, Box<Block>>;
 pub enum BlockParseError {
     Unknown(),
     BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
-    CannotAccessPrivateItem { pos: CharacterPosition, item_id: String },
+    AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
     DuplicatedBlockName { pos: CharacterPosition, block_name: String },
     DuplicatedFileAliasName { file_alias_name: String },
     DuplicatedArgumentID { pos: CharacterPosition, arg_id: String },
@@ -128,7 +128,7 @@ impl ConsoleLogger for BlockParseError {
         match self {
             BlockParseError::Unknown() => log!(Error, "unknown error"),
             BlockParseError::BlockAliasNotFound { pos, block_alias_name } => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
-            BlockParseError::CannotAccessPrivateItem { pos, item_id } => log!(Error, "cannot access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
+            BlockParseError::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
             BlockParseError::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
             BlockParseError::DuplicatedFileAliasName { file_alias_name } => log!(Error, &format!("duplicated file alias name '{}'", file_alias_name)),
             BlockParseError::DuplicatedArgumentID { pos, arg_id } => log!(Error, &format!("duplicated argument id '{}'", arg_id), format!("at:\t{}", pos)),
@@ -806,12 +806,10 @@ impl BlockParser {
         // todo: プライベートブロックに対応
         // todo: 異なるファイルでの同ブロック名を除外
         if id_rule_name.starts_with("_") && *block_name != *id_block_name {
-            cons.borrow_mut().append_log(BlockParseError::CannotAccessPrivateItem {
+            cons.borrow_mut().append_log(BlockParseError::AttemptToAccessPrivateItem {
                 pos: pos.clone(),
                 item_id: new_id.clone(),
             }.get_log());
-
-            return Err(());
         }
 
         return Ok(new_id);
