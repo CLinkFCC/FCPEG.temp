@@ -1,6 +1,7 @@
 use std::collections::*;
+use std::rc::Rc;
+use std::cell::RefCell;
 
-use crate::block::*;
 use crate::rule::*;
 use crate::tree::*;
 
@@ -11,11 +12,8 @@ use rustnutlib::console::*;
 
 use uuid::Uuid;
 
-pub type SyntaxParseResult<T> = Result<T, SyntaxParseError>;
-
 pub enum SyntaxParseError {
     Unknown {},
-    BlockParseError { err: BlockParseError },
     InternalError { msg: String },
     InvalidCharClassFormat { value: String },
     InvalidGenericsArgumentLength { arg_ids: Vec<String> },
@@ -31,7 +29,6 @@ impl ConsoleLogger for SyntaxParseError {
     fn get_log(&self) -> ConsoleLog {
         return match self {
             SyntaxParseError::Unknown {} => log!(Error, "unknown error"),
-            SyntaxParseError::BlockParseError { err } => err.get_log(),
             SyntaxParseError::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
             SyntaxParseError::InvalidCharClassFormat { value } => log!(Error, &format!("invalid character class format '{}'", value)),
             SyntaxParseError::InvalidGenericsArgumentLength { arg_ids } => log!(Error, &format!("invalid generics argument length ({:?})", arg_ids)),
@@ -93,6 +90,7 @@ impl MemoizationMap {
 }
 
 pub struct SyntaxParser {
+    cons: Rc<RefCell<Console>>,
     rule_map: Box<RuleMap>,
     src_i: usize,
     src_line: usize,
@@ -108,8 +106,9 @@ pub struct SyntaxParser {
 }
 
 impl SyntaxParser {
-    pub fn new(rule_map: Box<RuleMap>, enable_memoization: bool) -> SyntaxParseResult<SyntaxParser> {
+    pub fn new(cons: Rc<RefCell<Console>>, rule_map: Box<RuleMap>, enable_memoization: bool) -> ConsoleResult<SyntaxParser> {
         return Ok(SyntaxParser {
+            cons: cons,
             rule_map: rule_map,
             src_i: 0,
             src_line: 0,
@@ -125,7 +124,7 @@ impl SyntaxParser {
         });
     }
 
-    pub fn parse(&mut self, src_path: String, src_content: &Box<String>) -> SyntaxParseResult<SyntaxTree> {
+    pub fn parse(&mut self, src_path: String, src_content: &Box<String>) -> ConsoleResult<SyntaxTree> {
         let mut tmp_src_content = *src_content.clone();
 
         // note: 余分な改行コード 0x0d を排除する
@@ -155,23 +154,43 @@ impl SyntaxParser {
         // todo: CharacterPosition を修正
         let mut root_node = match self.parse_rule(&start_rule_id, &CharacterPosition::get_empty())? {
             Some(v) => v,
-            None => return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position() }),
+            None => {
+                self.cons.borrow_mut().append_log(SyntaxParseError::NoSucceededRule {
+                    rule_id: start_rule_id.clone(),
+                    pos: self.get_char_position(),
+                }.get_log());
+
+                return Err(());
+            },
         };
 
-        // ルートは常に Reflectable
+        // note: ルートは常に Reflectable
         root_node.set_ast_reflection_style(ASTReflectionStyle::Reflection(start_rule_id.clone()));
 
+        // note: 入力位置が length を超えると失敗
         if self.src_i < self.src_content.chars().count() {
-            return Err(SyntaxParseError::NoSucceededRule { rule_id: start_rule_id.clone(), pos: self.get_char_position() });
+            self.cons.borrow_mut().append_log(SyntaxParseError::NoSucceededRule {
+                rule_id: start_rule_id.clone(),
+                pos: self.get_char_position()
+            }.get_log());
+
+            return Err(());
         }
 
         return Ok(SyntaxTree::from_node(root_node));
     }
 
-    fn parse_rule(&mut self, rule_id: &String, pos: &CharacterPosition) -> SyntaxParseResult<Option<SyntaxNodeElement>> {
+    fn parse_rule(&mut self, rule_id: &String, pos: &CharacterPosition) -> ConsoleResult<Option<SyntaxNodeElement>> {
         let rule_group = match self.rule_map.rule_map.get(rule_id) {
             Some(rule) => rule.group.clone(),
-            None => return Err(SyntaxParseError::UnknownRuleID { pos: pos.clone(), rule_id: rule_id.clone() }),
+            None => {
+                self.cons.borrow_mut().append_log(SyntaxParseError::UnknownRuleID {
+                    pos: pos.clone(),
+                    rule_id: rule_id.clone(),
+                }.get_log());
+
+                return Err(());
+            },
         };
 
         // self.rule_stack.push((self.src_i, rule_id.clone()));
@@ -204,7 +223,7 @@ impl SyntaxParser {
         }
     }
 
-    fn parse_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         if self.enable_memoization {
             match self.memoized_map.find(&group.uuid, self.src_i) {
                 Some((src_len, result)) => {
@@ -227,7 +246,7 @@ impl SyntaxParser {
         return Ok(result);
     }
 
-    fn parse_lookahead_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_lookahead_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         return if group.lookahead_kind.is_none() {
             self.parse_loop_group(parent_elem_order, group)
         } else {
@@ -242,10 +261,10 @@ impl SyntaxParser {
             } else {
                 Ok(None)
             }
-        }
+        };
     }
 
-    fn parse_loop_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_loop_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = match parent_elem_order {
             RuleElementOrder::Random(tmp_occurrence_count) => {
                 let (mut tmp_min_count, mut tmp_max_count) = tmp_occurrence_count.to_tuple();
@@ -268,7 +287,11 @@ impl SyntaxParser {
         };
 
         if max_count != -1 && min_count as i32 > max_count {
-            return Err(SyntaxParseError::InternalError { msg: format!("invalid loop count {{{},{}}}", min_count, max_count) });
+            self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                msg: format!("invalid loop count {{{},{}}}", min_count, max_count),
+            }.get_log());
+
+            return Err(());
         }
 
         let mut children = Vec::<SyntaxNodeElement>::new();
@@ -276,7 +299,11 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.max_loop_count as i32 {
-                return Err(SyntaxParseError::TooLongRepetition { max_loop_count: self.max_loop_count as usize });
+                self.cons.borrow_mut().append_log(SyntaxParseError::TooLongRepetition {
+                    max_loop_count: self.max_loop_count as usize,
+                }.get_log());
+
+                return Err(());
             }
 
             match self.parse_raw_choice(group)? {
@@ -315,7 +342,7 @@ impl SyntaxParser {
         }
     }
 
-    fn parse_raw_choice(&mut self, group: &Box<RuleGroup>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_raw_choice(&mut self, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         let mut children = Vec::<SyntaxNodeElement>::new();
 
         for each_elem in &group.sub_elems {
@@ -477,11 +504,11 @@ impl SyntaxParser {
         return Ok(Some(children));
     }
 
-    fn parse_expr(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         return self.parse_lookahead_expr(expr);
     }
 
-    fn parse_lookahead_expr(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_lookahead_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         return if expr.lookahead_kind.is_none() {
             self.parse_loop_expr(expr)
         } else {
@@ -499,11 +526,15 @@ impl SyntaxParser {
         }
     }
 
-    fn parse_loop_expr(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_loop_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = expr.loop_count.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
-            return Err(SyntaxParseError::InternalError { msg: format!("invalid loop count {{{},{}}}", min_count, max_count) });
+            self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                msg: format!("invalid loop count {{{},{}}}", min_count, max_count),
+            }.get_log());
+
+            return Err(());
         }
 
         let mut children = Vec::<SyntaxNodeElement>::new();
@@ -511,7 +542,11 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.max_loop_count {
-                return Err(SyntaxParseError::TooLongRepetition { max_loop_count: self.max_loop_count as usize });
+                self.cons.borrow_mut().append_log(SyntaxParseError::TooLongRepetition {
+                    max_loop_count: self.max_loop_count as usize
+                }.get_log());
+
+                return Err(());
             }
 
             match self.parse_raw_expr(expr)? {
@@ -546,7 +581,7 @@ impl SyntaxParser {
         }
     }
 
-    fn parse_raw_expr(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_raw_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         if self.src_i >= self.src_content.chars().count() {
             return Ok(None);
         }
@@ -568,7 +603,13 @@ impl SyntaxParser {
 
                 let result = match &group {
                     Some(v) => self.parse_group(&RuleElementOrder::Sequential, &v),
-                    None => return Err(SyntaxParseError::UnknownArgumentID { arg_id: expr.value.clone() }),
+                    None => {
+                        self.cons.borrow_mut().append_log(SyntaxParseError::UnknownArgumentID {
+                            arg_id: expr.value.clone(),
+                        }.get_log());
+
+                        return Err(());
+                    },
                 };
 
                 return if !expr.ast_reflection_style.is_reflectable() {
@@ -588,7 +629,7 @@ impl SyntaxParser {
                                 None => result,
                             }
                         },
-                        Err(_) => result,
+                        Err(()) => result,
                     }
                 } else {
                     result
@@ -605,7 +646,13 @@ impl SyntaxParser {
                     None => {
                         let pattern = match Regex::new(&expr.value.clone()) {
                             Ok(v) => v,
-                            Err(_) => return Err(SyntaxParseError::InvalidCharClassFormat { value: expr.to_string() }),
+                            Err(_) => {
+                                self.cons.borrow_mut().append_log(SyntaxParseError::InvalidCharClassFormat {
+                                    value: expr.to_string(),
+                                }.get_log());
+
+                                return Err(());
+                            },
                         };
 
                         self.regex_map.insert(expr.value.clone(), pattern);
@@ -630,22 +677,45 @@ impl SyntaxParser {
                 let mut new_arg_map = ArgumentMap::new();
                 let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
                     Some(rule) => &rule.generics_arg_ids,
-                    None => return Err(SyntaxParseError::UnknownRuleID { pos: expr.pos.clone(), rule_id: rule_id.clone() }),
+                    None => {
+                        self.cons.borrow_mut().append_log(SyntaxParseError::UnknownRuleID {
+                            pos: expr.pos.clone(),
+                            rule_id: rule_id.clone(),
+                        }.get_log());
+
+                        return Err(());
+                    },
                 };
 
                 if args.len() != new_arg_ids.len() {
-                    return Err(SyntaxParseError::InvalidGenericsArgumentLength { arg_ids: new_arg_ids.clone() });
+                    self.cons.borrow_mut().append_log(SyntaxParseError::InvalidGenericsArgumentLength {
+                        arg_ids: new_arg_ids.clone(),
+                    }.get_log());
+
+                    return Err(());
                 }
 
                 for i in 0..args.len() {
                     let new_arg_id = match new_arg_ids.get(i) {
                         Some(v) => v,
-                        None => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
+                        None => {
+                            self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                                msg: "invalid operation".to_string(),
+                            }.get_log());
+
+                            return Err(());
+                        },
                     };
 
                     let new_arg_group = match args.get(i) {
                         Some(v) => v,
-                        None => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
+                        None => {
+                            self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                                msg: "invalid operation".to_string(),
+                            }.get_log());
+
+                            return Err(());
+                        }
                     };
 
                     new_arg_map.insert(new_arg_id.clone(), Argument::new(ArgumentKind::Generics, new_arg_group.clone()));
@@ -682,7 +752,13 @@ impl SyntaxParser {
                                     None => Ok(None),
                                 };
                             },
-                            _ => return Err(SyntaxParseError::InvalidFunctionArgumentLength { arg_ids: vec!["Item".to_string()] }),
+                            _ => {
+                                self.cons.borrow_mut().append_log(SyntaxParseError::InvalidFunctionArgumentLength {
+                                    arg_ids: vec!["Item".to_string()],
+                                }.get_log());
+
+                                return Err(());
+                            },
                         }
                     },
                     _ => (),
@@ -691,22 +767,44 @@ impl SyntaxParser {
                 let mut new_arg_map = ArgumentMap::new();
                 let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
                     Some(rule) => &rule.func_arg_ids,
-                    None => return Err(SyntaxParseError::UnknownRuleID { pos: expr.pos.clone(), rule_id: rule_id.clone() }),
+                    None => {
+                        self.cons.borrow_mut().append_log(SyntaxParseError::UnknownRuleID {
+                            pos: expr.pos.clone(), rule_id: rule_id.clone(),
+                        }.get_log());
+
+                        return Err(());
+                    },
                 };
 
                 if args.len() != new_arg_ids.len() {
-                    return Err(SyntaxParseError::InvalidFunctionArgumentLength { arg_ids: new_arg_ids.clone() });
+                    self.cons.borrow_mut().append_log(SyntaxParseError::InvalidFunctionArgumentLength {
+                        arg_ids: new_arg_ids.clone(),
+                    }.get_log());
+
+                    return Err(());
                 }
 
                 for i in 0..args.len() {
                     let new_arg_id = match new_arg_ids.get(i) {
                         Some(v) => v,
-                        None => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
+                        None => {
+                            self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                                msg: "invalid operation".to_string(),
+                            }.get_log());
+
+                            return Err(());
+                        },
                     };
 
                     let new_arg_group = match args.get(i) {
                         Some(v) => v,
-                        None => return Err(SyntaxParseError::InternalError { msg: "invalid operation".to_string() }),
+                        None => {
+                            self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                                msg: "invalid operation".to_string(),
+                            }.get_log());
+
+                            return Err(());
+                        },
                     };
 
                     new_arg_map.insert(new_arg_id.clone(), Argument::new(ArgumentKind::Function, new_arg_group.clone()));
@@ -748,7 +846,7 @@ impl SyntaxParser {
         }
     }
 
-    fn parse_id_expr(&mut self, expr: &Box<RuleExpression>) -> SyntaxParseResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_id_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         match self.parse_rule(&expr.value, &expr.pos)? {
             Some(node_elem) => {
                 let conv_node_elems = match &node_elem {

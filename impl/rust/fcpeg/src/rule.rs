@@ -4,6 +4,8 @@ use std::fmt::*;
 use crate::block::*;
 use crate::tree::*;
 
+use rustnutlib::console::ConsoleResult;
+
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -13,7 +15,7 @@ pub struct RuleMap {
 }
 
 impl RuleMap {
-    pub fn new(block_map: Vec<BlockMap>, start_rule_id: String) -> BlockParseResult<RuleMap> {
+    pub fn new(block_map: Vec<BlockMap>, start_rule_id: String) -> ConsoleResult<RuleMap> {
         let rule_map = RuleMap {
             rule_map: RuleMap::to_rule_map(block_map)?,
             start_rule_id: start_rule_id,
@@ -22,7 +24,7 @@ impl RuleMap {
         return Ok(rule_map);
     }
 
-    fn to_rule_map(block_maps: Vec<BlockMap>) -> BlockParseResult<HashMap<String, Box<Rule>>> {
+    fn to_rule_map(block_maps: Vec<BlockMap>) -> ConsoleResult<HashMap<String, Box<Rule>>> {
         let mut rule_map = HashMap::<String, Box<Rule>>::new();
 
         for each_block_map in block_maps {

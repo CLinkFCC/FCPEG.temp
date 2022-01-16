@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::collections::*;
 use std::option::*;
+use std::rc::Rc;
 use std::thread::*;
 use std::time::*;
 
@@ -13,7 +15,7 @@ use rustnutlib::file::*;
 
 fn main() {
     let cmd: MainCommand = argh::from_env();
-    let mut cons = match Console::load(None) {
+    let cons = match Console::load(None, ConsoleLogLimit::NoLimit) {
         Ok(v) => v,
         Err(_) => {
             println!("[err] failed to launch parser: failure on loading console data");
@@ -22,8 +24,8 @@ fn main() {
     };
 
     match cmd.subcmd {
-        Subcommand::Manual(subcmd) => spawn(move || proc_manual_subcommand(&subcmd, &mut cons)).join().unwrap(),
-        Subcommand::Parse(subcmd) => spawn(move || proc_parse_subcmd(&subcmd, &mut cons)).join().unwrap(),
+        Subcommand::Manual(subcmd) => spawn(move || proc_manual_subcommand(&subcmd, cons)).join().unwrap(),
+        Subcommand::Parse(subcmd) => spawn(move || proc_parse_subcmd(&subcmd, cons)).join().unwrap(),
     }
 }
 
@@ -76,7 +78,7 @@ struct ParseSubcommand {
     time: bool,
 }
 
-fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: &mut Console) {
+fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: Console) {
     let fcpeg_file_path = subcmd.fcpeg.clone();
     let input_file_path = subcmd.input.clone();
     let output_tree = subcmd.output;
@@ -84,22 +86,21 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: &mut Console) {
     let is_monitored = subcmd.mon;
     let count_duration = subcmd.time;
 
-    if is_monitored {
-        cons.log(log!(Notice, "command help", "You can quit parsing with '^C'."), false);
+    let cons_ptr = Rc::from(RefCell::new(cons));
 
-        match parse_with_monitoring(cons, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt) {
-            Ok(()) => (),
-            Err(e) => cons.log(e.get_log(), false),
-        }
+    let _ = if is_monitored {
+        cons_ptr.borrow_mut().append_log(log!(Notice, "command help", "You can quit parsing with '^C'."));
+        parse_with_monitoring(&cons_ptr, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt)
     } else {
-        match parse(fcpeg_file_path, input_file_path, output_tree, count_duration, disable_opt) {
-            Ok(()) => (),
-            Err(e) => cons.log(e.get_log(), false),
-        }
-    }
+        parse(&cons_ptr, fcpeg_file_path, input_file_path, output_tree, count_duration, disable_opt)
+    };
+
+    cons_ptr.borrow().print_all();
 }
 
-fn proc_manual_subcommand(_: &ManualSubcommand, cons: &mut Console) {
+fn proc_manual_subcommand(_: &ManualSubcommand, cons: Console) {
+    let cons_ptr = Rc::from(RefCell::new(cons));
+
     let log = log!(Notice, "command help",
         "parse:\tparse specified files",
             "\t-f:\tspecify .fcpeg file",
@@ -111,15 +112,16 @@ fn proc_manual_subcommand(_: &ManualSubcommand, cons: &mut Console) {
             "\t--noopt:\tdisable optimization"
     );
 
-    cons.log(log, false);
+    cons_ptr.borrow_mut().append_log(log);
+    cons_ptr.borrow().print_all();
 }
 
-fn parse(fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool, disable_opt: bool) -> FCPEGResult<()> {
+fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool, disable_opt: bool) -> ConsoleResult<()> {
     let start_count = Instant::now();
     // let mut file_alias_map = HashMap::<String, String>::new();
     // file_alias_map.insert("A".to_string(), "src/a.fcpeg".to_string());
-    let mut parser = FCPEGParser::load(fcpeg_file_path, HashMap::<String, String>::new(), !disable_opt)?;
-    let tree = parser.parse(input_file_path.clone())?;
+    let mut parser = FCPEGParser::load(cons, fcpeg_file_path, HashMap::<String, String>::new(), !disable_opt)?;
+    let tree = parser.parse(cons, input_file_path.clone())?;
 
     let duration = start_count.elapsed();
 
@@ -142,15 +144,12 @@ fn parse(fcpeg_file_path: String, input_file_path: String, output_tree: bool, co
     return Ok(());
 }
 
-fn parse_with_monitoring(cons: &mut Console, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool, disable_opt: bool) -> FCPEGResult<()> {
+fn parse_with_monitoring(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool, disable_opt: bool) -> ConsoleResult<()> {
     let detector_target_file_paths = vec![fcpeg_file_path.clone(), input_file_path.clone()];
     let mut detector = FileChangeDetector::new(detector_target_file_paths);
     let mut loop_count = 0;
 
-    match parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt) {
-        Ok(()) => (),
-        Err(e) => cons.log(e.get_log(), true),
-    }
+    parse(cons, fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt)?;
 
     loop {
         match quit_limit_sec {
@@ -163,10 +162,7 @@ fn parse_with_monitoring(cons: &mut Console, fcpeg_file_path: String, input_file
         }
 
         if detector.detect_multiple_file_changes() {
-            match parse(fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt) {
-                Ok(()) => (),
-                Err(e) => cons.log(e.get_log(), true),
-            }
+            parse(cons, fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt)?;
         }
 
         loop_count += 1;

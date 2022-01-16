@@ -1,9 +1,13 @@
+use std::cell::RefCell;
 use std::fmt::*;
 use std::io::*;
 use std::io::Write;
+use std::rc::Rc;
 
 use crate::parser::*;
 use crate::rule::*;
+
+use rustnutlib::console::*;
 
 #[derive(Clone, PartialEq)]
 pub struct CharacterPosition {
@@ -107,17 +111,29 @@ impl SyntaxNodeElement {
         return SyntaxNodeElement::Leaf(Box::new(SyntaxLeaf::new(pos, value, ast_reflection)));
     }
 
-    pub fn get_node(&self) -> SyntaxParseResult<&SyntaxNode> {
+    pub fn get_node(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxNode> {
         return match self {
             SyntaxNodeElement::Node(node) => Ok(node),
-            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "element not node list".to_string() }),
+            _ => {
+                cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                    cause: "element not node list".to_string(),
+                }.get_log());
+
+                return Err(());
+            },
         };
     }
 
-    pub fn get_leaf(&self) -> SyntaxParseResult<&SyntaxLeaf> {
+    pub fn get_leaf(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxLeaf> {
         return match self {
             SyntaxNodeElement::Leaf(leaf) => Ok(leaf),
-            _ => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "element not leaf".to_string() }),
+            _ => {
+                cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                    cause: "element not leaf".to_string(),
+                }.get_log());
+
+                return Err(());
+            },
         };
     }
 
@@ -259,15 +275,15 @@ impl SyntaxNode {
     }
 
     // todo: 最初に出現したリーフの位置を返す; Unreflectable なリーフも対象にする
-    pub fn get_position(&self) -> SyntaxParseResult<CharacterPosition> {
-        return Ok(self.get_leaf_child_at(0)?.pos.clone());
+    pub fn get_position(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<CharacterPosition> {
+        return Ok(self.get_leaf_child_at(cons, 0)?.pos.clone());
     }
 
     pub fn get_children(&self) -> &Vec<SyntaxNodeElement> {
         return &self.sub_elems;
     }
 
-    pub fn get_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxNodeElement> {
+    pub fn get_child_at(&self, cons: &Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxNodeElement> {
         let mut elem_i = 0;
         let mut reflectable_elem_i = 0;
 
@@ -276,7 +292,13 @@ impl SyntaxNode {
                 if reflectable_elem_i == index {
                     return match self.sub_elems.get(elem_i) {
                         Some(v) => Ok(&v),
-                        None => return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: "invalid operation".to_string() }),
+                        None => {
+                            cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                                cause: "invalid operation".to_string(),
+                            }.get_log());
+
+                            return Err(());
+                        },
                     };
                 }
 
@@ -286,15 +308,19 @@ impl SyntaxNode {
             elem_i += 1;
         }
 
-        return Err(SyntaxParseError::InvalidSyntaxTreeStructure { cause: format!("{}th reflectable element not matched", index + 1) });
+        cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+            cause: format!("{}th reflectable element not matched", index + 1),
+        }.get_log());
+
+        return Err(());
     }
 
-    pub fn get_node_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxNode> {
-        return self.get_child_at(index)?.get_node();
+    pub fn get_node_child_at(&self, cons: &Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxNode> {
+        return self.get_child_at(cons, index)?.get_node(cons);
     }
 
-    pub fn get_leaf_child_at(&self, index: usize) -> SyntaxParseResult<&SyntaxLeaf> {
-        return self.get_child_at(index)?.get_leaf();
+    pub fn get_leaf_child_at(&self, cons: &Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxLeaf> {
+        return self.get_child_at(cons, index)?.get_leaf(cons);
     }
 
     pub fn is_reflectable(&self) -> bool {
