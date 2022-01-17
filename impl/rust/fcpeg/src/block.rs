@@ -243,7 +243,6 @@ impl BlockParser {
 
             let mut cmds = Vec::<BlockCommand>::new();
             let mut rule_names = Vec::<String>::new();
-            self.cons.borrow_mut().ignore_logs = true;
 
             match each_block_node.get_node_child_at(&self.cons, 1) {
                 Ok(cmd_elems) => {
@@ -271,10 +270,9 @@ impl BlockParser {
                         cmds.push(new_cmd);
                     }
                 },
-                Err(()) => (),
+                Err(()) => self.cons.borrow_mut().pop_log(),
             }
 
-            self.cons.borrow_mut().ignore_logs = false;
             block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds)));
             self.block_alias_map.clear();
         }
@@ -1174,7 +1172,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: PureChoice <- Seq ((Symbol.Space# ":" : ",")## Symbol.Space# Seq)*##,
+        // code: PureChoice <- Seq ((SeqDiv+# ":" SeqDiv+# : ",")## Seq)*##,
         let pure_choice_rule = rule!{
             ".Rule.PureChoice",
             choice!{
@@ -1188,15 +1186,16 @@ impl FCPEGBlock {
                             vec![":"],
                             choice!{
                                 vec!["##"],
-                                expr!(ID, ".Symbol.Space", "#"),
+                                expr!(ID, ".Rule.SeqDiv", "+", "#"),
                                 expr!(String, ":"),
+                                expr!(ID, ".Rule.SeqDiv", "+", "#"),
                             },
                             choice!{
                                 vec!["##"],
                                 expr!(String, ","),
+                                expr!(ID, ".Symbol.Space", "#"),
                             },
                         },
-                        expr!(ID, ".Symbol.Space", "#"),
                         expr!(ID, ".Rule.Seq"),
                     },
                 },
@@ -1214,7 +1213,26 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Seq <- SeqElem (Symbol.Space+# SeqElem)*##,
+        // code: SeqDiv <- Symbol.Space# : "\n"#,
+        let seq_div_rule = rule!{
+            ".Rule.SeqDiv",
+            choice!{
+                vec![],
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(ID, ".Symbol.Space", "#"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(String, "\n", "#"),
+                    },
+                },
+            },
+        };
+
+        // code: Seq <- SeqElem (SeqDiv+# SeqElem)*##,
         let seq_rule = rule!{
             ".Rule.Seq",
             choice!{
@@ -1226,7 +1244,7 @@ impl FCPEGBlock {
                         vec![],
                         choice!{
                             vec![],
-                            expr!(ID, ".Symbol.Space", "+", "#"),
+                            expr!(ID, ".Rule.SeqDiv", "+", "#"),
                             expr!(ID, ".Rule.SeqElem"),
                         },
                     },
@@ -1609,6 +1627,6 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Rule", vec![instant_pure_choice_rule, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
+        return block!(".Rule", vec![instant_pure_choice_rule, pure_choice_rule, choice_rule, seq_div_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }

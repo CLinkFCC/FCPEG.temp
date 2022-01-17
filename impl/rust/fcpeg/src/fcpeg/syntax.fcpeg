@@ -41,10 +41,11 @@
     + use Symbol,
 
     InstantPureChoice <- Seq "," Symbol.Space# Seq)*##,
-    PureChoice <- Seq ((Symbol.Space# ":" : ",")## Symbol.Space# Seq)*##,
+    PureChoice <- Seq ((SeqDiv+# ":" SeqDiv+# : ",")## Seq)*##,
     Choice <- "("# PureChoice ")"#,
 
-    Seq <- SeqElem (Symbol.Space+# SeqElem)*##,
+    SeqDiv <- Symbol.Space# : "\n"#,
+    Seq <- SeqElem (SeqDiv+# SeqElem)*##,
     % (Choice : Expr) に命名する,
     SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
 
