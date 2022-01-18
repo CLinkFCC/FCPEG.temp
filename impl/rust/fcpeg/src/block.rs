@@ -584,7 +584,10 @@ impl BlockParser {
                                 ASTReflectionStyle::Reflection(style_node.join_child_leaf_values())
                             }
                         },
-                        Err(_) => ASTReflectionStyle::from_config(false, true, String::new()),
+                        Err(()) => {
+                            self.cons.borrow_mut().pop_log();
+                            ASTReflectionStyle::from_config(false, true, String::new())
+                        },
                     }
                 },
                 None => ASTReflectionStyle::from_config(false, false, String::new()),

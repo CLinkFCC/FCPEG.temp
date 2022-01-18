@@ -40,7 +40,7 @@
     + use Misc,
     + use Symbol,
 
-    InstantPureChoice <- Seq "," Symbol.Space# Seq)*##,
+    InstantPureChoice <- Seq ("," Symbol.Space# Seq)*##,
     PureChoice <- Seq ((SeqDiv+# ":" SeqDiv+# : ",")## Seq)*##,
     Choice <- "("# PureChoice ")"#,
 
@@ -64,7 +64,7 @@
     Generics <- Misc.ChainID "<"# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ">"#,
     Func <- Misc.ChainID "("# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ")"#,
     EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
-    Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))+## "\""#,
+    Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))*## "\""#,
     CharClass <- "["# (!"[" !"]" !Symbol.LineEnd (("\\[" : "\\]" : "\\\\" : .))##)+## "]"#,
     Wildcard <- ".",
 }
