@@ -99,7 +99,7 @@ pub struct SyntaxParser {
     src_content: String,
     max_loop_count: usize,
     arg_maps: Box<Vec<ArgumentMap>>,
-    rule_stack: Vec<(CharacterPosition, String)>,
+    rule_stack: Box<Vec<(CharacterPosition, String)>>,
     regex_map: Box<HashMap<String, Regex>>,
     memoized_map: Box<MemoizationMap>,
     enable_memoization: bool,
@@ -117,7 +117,7 @@ impl SyntaxParser {
             src_content: String::new(),
             max_loop_count: 65536,
             arg_maps: Box::new(Vec::new()),
-            rule_stack: Vec::new(),
+            rule_stack: Box::new(Vec::new()),
             regex_map: Box::new(HashMap::new()),
             memoized_map: Box::new(MemoizationMap::new()),
             enable_memoization: enable_memoization,
@@ -158,7 +158,7 @@ impl SyntaxParser {
                 self.cons.borrow_mut().append_log(SyntaxParseError::NoSucceededRule {
                     rule_id: start_rule_id.clone(),
                     pos: self.get_char_position(),
-                    rule_stack: self.rule_stack.clone(),
+                    rule_stack: *self.rule_stack.clone(),
                 }.get_log());
 
                 return Err(());
@@ -173,7 +173,7 @@ impl SyntaxParser {
             self.cons.borrow_mut().append_log(SyntaxParseError::NoSucceededRule {
                 rule_id: start_rule_id.clone(),
                 pos: self.get_char_position(),
-                rule_stack: self.rule_stack.clone(),
+                rule_stack: *self.rule_stack.clone(),
             }.get_log());
 
             return Err(());

@@ -153,6 +153,7 @@ pub struct BlockParser {
     cons: Rc<RefCell<Console>>,
     start_rule_id: Option<String>,
     file_alias_name: String,
+    appeared_block_ids: Box<HashMap<String, CharacterPosition>>,
     block_name: String,
     block_alias_map: HashMap<String, String>,
     file_path: String,
@@ -168,6 +169,7 @@ impl BlockParser {
         let mut parser = SyntaxParser::new(cons.clone(), rule_map, enable_memoization)?;
         // note: HashMap<エイリアス名, ブロックマップ>
         let mut block_maps = Vec::<BlockMap>::new();
+        let mut appeared_block_ids = Box::new(HashMap::<String, CharacterPosition>::new());
         let mut start_rule_id = Option::<String>::None;
 
         for (file_alias_name, fcpeg_file) in fcpeg_file_map.iter() {
@@ -175,6 +177,7 @@ impl BlockParser {
                 cons: cons.clone(),
                 start_rule_id: None,
                 file_alias_name: file_alias_name.clone(),
+                appeared_block_ids: appeared_block_ids,
                 block_name: String::new(),
                 block_alias_map: HashMap::new(),
                 file_path: fcpeg_file.file_path.clone(),
@@ -187,6 +190,8 @@ impl BlockParser {
             if block_parser.file_alias_name == "" {
                 start_rule_id = block_parser.start_rule_id.clone();
             }
+
+            appeared_block_ids = block_parser.appeared_block_ids;
         }
 
         let rule_map = match start_rule_id {
@@ -197,7 +202,23 @@ impl BlockParser {
             },
         };
 
-        return Ok(rule_map);
+        let mut has_id_error = false;
+
+        for (each_rule_id, each_pos) in *appeared_block_ids {
+            if !rule_map.rule_map.contains_key(&each_rule_id) {
+                cons.borrow_mut().append_log(SyntaxParseError::UnknownRuleID {
+                    pos: each_pos, rule_id: each_rule_id,
+                }.get_log());
+
+                has_id_error = true;
+            }
+        }
+
+        return if has_id_error {
+            Err(())
+        } else {
+            Ok(rule_map)
+        };
     }
 
     fn to_syntax_tree(&mut self, parser: &mut SyntaxParser) -> ConsoleResult<SyntaxTree> {
@@ -717,7 +738,13 @@ impl BlockParser {
                             joined_raw_id.clone()
                         } else {
                             match BlockParser::to_rule_id(&self.cons, &pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
-                                Ok(v) => v,
+                                Ok(id) => {
+                                    if !self.appeared_block_ids.contains_key(&id) {
+                                        self.appeared_block_ids.insert(id.clone(), pos.clone());
+                                    }
+
+                                    id
+                                },
                                 Err(()) => return Err(()),
                             }
                         };
@@ -726,12 +753,21 @@ impl BlockParser {
                     },
                     ".Rule.ID" => {
                         let chain_id_node = expr_child_node.get_node_child_at(&self.cons, 0)?;
-                        let id = match BlockParser::to_rule_id(&self.cons, &chain_id_node.get_node_child_at(&self.cons, 0)?.get_position(&self.cons)?, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
-                            Ok(v) => v,
+                        let parent_node = chain_id_node.get_node_child_at(&self.cons, 0)?;
+                        let pos = parent_node.get_position(&self.cons)?;
+
+                        let id = match BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
+                            Ok(id) => {
+                                if !self.appeared_block_ids.contains_key(&id) {
+                                    self.appeared_block_ids.insert(id.clone(), pos.clone());
+                                }
+
+                                id
+                            },
                             Err(()) => return Err(()),
                         };
 
-                        (CharacterPosition::get_empty(), RuleExpressionKind::ID, id)
+                        (pos, RuleExpressionKind::ID, id)
                     },
                     ".Rule.Str" => (CharacterPosition::get_empty(), RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
                     ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
@@ -875,8 +911,19 @@ impl BlockParser {
 
     // ret: 空文字の場合は false
     fn is_pascal_case(id: &String) -> bool {
-        return match id.chars().next() {
-            Some(v) => v.is_uppercase(),
+        let mut id_chars = id.chars();
+
+        return match id_chars.next() {
+            Some(first_char) => {
+                if first_char != '_' {
+                    first_char.is_uppercase()
+                } else {
+                    match id_chars.next() {
+                        Some(second_char) => second_char.is_uppercase(),
+                        None => false,
+                    }
+                }
+            },
             None => false,
         };
     }

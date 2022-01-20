@@ -123,6 +123,10 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
         Err(()) => {
             cons.borrow().print_all();
             cons.borrow_mut().clear_log();
+
+            println!("--- End ---");
+            println!();
+
             return;
         },
     };
@@ -132,6 +136,10 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
         Err(()) => {
             cons.borrow().print_all();
             cons.borrow_mut().clear_log();
+
+            println!("--- End ---");
+            println!();
+
             return;
         },
     };
