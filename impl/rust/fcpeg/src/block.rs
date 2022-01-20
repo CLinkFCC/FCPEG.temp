@@ -40,7 +40,7 @@ macro_rules! rule {
             root_group.sub_elems = sub_elems;
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
-            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), String::new(), vec![], vec![], root_group);
+            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), String::new(), Vec::new(), Vec::new(), root_group);
             BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule }
         }
     };
@@ -298,7 +298,7 @@ impl BlockParser {
             self.block_alias_map.clear();
         }
 
-        block_map.insert(String::new(), Box::new(Block::new("Main".to_string(), vec![])));
+        block_map.insert(String::new(), Box::new(Block::new("Main".to_string(), Vec::new())));
 
         if cfg!(debug) {
             for (_, each_block) in &block_map {
@@ -393,12 +393,12 @@ impl BlockParser {
 
         let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenericsIDs"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
-            None => vec![],
+            None => Vec::new(),
         };
 
         let func_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdFuncIDs"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
-            None => vec![],
+            None => Vec::new(),
         };
 
         let new_choice = match cmd_node.find_first_child_node(vec![".Rule.PureChoice"]) {

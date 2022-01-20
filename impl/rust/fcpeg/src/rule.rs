@@ -277,7 +277,7 @@ impl RuleGroup {
         return RuleGroup {
             uuid: Uuid::new_v4(),
             kind: kind,
-            sub_elems: vec![],
+            sub_elems: Vec::new(),
             lookahead_kind: RuleElementLookaheadKind::None,
             loop_count: RuleElementLoopCount::get_single_loop(),
             ast_reflection_style: ASTReflectionStyle::Reflection(String::new()),

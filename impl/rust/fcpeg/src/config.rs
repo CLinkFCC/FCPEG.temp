@@ -252,7 +252,7 @@ impl Configuration {
                 ":" => {
                     match tmp_prop_name {
                         Some(prop_name) => {
-                            prop_map.insert(prop_name, (vec![], tmp_prop_sub_map.clone()));
+                            prop_map.insert(prop_name, (Vec::new(), tmp_prop_sub_map.clone()));
                         }
                         None => (),
                     }
@@ -274,7 +274,7 @@ impl Configuration {
 
         match tmp_prop_name {
             Some(prop_name) => {
-                prop_map.insert(prop_name, (vec![], tmp_prop_sub_map));
+                prop_map.insert(prop_name, (Vec::new(), tmp_prop_sub_map));
             }
             None => (),
         }

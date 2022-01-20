@@ -15,7 +15,7 @@ impl FCPEGFileMap {
     // todo: config 読んでサブファイル対応
     pub fn load(cons: Rc<RefCell<Console>>,fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> ConsoleResult<FCPEGFileMap> {
         // note: ルートファイルのエイリアス名は空文字; 除外エイリアスなし
-        let file_map = FCPEGFile::load(cons, String::new(), fcpeg_file_path, lib_fcpeg_file_map, &mut vec![])?;
+        let file_map = FCPEGFile::load(cons, String::new(), fcpeg_file_path, lib_fcpeg_file_map, &mut Vec::new())?;
 
         let file_map_wrapper = FCPEGFileMap {
             file_map: file_map,

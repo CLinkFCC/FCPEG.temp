@@ -148,7 +148,7 @@ impl SyntaxParser {
         let start_rule_id = self.rule_map.start_rule_id.clone();
 
         if self.src_content.chars().count() == 0 {
-            return Ok(SyntaxTree::from_node_args(vec![], ASTReflectionStyle::Reflection(String::new())));
+            return Ok(SyntaxTree::from_node_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
         }
 
         // todo: CharacterPosition を修正
@@ -261,7 +261,7 @@ impl SyntaxParser {
             self.src_i = start_src_i;
 
             if result.is_some() == is_lookahead_positive {
-                Ok(Some(vec![]))
+                Ok(Some(Vec::new()))
             } else {
                 Ok(None)
             }
@@ -523,7 +523,7 @@ impl SyntaxParser {
             self.src_i = start_src_i;
 
             if result.is_some() == is_lookahead_positive {
-                Ok(Some(vec![]))
+                Ok(Some(Vec::new()))
             } else {
                 Ok(None)
             }
