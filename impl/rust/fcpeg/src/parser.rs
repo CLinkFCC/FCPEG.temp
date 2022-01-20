@@ -19,7 +19,7 @@ pub enum SyntaxParseError {
     InvalidGenericsArgumentLength { arg_ids: Vec<String> },
     InvalidFunctionArgumentLength { arg_ids: Vec<String> },
     InvalidSyntaxTreeStructure { cause: String },
-    NoSucceededRule { pos: CharacterPosition, rule_id: String },
+    NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
     TooLongRepetition { max_loop_count: usize },
     UnknownArgumentID { arg_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
@@ -34,7 +34,7 @@ impl ConsoleLogger for SyntaxParseError {
             SyntaxParseError::InvalidGenericsArgumentLength { arg_ids } => log!(Error, &format!("invalid generics argument length ({:?})", arg_ids)),
             SyntaxParseError::InvalidFunctionArgumentLength { arg_ids } => log!(Error, &format!("invalid function argument length ({:?})", arg_ids)),
             SyntaxParseError::InvalidSyntaxTreeStructure { cause } => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
-            SyntaxParseError::NoSucceededRule { pos, rule_id } => log!(Error, &format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos)),
+            SyntaxParseError::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, &format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
             SyntaxParseError::TooLongRepetition { max_loop_count } => log!(Error, &format!("too long repetition over {}", max_loop_count)),
             SyntaxParseError::UnknownArgumentID { arg_id } => log!(Error, &format!("unknown argument id '{}'", arg_id)),
             SyntaxParseError::UnknownRuleID { pos, rule_id } => log!(Error, &format!("unknown rule id '{}'", rule_id), &format!("at: {}", pos)),
@@ -99,7 +99,7 @@ pub struct SyntaxParser {
     src_content: String,
     max_loop_count: usize,
     arg_maps: Box<Vec<ArgumentMap>>,
-    // rule_stack: Box<Vec<(usize, String)>>,
+    rule_stack: Vec<(CharacterPosition, String)>,
     regex_map: Box<HashMap<String, Regex>>,
     memoized_map: Box<MemoizationMap>,
     enable_memoization: bool,
@@ -117,7 +117,7 @@ impl SyntaxParser {
             src_content: String::new(),
             max_loop_count: 65536,
             arg_maps: Box::new(Vec::new()),
-            // rule_stack: Box::new(vec![]),
+            rule_stack: Vec::new(),
             regex_map: Box::new(HashMap::new()),
             memoized_map: Box::new(MemoizationMap::new()),
             enable_memoization: enable_memoization,
@@ -131,7 +131,7 @@ impl SyntaxParser {
         loop {
             match tmp_src_content.find(0x0d as char) {
                 Some(v) => {
-                    tmp_src_content.remove(v);
+                    let _ = tmp_src_content.remove(v);
                 },
                 None => break,
             }
@@ -158,6 +158,7 @@ impl SyntaxParser {
                 self.cons.borrow_mut().append_log(SyntaxParseError::NoSucceededRule {
                     rule_id: start_rule_id.clone(),
                     pos: self.get_char_position(),
+                    rule_stack: self.rule_stack.clone(),
                 }.get_log());
 
                 return Err(());
@@ -171,7 +172,8 @@ impl SyntaxParser {
         if self.src_i < self.src_content.chars().count() {
             self.cons.borrow_mut().append_log(SyntaxParseError::NoSucceededRule {
                 rule_id: start_rule_id.clone(),
-                pos: self.get_char_position()
+                pos: self.get_char_position(),
+                rule_stack: self.rule_stack.clone(),
             }.get_log());
 
             return Err(());
@@ -193,7 +195,7 @@ impl SyntaxParser {
             },
         };
 
-        // self.rule_stack.push((self.src_i, rule_id.clone()));
+        self.rule_stack.push((self.get_char_position(), rule_id.clone()));
 
         return match self.parse_group(&rule_group.elem_order, &rule_group)? {
             Some(v) => {
@@ -215,11 +217,13 @@ impl SyntaxParser {
                     _ => (),
                 };
 
-                // self.rule_stack.pop().unwrap();
+                self.rule_stack.pop().unwrap();
                 let new_node = SyntaxNodeElement::from_node_args(v, ast_reflection_style);
                 Ok(Some(new_node))
             },
-            None => Ok(None),
+            None => {
+                Ok(None)
+            },
         }
     }
 
