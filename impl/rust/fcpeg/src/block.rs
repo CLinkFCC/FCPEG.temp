@@ -104,7 +104,7 @@ macro_rules! expr {
 
 pub type BlockMap = HashMap<String, Box<Block>>;
 
-pub enum BlockParseError {
+pub enum BlockParseLog {
     Unknown(),
     BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
@@ -123,25 +123,25 @@ pub enum BlockParseError {
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
 }
 
-impl ConsoleLogger for BlockParseError {
+impl ConsoleLogger for BlockParseLog {
     fn get_log(&self) -> ConsoleLog {
         match self {
-            BlockParseError::Unknown() => log!(Error, "unknown error"),
-            BlockParseError::BlockAliasNotFound { pos, block_alias_name } => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
-            BlockParseError::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
-            BlockParseError::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
-            BlockParseError::DuplicatedFileAliasName { file_alias_name } => log!(Error, &format!("duplicated file alias name '{}'", file_alias_name)),
-            BlockParseError::DuplicatedArgumentID { pos, arg_id } => log!(Error, &format!("duplicated argument id '{}'", arg_id), format!("at:\t{}", pos)),
-            BlockParseError::DuplicatedRuleName { pos, rule_name } => log!(Error, &format!("duplicated rule name '{}'", rule_name), format!("at:\t{}", pos)),
-            BlockParseError::DuplicatedStartCommand { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
-            BlockParseError::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
-            BlockParseError::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
-            BlockParseError::InvalidLoopCount { pos } => log!(Error, &format!("invalid loop count"), format!("at:\t{}", pos)),
-            BlockParseError::MainBlockNotDefined {} => log!(Error, "main block not defined"),
-            BlockParseError::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
-            BlockParseError::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
-            BlockParseError::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
-            BlockParseError::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
+            BlockParseLog::Unknown() => log!(Error, "unknown error"),
+            BlockParseLog::BlockAliasNotFound { pos, block_alias_name } => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
+            BlockParseLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
+            BlockParseLog::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicatedFileAliasName { file_alias_name } => log!(Error, &format!("duplicated file alias name '{}'", file_alias_name)),
+            BlockParseLog::DuplicatedArgumentID { pos, arg_id } => log!(Error, &format!("duplicated argument id '{}'", arg_id), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicatedRuleName { pos, rule_name } => log!(Error, &format!("duplicated rule name '{}'", rule_name), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicatedStartCommand { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
+            BlockParseLog::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
+            BlockParseLog::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
+            BlockParseLog::InvalidLoopCount { pos } => log!(Error, &format!("invalid loop count"), format!("at:\t{}", pos)),
+            BlockParseLog::MainBlockNotDefined {} => log!(Error, "main block not defined"),
+            BlockParseLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
+            BlockParseLog::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
+            BlockParseLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
+            BlockParseLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
         }
     }
 }
@@ -197,7 +197,7 @@ impl BlockParser {
         let rule_map = match start_rule_id {
             Some(id) => Box::new(RuleMap::new(block_maps, id)?),
             None => {
-                cons.borrow_mut().append_log(BlockParseError::NoStartCommandInMainBlock {}.get_log());
+                cons.borrow_mut().append_log(BlockParseLog::NoStartCommandInMainBlock {}.get_log());
                 return Err(());
             },
         };
@@ -206,7 +206,7 @@ impl BlockParser {
 
         for (each_rule_id, each_pos) in *appeared_block_ids {
             if !rule_map.rule_map.contains_key(&each_rule_id) {
-                cons.borrow_mut().append_log(SyntaxParseError::UnknownRuleID {
+                cons.borrow_mut().append_log(SyntaxParseLog::UnknownRuleID {
                     pos: each_pos, rule_id: each_rule_id,
                 }.get_log());
 
@@ -247,14 +247,14 @@ impl BlockParser {
             self.block_name = block_name_node.join_child_leaf_values();
 
             if !BlockParser::is_pascal_case(&self.block_name) {
-                self.cons.borrow_mut().append_log(BlockParseError::NamingRuleViolation {
+                self.cons.borrow_mut().append_log(BlockParseLog::NamingRuleViolation {
                     pos: block_pos.clone(),
                     id: self.block_name.clone(),
                 }.get_log());
             }
 
             if block_map.contains_key(&self.block_name) {
-                self.cons.borrow_mut().append_log(BlockParseError::DuplicatedBlockName {
+                self.cons.borrow_mut().append_log(BlockParseLog::DuplicatedBlockName {
                     pos: block_name_node.get_position(&self.cons)?,
                     block_name: self.block_name.clone(),
                 }.get_log());
@@ -275,7 +275,7 @@ impl BlockParser {
                         match &new_cmd {
                             BlockCommand::Define { pos: _, rule } => {
                                 if rule_names.contains(&rule.name) {
-                                    self.cons.borrow_mut().append_log(BlockParseError::DuplicatedRuleName {
+                                    self.cons.borrow_mut().append_log(BlockParseLog::DuplicatedRuleName {
                                         pos: rule.pos.clone(),
                                         rule_name: rule.name.clone(),
                                     }.get_log());
@@ -321,7 +321,7 @@ impl BlockParser {
                     match start_cmd.clone() {
                         BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => {
                             if self.block_name != "Main" {
-                                self.cons.borrow_mut().append_log(BlockParseError::StartCommandOutsideMainBlock {
+                                self.cons.borrow_mut().append_log(BlockParseLog::StartCommandOutsideMainBlock {
                                     pos: pos,
                                 }.get_log());
 
@@ -330,7 +330,7 @@ impl BlockParser {
 
                             if self.file_alias_name == "" {
                                 if self.start_rule_id.is_some() {
-                                    self.cons.borrow_mut().append_log(BlockParseError::DuplicatedStartCommand {
+                                    self.cons.borrow_mut().append_log(BlockParseLog::DuplicatedStartCommand {
                                         pos: pos,
                                     }.get_log());
 
@@ -358,7 +358,7 @@ impl BlockParser {
                     Ok(use_cmd)
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                         cause: format!("invalid node name '{}'", node_name),
                     }.get_log());
 
@@ -366,7 +366,7 @@ impl BlockParser {
                 },
             },
             _ => {
-                self.cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                     cause: "invalid operation".to_string(),
                 }.get_log());
 
@@ -385,7 +385,7 @@ impl BlockParser {
         let rule_name = rule_name_node.join_child_leaf_values();
 
         if !BlockParser::is_pascal_case(&rule_name) {
-            self.cons.borrow_mut().append_log(BlockParseError::NamingRuleViolation {
+            self.cons.borrow_mut().append_log(BlockParseLog::NamingRuleViolation {
                 pos: rule_pos.clone(),
                 id: rule_name.clone(),
             }.get_log());
@@ -404,7 +404,7 @@ impl BlockParser {
         let new_choice = match cmd_node.find_first_child_node(vec![".Rule.PureChoice"]) {
             Some(choice_node) => Box::new(self.to_rule_choice_elem(choice_node, &generics_args)?),
             None => {
-                self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                     msg: "pure choice not found".to_string(),
                 }.get_log());
 
@@ -426,7 +426,7 @@ impl BlockParser {
                         let new_arg = each_node.join_child_leaf_values();
 
                         if args.contains(&new_arg) {
-                            self.cons.borrow_mut().append_log(BlockParseError::DuplicatedArgumentID {
+                            self.cons.borrow_mut().append_log(BlockParseLog::DuplicatedArgumentID {
                                 pos: each_node.get_position(&self.cons)?,
                                 arg_id: new_arg.clone(),
                             }.get_log());
@@ -451,7 +451,7 @@ impl BlockParser {
             2 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), rule_name: divided_raw_id.get(1).unwrap().to_string() },
             3 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), rule_name: divided_raw_id.get(2).unwrap().to_string() },
             _ => {
-                self.cons.borrow_mut().append_log(BlockParseError::InvalidID {
+                self.cons.borrow_mut().append_log(BlockParseLog::InvalidID {
                     pos: raw_id_node.get_node_child_at(&self.cons, 0)?.get_position(&self.cons)?,
                     id: raw_id,
                 }.get_log());
@@ -474,7 +474,7 @@ impl BlockParser {
                     1 => (self.file_alias_name.clone(), divided_raw_id.get(0).unwrap().to_string()),
                     2 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
                     _ => {
-                        self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                        self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                             msg: "invalid chain ID length on use command".to_string(),
                         }.get_log());
 
@@ -488,7 +488,7 @@ impl BlockParser {
             1 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: file_alias_name, block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
             2 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: file_alias_name, block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
             _ => {
-                self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                     msg: "invalid chain ID length on use command".to_string(),
                 }.get_log());
 
@@ -512,7 +512,7 @@ impl BlockParser {
                         "&" => RuleElementLookaheadKind::Positive,
                         "!" => RuleElementLookaheadKind::Negative,
                         _ => {
-                            self.cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                            self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                                 cause: format!("unknown lookahead kind"),
                             }.get_log());
 
@@ -535,7 +535,7 @@ impl BlockParser {
                                     match min_str.parse::<usize>() {
                                         Ok(v) => {
                                             if v == 0 {
-                                                self.cons.borrow_mut().append_log(BlockParseError::InvalidLoopCount {
+                                                self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCount {
                                                     pos: CharacterPosition::get_empty(),
                                                 }.get_log());
 
@@ -545,7 +545,7 @@ impl BlockParser {
                                             v
                                         },
                                         Err(_) => {
-                                            self.cons.borrow_mut().append_log(BlockParseError::InvalidLoopCount {
+                                            self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCount {
                                                 pos: CharacterPosition::get_empty(),
                                             }.get_log());
 
@@ -563,7 +563,7 @@ impl BlockParser {
                                     match max_str.parse::<usize>() {
                                         Ok(v) => Infinitable::Normal(v),
                                         Err(_) => {
-                                            self.cons.borrow_mut().append_log(BlockParseError::InvalidLoopCount {
+                                            self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCount {
                                                 pos: CharacterPosition::get_empty(),
                                             }.get_log());
 
@@ -580,7 +580,7 @@ impl BlockParser {
                             match leaf.value.as_str() {
                                 "?" | "*" | "+" => RuleElementLoopCount::from_symbol(&leaf.value),
                                 _ => {
-                                    self.cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                                         cause: format!("unknown lookahead kind"),
                                     }.get_log());
 
@@ -618,7 +618,7 @@ impl BlockParser {
             let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec![".Rule.Choice", ".Rule.Expr"]) {
                 Some(v) => v,
                 None => {
-                    self.cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                         cause: "invalid operation".to_string(),
                     }.get_log());
 
@@ -644,7 +644,7 @@ impl BlockParser {
                             RuleElement::Expression(new_expr)
                         },
                         _ => {
-                            self.cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                            self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                                 cause: format!("invalid node name '{}'", name),
                             }.get_log());
 
@@ -655,7 +655,7 @@ impl BlockParser {
                     children.push(new_elem);
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                         cause: "invalid operation".to_string()
                     }.get_log());
 
@@ -724,7 +724,7 @@ impl BlockParser {
                             ".Rule.Generics" => RuleExpressionKind::Generics(args),
                             ".Rule.Func" => RuleExpressionKind::Func(args),
                             _ => {
-                                self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                                self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                                     msg: "invalid operation".to_string(),
                                 }.get_log());
 
@@ -772,7 +772,7 @@ impl BlockParser {
                     ".Rule.Str" => (CharacterPosition::get_empty(), RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
                     ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
                     _ => {
-                        self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                        self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                             msg: format!("unknown expression name '{}'", name),
                         }.get_log());
 
@@ -781,7 +781,7 @@ impl BlockParser {
                 }
             },
             _ => {
-                self.cons.borrow_mut().append_log(SyntaxParseError::InternalError {
+                self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                     msg: "invalid operation".to_string(),
                 }.get_log());
 
@@ -823,7 +823,7 @@ impl BlockParser {
                     (new_id, "", block_name, rule_name.clone())
                 } else {
                     // note: ブロック名がエイリアスでない場合
-                    cons.borrow_mut().append_log(BlockParseError::BlockAliasNotFound {
+                    cons.borrow_mut().append_log(BlockParseLog::BlockAliasNotFound {
                         pos: pos.clone(),
                         block_alias_name: block_name.to_string(),
                     }.get_log());
@@ -840,7 +840,7 @@ impl BlockParser {
                 (new_id, file_alias_name.as_str(), block_name, rule_name.to_string())
             },
             _ => {
-                cons.borrow_mut().append_log(BlockParseError::InternalError {
+                cons.borrow_mut().append_log(BlockParseLog::InternalError {
                     msg: format!("invalid id expression"),
                 }.get_log());
 
@@ -852,7 +852,7 @@ impl BlockParser {
         // todo: プライベートブロックに対応
         // todo: 異なるファイルでの同ブロック名を除外
         if id_rule_name.starts_with("_") && *block_name != *id_block_name {
-            cons.borrow_mut().append_log(BlockParseError::AttemptToAccessPrivateItem {
+            cons.borrow_mut().append_log(BlockParseLog::AttemptToAccessPrivateItem {
                 pos: pos.clone(),
                 item_id: new_id.clone(),
             }.get_log());
@@ -876,7 +876,7 @@ impl BlockParser {
                                 "t" => "\t",
                                 "z" => "\0",
                                 _ => {
-                                    self.cons.borrow_mut().append_log(BlockParseError::UnknownEscapeSequenceCharacter {
+                                    self.cons.borrow_mut().append_log(BlockParseLog::UnknownEscapeSequenceCharacter {
                                         pos: node.get_position(&self.cons)?,
                                     }.get_log());
 

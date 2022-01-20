@@ -115,7 +115,7 @@ impl SyntaxNodeElement {
         return match self {
             SyntaxNodeElement::Node(node) => Ok(node),
             _ => {
-                cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                     cause: "element not node list".to_string(),
                 }.get_log());
 
@@ -128,7 +128,7 @@ impl SyntaxNodeElement {
         return match self {
             SyntaxNodeElement::Leaf(leaf) => Ok(leaf),
             _ => {
-                cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                     cause: "element not leaf".to_string(),
                 }.get_log());
 
@@ -293,7 +293,7 @@ impl SyntaxNode {
                     return match self.sub_elems.get(elem_i) {
                         Some(v) => Ok(&v),
                         None => {
-                            cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+                            cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                                 cause: "invalid operation".to_string(),
                             }.get_log());
 
@@ -308,7 +308,7 @@ impl SyntaxNode {
             elem_i += 1;
         }
 
-        cons.borrow_mut().append_log(SyntaxParseError::InvalidSyntaxTreeStructure {
+        cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
             cause: format!("{}th reflectable element not matched", index + 1),
         }.get_log());
 

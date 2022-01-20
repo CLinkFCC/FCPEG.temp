@@ -11,7 +11,7 @@ use rustnutlib::file::*;
 type PropertyMap = HashMap<String, (Vec<String>, PropertySubMap)>;
 type PropertySubMap = HashMap::<String, Vec<String>>;
 
-pub enum ConfigurationError {
+pub enum ConfigurationLog {
     Unknown {},
     DuplicatedPropertyName { prop_name: String },
     FileError { err: FileError },
@@ -22,17 +22,17 @@ pub enum ConfigurationError {
     UnknownRegexMode { input: String },
 }
 
-impl ConsoleLogger for ConfigurationError {
+impl ConsoleLogger for ConfigurationLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            ConfigurationError::Unknown {} => log!(Error, "unknown"),
-            ConfigurationError::DuplicatedPropertyName { prop_name } => log!(Error, "duplicated property name", format!("property name:\t{}", prop_name)),
-            ConfigurationError::FileError { err } => err.get_log(),
-            ConfigurationError::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
-            ConfigurationError::InvalidPropertyValueLength { prop_name } => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
-            ConfigurationError::InvalidSyntax { line, msg } => log!(Error, "invalid syntax", format!("{}", msg), format!("line:\t{}", line)),
-            ConfigurationError::UnknownPropertyName { prop_name } => log!(Error, &format!("unknown property name '{}'", prop_name)),
-            ConfigurationError::UnknownRegexMode { input } => log!(Error, &format!("unknown regex mode '{}'", input)),
+            ConfigurationLog::Unknown {} => log!(Error, "unknown"),
+            ConfigurationLog::DuplicatedPropertyName { prop_name } => log!(Error, "duplicated property name", format!("property name:\t{}", prop_name)),
+            ConfigurationLog::FileError { err } => err.get_log(),
+            ConfigurationLog::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
+            ConfigurationLog::InvalidPropertyValueLength { prop_name } => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
+            ConfigurationLog::InvalidSyntax { line, msg } => log!(Error, "invalid syntax", format!("{}", msg), format!("line:\t{}", line)),
+            ConfigurationLog::UnknownPropertyName { prop_name } => log!(Error, &format!("unknown property name '{}'", prop_name)),
+            ConfigurationLog::UnknownRegexMode { input } => log!(Error, &format!("unknown regex mode '{}'", input)),
         };
     }
 }
@@ -95,7 +95,7 @@ impl Configuration {
                     let regex_mode_str = match prop_values.get(0) {
                         Some(v) => v,
                         None => {
-                            cons.borrow_mut().append_log(ConfigurationError::InvalidPropertyValueLength {
+                            cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValueLength {
                                 prop_name: prop_name.clone(),
                             }.get_log());
 
@@ -106,7 +106,7 @@ impl Configuration {
                     regex_mode = match RegexMode::get_regex_mode(regex_mode_str) {
                         Some(v) => v,
                         None => {
-                            cons.borrow_mut().append_log(ConfigurationError::UnknownRegexMode {
+                            cons.borrow_mut().append_log(ConfigurationLog::UnknownRegexMode {
                                 input: regex_mode_str.clone(),
                             }.get_log());
 
@@ -121,7 +121,7 @@ impl Configuration {
                         let alias_path = match alias_path_vec.get(0) {
                             Some(v) => v,
                             None => {
-                                cons.borrow_mut().append_log(ConfigurationError::InvalidPropertyValueLength {
+                                cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValueLength {
                                     prop_name: alias_name.clone()
                                 }.get_log());
 
@@ -138,7 +138,7 @@ impl Configuration {
                     let ast_reflect = match prop_values.get(0) {
                         Some(v) => v,
                         None => {
-                            cons.borrow_mut().append_log(ConfigurationError::InvalidPropertyValueLength {
+                            cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValueLength {
                                 prop_name: prop_name.clone(),
                             }.get_log());
 
@@ -150,7 +150,7 @@ impl Configuration {
                         "normal" => false,
                         "reversed" => true,
                         _ => {
-                            cons.borrow_mut().append_log(ConfigurationError::InvalidPropertyValue {
+                            cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValue {
                                 prop_name: prop_name.clone(),
                                 prop_value: ast_reflect.clone(),
                             }.get_log());
@@ -160,7 +160,7 @@ impl Configuration {
                     };
                 },
                 _ => {
-                    cons.borrow_mut().append_log(ConfigurationError::UnknownPropertyName {
+                    cons.borrow_mut().append_log(ConfigurationLog::UnknownPropertyName {
                         prop_name: prop_name.clone(),
                     }.get_log());
 
@@ -203,7 +203,7 @@ impl Configuration {
                     let both_sides: Vec<&str> = pure_line.split(": ").collect();
 
                     if both_sides.len() != 2 {
-                        cons.borrow_mut().append_log(ConfigurationError::InvalidSyntax {
+                        cons.borrow_mut().append_log(ConfigurationLog::InvalidSyntax {
                             line: line_i,
                             msg: "expected ':'".to_string(),
                         }.get_log());
@@ -214,7 +214,7 @@ impl Configuration {
                     let prop_name = both_sides.get(0).unwrap().to_string();
 
                     if prop_map.contains_key(&prop_name) {
-                        cons.borrow_mut().append_log(ConfigurationError::DuplicatedPropertyName {
+                        cons.borrow_mut().append_log(ConfigurationLog::DuplicatedPropertyName {
                             prop_name: prop_name,
                         }.get_log());
 
@@ -225,7 +225,7 @@ impl Configuration {
                     let prop_values: Vec<String> = prop_values_orig.iter().map(|s| s.to_string()).collect();
 
                     if prop_values == vec![""] {
-                        cons.borrow_mut().append_log(ConfigurationError::InvalidSyntax {
+                        cons.borrow_mut().append_log(ConfigurationLog::InvalidSyntax {
                             line: line_i,
                             msg: "property value not found".to_string(),
                         }.get_log());
@@ -235,7 +235,7 @@ impl Configuration {
 
                     if is_nested {
                         if tmp_prop_name.is_none() {
-                            cons.borrow_mut().append_log(ConfigurationError::InvalidSyntax {
+                            cons.borrow_mut().append_log(ConfigurationLog::InvalidSyntax {
                                 line: line_i,
                                 msg: "unexpected '||'".to_string(),
                             }.get_log());
@@ -262,7 +262,7 @@ impl Configuration {
                     tmp_prop_name = Some(pure_line.clone());
                 },
                 _ => {
-                    cons.borrow_mut().append_log(ConfigurationError::InvalidSyntax {
+                    cons.borrow_mut().append_log(ConfigurationLog::InvalidSyntax {
                         line: line_i,
                         msg: "expected ',' and ':' at the end".to_string(),
                     }.get_log());

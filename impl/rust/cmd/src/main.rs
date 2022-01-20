@@ -89,7 +89,7 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: Console) {
     let cons_ptr = Rc::from(RefCell::new(cons));
 
     if is_monitored {
-        cons_ptr.borrow_mut().append_log(log!(Notice, "command help", "You can quit parsing with '^C'."));
+        cons_ptr.borrow_mut().append_log(log!(Note, "command help", "You can quit parsing with '^C'."));
         parse_with_monitoring(&cons_ptr, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt);
     } else {
         parse(&cons_ptr, fcpeg_file_path, input_file_path, output_tree, count_duration, disable_opt);
@@ -99,7 +99,7 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: Console) {
 fn proc_manual_subcommand(_: &ManualSubcommand, cons: Console) {
     let cons_ptr = Rc::from(RefCell::new(cons));
 
-    let log = log!(Notice, "command help",
+    let log = log!(Note, "command help",
         "parse:\tparse specified files",
             "\t-f:\tspecify .fcpeg file",
             "\t-i:\tspecify input files",
