@@ -7,6 +7,8 @@ use crate::parser::*;
 use crate::rule::*;
 use crate::tree::*;
 
+use colored::*;
+
 use rustnutlib::*;
 use rustnutlib::console::*;
 
@@ -115,13 +117,13 @@ pub enum BlockParseLog {
     DuplicateStartCommand { pos: CharacterPosition },
     InternalError { msg: String },
     InvalidID { pos: CharacterPosition, id: String },
-    InvalidLoopCountItem { pos: CharacterPosition, item: String },
+    InvalidLoopCountItem { pos: CharacterPosition, msg: String },
     MainBlockNotDefined {},
     NamingRuleViolation { pos: CharacterPosition, id: String },
     NoStartCommandInMainBlock {},
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
-    UnnecessaryLoopCountItem { pos: CharacterPosition, item: String },
+    UnnecessaryLoopCountItem { pos: CharacterPosition, msg: String },
 }
 
 impl ConsoleLogger for BlockParseLog {
@@ -137,13 +139,13 @@ impl ConsoleLogger for BlockParseLog {
             BlockParseLog::DuplicateStartCommand { pos } => log!(Error, "duplicate start command", format!("at:\t{}", pos)),
             BlockParseLog::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
             BlockParseLog::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
-            BlockParseLog::InvalidLoopCountItem { pos, item } => log!(Error, &format!("invalid loop count item"), format!("at:\t{}", pos), format!("item:\t{}", item)),
+            BlockParseLog::InvalidLoopCountItem { pos, msg } => log!(Error, &format!("invalid loop count item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParseLog::MainBlockNotDefined {} => log!(Error, "main block not defined"),
             BlockParseLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
             BlockParseLog::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
             BlockParseLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParseLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
-            BlockParseLog::UnnecessaryLoopCountItem { pos, item } => log!(Warning, &format!("unnecessary loop count item"), format!("at:\t{}", pos), format!("item:\t{}", item)),
+            BlockParseLog::UnnecessaryLoopCountItem { pos, msg } => log!(Warning, &format!("unnecessary loop count item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
         }
     }
 }
@@ -533,32 +535,23 @@ impl BlockParser {
                 Some(v) => {
                     match v.get_child_at(&self.cons, 0)? {
                         SyntaxNodeElement::Node(node) => {
-                            let min_num = match node.get_child_at(&self.cons, 0)? {
+                            let (min_num, is_zero_specified) = match node.get_child_at(&self.cons, 0)? {
                                 SyntaxNodeElement::Node(min_node) => {
                                     let min_str = min_node.join_child_leaf_values();
 
                                     match min_str.parse::<usize>() {
-                                        Ok(v) => {
-                                            if v == 0 {
-                                                self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
-                                                    pos: CharacterPosition::get_empty(),
-                                                    item: v.to_string(),
-                                                }.get_log());
-                                            }
-
-                                            v
-                                        },
+                                        Ok(v) => (v, true),
                                         Err(_) => {
                                             self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
                                                 pos: CharacterPosition::get_empty(),
-                                                item: min_str.clone(),
+                                                msg: format!("'{}' is not a number", min_str),
                                             }.get_log());
 
                                             return Err(());
                                         },
                                     }
                                 },
-                                SyntaxNodeElement::Leaf(_) => 0usize,
+                                SyntaxNodeElement::Leaf(_) => (0usize, false),
                             };
 
                             let max_num = match node.get_child_at(&self.cons, 1)? {
@@ -570,7 +563,7 @@ impl BlockParser {
                                         Err(_) => {
                                             self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
                                                 pos: CharacterPosition::get_empty(),
-                                                item: max_str.clone(),
+                                                msg: format!("'{}' is not a number", max_str),
                                             }.get_log());
 
                                             return Err(());
@@ -579,6 +572,54 @@ impl BlockParser {
                                 },
                                 SyntaxNodeElement::Leaf(_) => Infinitable::Infinite,
                             };
+
+                            let raw_loop_count_txt = match &max_num {
+                                Infinitable::Normal(v) => format!("{{{},{}}}", min_num, v),
+                                Infinitable::Infinite => format!("{{{},}}", min_num),
+                            };
+
+                            match &max_num {
+                                Infinitable::Normal(v) => {
+                                    if min_num > *v {
+                                        // note: 最小回数が最大回数より大きかった場合
+                                        self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
+                                            pos: CharacterPosition::get_empty(),
+                                            msg: format!("min value '{}' is bigger than max value '{}'", min_num, v),
+                                        }.get_log());
+
+                                        return Err(());
+                                    }
+
+                                    if *v == 0 {
+                                        // note: 最大回数に 0 が指定された場合
+                                        self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
+                                            pos: CharacterPosition::get_empty(),
+                                            msg: format!("invalid max number '{}'", min_num),
+                                        }.get_log());
+                                    } else if min_num == *v {
+                                        // note: 最小回数と最大回数が同じだった場合
+                                        self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
+                                            pos: CharacterPosition::get_empty(),
+                                            msg: format!("modify '{}' to '{{{}}}'", raw_loop_count_txt, min_num),
+                                        }.get_log());
+                                    } else if is_zero_specified {
+                                        // note: 最小回数に 0 が指定された場合
+                                        self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
+                                            pos: CharacterPosition::get_empty(),
+                                            msg: format!("modify '{}' to '{{,{}}}'", raw_loop_count_txt, v),
+                                        }.get_log());
+                                    }
+                                },
+                                _ => {
+                                    if is_zero_specified {
+                                        // note: 最小回数に 0 が指定された場合
+                                        self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
+                                            pos: CharacterPosition::get_empty(),
+                                            msg: format!("modify '{}' to '{{,}}'", raw_loop_count_txt),
+                                        }.get_log());
+                                    }
+                                },
+                            }
 
                             RuleElementLoopCount::new(min_num, max_num)
                         },
