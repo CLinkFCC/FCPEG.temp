@@ -81,7 +81,7 @@ macro_rules! expr {
             let mut expr = RuleExpression::new(CharacterPosition::get_empty(), RuleExpressionKind::$kind, $value.to_string());
 
             let leaf_name = match RuleExpressionKind::$kind {
-                RuleExpressionKind::ID => $value.to_string(),
+                RuleExpressionKind::Id => $value.to_string(),
                 _ => String::new(),
             };
 
@@ -715,7 +715,7 @@ impl BlockParser {
         let (pos, kind, value) = match &expr_child_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(name) => {
                 match name.as_str() {
-                    ".Rule.ArgID" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::ArgID, expr_child_node.join_child_leaf_values()),
+                    ".Rule.ArgID" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::ArgId, expr_child_node.join_child_leaf_values()),
                     ".Rule.CharClass" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
                     ".Rule.Generics" | ".Rule.Func" => {
                         let mut args = Vec::<Box<RuleGroup>>::new();
@@ -773,7 +773,7 @@ impl BlockParser {
                             Err(()) => return Err(()),
                         };
 
-                        (pos, RuleExpressionKind::ID, id)
+                        (pos, RuleExpressionKind::Id, id)
                     },
                     ".Rule.Str" => (CharacterPosition::get_empty(), RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
                     ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
@@ -960,18 +960,18 @@ impl FCPEGBlock {
             ".Syntax.FCPEG",
             choice!{
                 vec![],
-                expr!(ID, ".Symbol.Space", "*", "#"),
-                expr!(ID, ".Symbol.LineEnd", "*", "#"),
+                expr!(Id, ".Symbol.Space", "*", "#"),
+                expr!(Id, ".Symbol.LineEnd", "*", "#"),
                 choice!{
                     vec!["*"],
                     choice!{
                         vec![],
-                        expr!(ID, ".Block.Block"),
-                        expr!(ID, ".Symbol.LineEnd", "+", "#"),
+                        expr!(Id, ".Block.Block"),
+                        expr!(Id, ".Symbol.LineEnd", "+", "#"),
                     },
                 },
-                expr!(ID, ".Symbol.LineEnd", "*", "#"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(Id, ".Symbol.LineEnd", "*", "#"),
+                expr!(Id, ".Symbol.Space", "*", "#"),
                 expr!(String, "\0", "#"),
             },
         };
@@ -994,9 +994,9 @@ impl FCPEGBlock {
             ".Symbol.LineEnd",
             choice!{
                 vec![],
-                expr!(ID, ".Symbol.Space", "*"),
+                expr!(Id, ".Symbol.Space", "*"),
                 expr!(String, "\n"),
-                expr!(ID, ".Symbol.Space", "*"),
+                expr!(Id, ".Symbol.Space", "*"),
             },
         };
 
@@ -1009,7 +1009,7 @@ impl FCPEGBlock {
                     vec![":"],
                     choice!{
                         vec![],
-                        expr!(ID, ".Symbol.Space"),
+                        expr!(Id, ".Symbol.Space"),
                     },
                     choice!{
                         vec![],
@@ -1024,19 +1024,19 @@ impl FCPEGBlock {
             ".Symbol.CommaDiv",
             choice!{
                 vec![],
-                expr!(ID, ".Symbol.Div", "*"),
+                expr!(Id, ".Symbol.Div", "*"),
                 choice!{
                     vec![":"],
                     choice!{
                         vec![],
                         expr!(String, ",,"),
-                        expr!(ID, ".Symbol.LineEnd"),
-                        expr!(ID, ".Symbol.Div", "*"),
+                        expr!(Id, ".Symbol.LineEnd"),
+                        expr!(Id, ".Symbol.Div", "*"),
                     },
                     choice!{
                         vec![],
                         expr!(String, ","),
-                        expr!(ID, ".Symbol.Space", "*"),
+                        expr!(Id, ".Symbol.Space", "*"),
                     },
                 },
             },
@@ -1070,13 +1070,13 @@ impl FCPEGBlock {
             ".Misc.ChainID",
             choice!{
                 vec![],
-                expr!(ID, ".Misc.SingleID"),
+                expr!(Id, ".Misc.SingleID"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec![],
                         expr!(String, ".", "#"),
-                        expr!(ID, ".Misc.SingleID"),
+                        expr!(Id, ".Misc.SingleID"),
                     },
                 },
             },
@@ -1092,19 +1092,19 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "[", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
-                expr!(ID, ".Misc.SingleID"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Misc.SingleID"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "]", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "{", "#"),
-                expr!(ID, ".Symbol.LineEnd", "+", "#"),
+                expr!(Id, ".Symbol.LineEnd", "+", "#"),
                 choice!{
                     vec!["*"],
                     choice!{
                         vec![],
-                        expr!(ID, ".Block.Cmd"),
-                        expr!(ID, ".Symbol.LineEnd", "+", "#"),
+                        expr!(Id, ".Block.Cmd"),
+                        expr!(Id, ".Symbol.LineEnd", "+", "#"),
                     },
                 },
                 expr!(String, "}", "#"),
@@ -1118,19 +1118,19 @@ impl FCPEGBlock {
                 vec![":"],
                 choice!{
                     vec![],
-                    expr!(ID, ".Block.CommentCmd"),
+                    expr!(Id, ".Block.CommentCmd"),
                 },
                 choice!{
                     vec![],
-                    expr!(ID, ".Block.DefineCmd"),
+                    expr!(Id, ".Block.DefineCmd"),
                 },
                 choice!{
                     vec![],
-                    expr!(ID, ".Block.StartCmd"),
+                    expr!(Id, ".Block.StartCmd"),
                 },
                 choice!{
                     vec![],
-                    expr!(ID, ".Block.UseCmd"),
+                    expr!(Id, ".Block.UseCmd"),
                 },
             },
         };
@@ -1165,14 +1165,14 @@ impl FCPEGBlock {
             ".Block.DefineCmd",
             choice!{
                 vec![],
-                expr!(ID, ".Misc.SingleID"),
-                expr!(ID, ".Block.DefineCmdGenericsIDs", "?"),
-                expr!(ID, ".Block.DefineCmdFuncIDs", "?"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Misc.SingleID"),
+                expr!(Id, ".Block.DefineCmdGenericsIDs", "?"),
+                expr!(Id, ".Block.DefineCmdFuncIDs", "?"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "<-", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
-                expr!(ID, ".Rule.PureChoice"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Rule.PureChoice"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, ",", "#"),
             },
         };
@@ -1182,20 +1182,20 @@ impl FCPEGBlock {
             ".Block.DefineCmdGenericsIDs",
             choice!{
                 vec![],
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "<", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
-                expr!(ID, ".Rule.ArgID"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Rule.ArgID"),
                 choice!{
                     vec!["*", "##"],
-                    expr!(ID, ".Symbol.Div", "*", "#"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
-                    expr!(ID, ".Symbol.Div", "*", "#"),
-                    expr!(ID, ".Rule.ArgID"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
+                    expr!(Id, ".Rule.ArgID"),
                 },
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, ">", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
             },
         };
 
@@ -1204,20 +1204,20 @@ impl FCPEGBlock {
             ".Block.DefineCmdFuncIDs",
             choice!{
                 vec![],
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "(", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
-                expr!(ID, ".Rule.ArgID"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Rule.ArgID"),
                 choice!{
                     vec!["*", "##"],
-                    expr!(ID, ".Symbol.Div", "*", "#"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
-                    expr!(ID, ".Symbol.Div", "*", "#"),
-                    expr!(ID, ".Rule.ArgID"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
+                    expr!(Id, ".Rule.ArgID"),
                 },
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, ")", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
             },
         };
 
@@ -1227,11 +1227,11 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "+", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "start", "#"),
-                expr!(ID, ".Symbol.Div", "+", "#"),
-                expr!(ID, ".Misc.ChainID"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "+", "#"),
+                expr!(Id, ".Misc.ChainID"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, ",", "#"),
             },
         };
@@ -1242,12 +1242,12 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "+", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "use", "#"),
-                expr!(ID, ".Symbol.Div", "+", "#"),
-                expr!(ID, ".Misc.ChainID"),
-                expr!(ID, ".Block.UseCmdBlockAlias", "?"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "+", "#"),
+                expr!(Id, ".Misc.ChainID"),
+                expr!(Id, ".Block.UseCmdBlockAlias", "?"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, ",", "#"),
             },
         };
@@ -1257,10 +1257,10 @@ impl FCPEGBlock {
             ".Block.UseCmdBlockAlias",
             choice!{
                 vec![],
-                expr!(ID, ".Symbol.Div", "+", "#"),
+                expr!(Id, ".Symbol.Div", "+", "#"),
                 expr!(String, "as", "#"),
-                expr!(ID, ".Symbol.Div", "+", "#"),
-                expr!(ID, ".Misc.SingleID"),
+                expr!(Id, ".Symbol.Div", "+", "#"),
+                expr!(Id, ".Misc.SingleID"),
             },
         };
 
@@ -1273,14 +1273,14 @@ impl FCPEGBlock {
             ".Rule.InstantPureChoice",
             choice!{
                 vec![],
-                expr!(ID, ".Rule.Seq"),
+                expr!(Id, ".Rule.Seq"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec!["##"],
                         expr!(String, ":"),
-                        expr!(ID, ".Symbol.Space", "#"),
-                        expr!(ID, ".Rule.Seq"),
+                        expr!(Id, ".Symbol.Space", "#"),
+                        expr!(Id, ".Rule.Seq"),
                     },
                 },
             },
@@ -1291,7 +1291,7 @@ impl FCPEGBlock {
             ".Rule.PureChoice",
             choice!{
                 vec![],
-                expr!(ID, ".Rule.Seq"),
+                expr!(Id, ".Rule.Seq"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
@@ -1300,17 +1300,17 @@ impl FCPEGBlock {
                             vec![":"],
                             choice!{
                                 vec!["##"],
-                                expr!(ID, ".Symbol.Div", "+", "#"),
+                                expr!(Id, ".Symbol.Div", "+", "#"),
                                 expr!(String, ":"),
-                                expr!(ID, ".Symbol.Div", "+", "#"),
+                                expr!(Id, ".Symbol.Div", "+", "#"),
                             },
                             choice!{
                                 vec!["##"],
                                 expr!(String, ","),
-                                expr!(ID, ".Symbol.Space", "#"),
+                                expr!(Id, ".Symbol.Space", "#"),
                             },
                         },
-                        expr!(ID, ".Rule.Seq"),
+                        expr!(Id, ".Rule.Seq"),
                     },
                 },
             },
@@ -1322,7 +1322,7 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "(", "#"),
-                expr!(ID, ".Rule.PureChoice"),
+                expr!(Id, ".Rule.PureChoice"),
                 expr!(String, ")", "#"),
             },
         };
@@ -1332,15 +1332,15 @@ impl FCPEGBlock {
             ".Rule.Seq",
             choice!{
                 vec![],
-                expr!(ID, ".Rule.SeqElem"),
+                expr!(Id, ".Rule.SeqElem"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec![],
                         choice!{
                             vec![],
-                            expr!(ID, ".Symbol.Div", "+", "#"),
-                            expr!(ID, ".Rule.SeqElem"),
+                            expr!(Id, ".Symbol.Div", "+", "#"),
+                            expr!(Id, ".Rule.SeqElem"),
                         },
                     },
                 },
@@ -1352,24 +1352,24 @@ impl FCPEGBlock {
             ".Rule.SeqElem",
             choice!{
                 vec![],
-                expr!(ID, ".Rule.Lookahead", "?"),
+                expr!(Id, ".Rule.Lookahead", "?"),
                 choice!{
                     vec!["##"],
                     choice!{
                         vec![":"],
                         choice!{
                             vec![],
-                            expr!(ID, ".Rule.Choice"),
+                            expr!(Id, ".Rule.Choice"),
                         },
                         choice!{
                             vec![],
-                            expr!(ID, ".Rule.Expr"),
+                            expr!(Id, ".Rule.Expr"),
                         },
                     },
                 },
-                expr!(ID, ".Rule.Loop", "?"),
-                expr!(ID, ".Rule.RandomOrder", "?"),
-                expr!(ID, ".Rule.ASTReflectionStyle", "?"),
+                expr!(Id, ".Rule.Loop", "?"),
+                expr!(Id, ".Rule.RandomOrder", "?"),
+                expr!(Id, ".Rule.ASTReflectionStyle", "?"),
             },
         };
 
@@ -1382,31 +1382,31 @@ impl FCPEGBlock {
                     vec![":"],
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.ArgID"),
+                        expr!(Id, ".Rule.ArgID"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.Generics"),
+                        expr!(Id, ".Rule.Generics"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.Func"),
+                        expr!(Id, ".Rule.Func"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.ID"),
+                        expr!(Id, ".Rule.ID"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.Str"),
+                        expr!(Id, ".Rule.Str"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.CharClass"),
+                        expr!(Id, ".Rule.CharClass"),
                     },
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.Wildcard"),
+                        expr!(Id, ".Rule.Wildcard"),
                     },
                 },
             },
@@ -1452,7 +1452,7 @@ impl FCPEGBlock {
                     },
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.LoopRange"),
+                        expr!(Id, ".Rule.LoopRange"),
                     },
                 },
             },
@@ -1464,31 +1464,31 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "{", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 choice!{
                     vec![":"],
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.Num", "##"),
+                        expr!(Id, ".Rule.Num", "##"),
                     },
                     choice!{
                         vec!["##"],
                         expr!(String, ""),
                     },
                 },
-                expr!(ID, ".Symbol.CommaDiv", "#"),
+                expr!(Id, ".Symbol.CommaDiv", "#"),
                 choice!{
                     vec![":"],
                     choice!{
                         vec![],
-                        expr!(ID, ".Rule.Num", "##"),
+                        expr!(Id, ".Rule.Num", "##"),
                     },
                     choice!{
                         vec!["##"],
                         expr!(String, ""),
                     },
                 },
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "}", "#"),
             },
         };
@@ -1499,7 +1499,7 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "^", "#"),
-                expr!(ID, ".Rule.RandomOrderRange", "?"),
+                expr!(Id, ".Rule.RandomOrderRange", "?"),
             },
         };
 
@@ -1509,11 +1509,11 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "[", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
-                expr!(ID, ".Rule.Num", "?"),
-                expr!(ID, ".Symbol.CommaDiv", "#"),
-                expr!(ID, ".Rule.Num", "?"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Rule.Num", "?"),
+                expr!(Id, ".Symbol.CommaDiv", "#"),
+                expr!(Id, ".Rule.Num", "?"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "]", "#"),
             },
         };
@@ -1532,7 +1532,7 @@ impl FCPEGBlock {
                     choice!{
                         vec![],
                         expr!(String, "#", "#"),
-                        expr!(ID, ".Misc.SingleID", "?", "##"),
+                        expr!(Id, ".Misc.SingleID", "?", "##"),
                     },
                 },
             },
@@ -1552,7 +1552,7 @@ impl FCPEGBlock {
             ".Rule.ID",
             choice!{
                 vec![],
-                expr!(ID, ".Misc.ChainID"),
+                expr!(Id, ".Misc.ChainID"),
             },
         };
 
@@ -1562,7 +1562,7 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "$", "#"),
-                expr!(ID, ".Misc.SingleID", "##"),
+                expr!(Id, ".Misc.SingleID", "##"),
             },
         };
 
@@ -1571,21 +1571,21 @@ impl FCPEGBlock {
             ".Rule.Generics",
             choice!{
                 vec![],
-                expr!(ID, ".Misc.ChainID"),
+                expr!(Id, ".Misc.ChainID"),
                 expr!(String, "<", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
-                expr!(ID, ".Rule.InstantPureChoice"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Rule.InstantPureChoice"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec!["##"],
-                        expr!(ID, ".Symbol.Div", "*", "#"),
+                        expr!(Id, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
-                        expr!(ID, ".Symbol.Div", "*", "#"),
-                        expr!(ID, ".Rule.InstantPureChoice"),
+                        expr!(Id, ".Symbol.Div", "*", "#"),
+                        expr!(Id, ".Rule.InstantPureChoice"),
                     },
                 },
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, ">", "#"),
             },
         };
@@ -1595,21 +1595,21 @@ impl FCPEGBlock {
             ".Rule.Func",
             choice!{
                 vec![],
-                expr!(ID, ".Misc.ChainID"),
+                expr!(Id, ".Misc.ChainID"),
                 expr!(String, "(", "#"),
-                expr!(ID, ".Symbol.Div", "*", "#"),
-                expr!(ID, ".Rule.InstantPureChoice"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Rule.InstantPureChoice"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec!["##"],
-                        expr!(ID, ".Symbol.Div", "*", "#"),
+                        expr!(Id, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
-                        expr!(ID, ".Symbol.Div", "*", "#"),
-                        expr!(ID, ".Rule.InstantPureChoice"),
+                        expr!(Id, ".Symbol.Div", "*", "#"),
+                        expr!(Id, ".Rule.InstantPureChoice"),
                     },
                 },
-                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, ")", "#"),
             },
         };
@@ -1661,7 +1661,7 @@ impl FCPEGBlock {
                         vec![":"],
                         choice!{
                             vec![],
-                            expr!(ID, ".Rule.EscSeq"),
+                            expr!(Id, ".Rule.EscSeq"),
                         },
                         choice!{
                             vec![],
@@ -1697,7 +1697,7 @@ impl FCPEGBlock {
                     vec!["+", "##"],
                     expr!(String, "[", "!"),
                     expr!(String, "]", "!"),
-                    expr!(ID, ".Symbol.LineEnd", "!"),
+                    expr!(Id, ".Symbol.LineEnd", "!"),
                     choice!{
                         vec!["##"],
                         choice!{

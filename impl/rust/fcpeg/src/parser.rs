@@ -592,7 +592,7 @@ impl SyntaxParser {
 
         match &expr.kind {
             // todo: argid に引数 kind を追加
-            RuleExpressionKind::ArgID => {
+            RuleExpressionKind::ArgId => {
                 let mut group = Option::<Box<RuleGroup>>::None;
 
                 for each_arg_map in &*self.arg_maps {
@@ -819,7 +819,7 @@ impl SyntaxParser {
                 self.arg_maps.pop();
                 return result;
             },
-            RuleExpressionKind::ID => {
+            RuleExpressionKind::Id => {
                 return self.parse_id_expr(expr);
             },
             RuleExpressionKind::String => {

@@ -331,11 +331,11 @@ impl Display for RuleGroup {
 
 #[derive(Clone)]
 pub enum RuleExpressionKind {
-    ArgID,
+    ArgId,
     CharClass,
     Func(Vec<Box<RuleGroup>>),
     Generics(Vec<Box<RuleGroup>>),
-    ID,
+    Id,
     String,
     Wildcard,
 }
@@ -343,11 +343,11 @@ pub enum RuleExpressionKind {
 impl Display for RuleExpressionKind {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let s = match self {
-            RuleExpressionKind::ArgID => "ArgID",
+            RuleExpressionKind::ArgId => "ArgID",
             RuleExpressionKind::CharClass => "CharClass",
             RuleExpressionKind::Func(_) => "Func",
             RuleExpressionKind::Generics(_) => "Generics",
-            RuleExpressionKind::ID => "ID",
+            RuleExpressionKind::Id => "ID",
             RuleExpressionKind::String => "String",
             RuleExpressionKind::Wildcard => "Wildcard",
         };
@@ -383,7 +383,7 @@ impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let loop_text = self.loop_count.to_string(true, "{", ",", "}");
         let value_text = match self.kind.clone() {
-            RuleExpressionKind::ArgID => format!("${}", self.value),
+            RuleExpressionKind::ArgId => format!("${}", self.value),
             RuleExpressionKind::CharClass => self.value.clone(),
             RuleExpressionKind::Func(args) => {
                 let arg_text = args.iter().map(|each_arg| each_arg.to_string()).collect::<Vec<String>>();
@@ -393,7 +393,7 @@ impl Display for RuleExpression {
                 let arg_text = args.iter().map(|each_arg| each_arg.to_string()).collect::<Vec<String>>();
                 format!("{}<{}>", self.value, arg_text.join(", "))
             },
-            RuleExpressionKind::ID => self.value.clone(),
+            RuleExpressionKind::Id => self.value.clone(),
             RuleExpressionKind::String => format!("\"{}\"", self.value),
             RuleExpressionKind::Wildcard => ".".to_string(),
         };
