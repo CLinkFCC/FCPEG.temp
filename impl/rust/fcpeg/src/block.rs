@@ -115,12 +115,13 @@ pub enum BlockParseLog {
     DuplicatedStartCommand { pos: CharacterPosition },
     InternalError { msg: String },
     InvalidID { pos: CharacterPosition, id: String },
-    InvalidLoopCount { pos: CharacterPosition },
+    InvalidLoopCountItem { pos: CharacterPosition, item: String },
     MainBlockNotDefined {},
     NamingRuleViolation { pos: CharacterPosition, id: String },
     NoStartCommandInMainBlock {},
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
+    UnnecessaryLoopCountItem { pos: CharacterPosition, item: String },
 }
 
 impl ConsoleLogger for BlockParseLog {
@@ -136,12 +137,13 @@ impl ConsoleLogger for BlockParseLog {
             BlockParseLog::DuplicatedStartCommand { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
             BlockParseLog::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
             BlockParseLog::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
-            BlockParseLog::InvalidLoopCount { pos } => log!(Error, &format!("invalid loop count"), format!("at:\t{}", pos)),
+            BlockParseLog::InvalidLoopCountItem { pos, item } => log!(Error, &format!("invalid loop count item"), format!("at:\t{}", pos), format!("item:\t{}", item)),
             BlockParseLog::MainBlockNotDefined {} => log!(Error, "main block not defined"),
             BlockParseLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
             BlockParseLog::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
             BlockParseLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParseLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
+            BlockParseLog::UnnecessaryLoopCountItem { pos, item } => log!(Warning, &format!("unnecessary loop count item"), format!("at:\t{}", pos), format!("item:\t{}", item)),
         }
     }
 }
@@ -538,18 +540,18 @@ impl BlockParser {
                                     match min_str.parse::<usize>() {
                                         Ok(v) => {
                                             if v == 0 {
-                                                self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCount {
+                                                self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
                                                     pos: CharacterPosition::get_empty(),
+                                                    item: v.to_string(),
                                                 }.get_log());
-
-                                                return Err(());
                                             }
 
                                             v
                                         },
                                         Err(_) => {
-                                            self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCount {
+                                            self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
                                                 pos: CharacterPosition::get_empty(),
+                                                item: min_str.clone(),
                                             }.get_log());
 
                                             return Err(());
@@ -566,8 +568,9 @@ impl BlockParser {
                                     match max_str.parse::<usize>() {
                                         Ok(v) => Infinitable::Normal(v),
                                         Err(_) => {
-                                            self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCount {
+                                            self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
                                                 pos: CharacterPosition::get_empty(),
+                                                item: max_str.clone(),
                                             }.get_log());
 
                                             return Err(());

@@ -124,7 +124,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
             cons.borrow().print_all();
             cons.borrow_mut().clear_log();
 
-            println!("--- End ---");
+            println!("--- Error End ---");
             println!();
 
             return;
@@ -137,7 +137,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
             cons.borrow().print_all();
             cons.borrow_mut().clear_log();
 
-            println!("--- End ---");
+            println!("--- Error End ---");
             println!();
 
             return;
@@ -158,6 +158,9 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
         println!("{} msec | {} μsec", duration.as_millis(), duration.as_micros());
         println!();
     }
+
+    cons.borrow().print_all();
+    cons.borrow_mut().clear_log();
 
     println!("--- End ---");
     println!();
