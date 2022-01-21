@@ -13,7 +13,7 @@ type PropertySubMap = HashMap::<String, Vec<String>>;
 
 pub enum ConfigurationLog {
     Unknown {},
-    DuplicatedPropertyName { prop_name: String },
+    DuplicatePropertyName { prop_name: String },
     FileError { err: FileError },
     InvalidPropertyValue { prop_name: String, prop_value: String },
     InvalidPropertyValueLength { prop_name: String },
@@ -26,7 +26,7 @@ impl ConsoleLogger for ConfigurationLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
             ConfigurationLog::Unknown {} => log!(Error, "unknown"),
-            ConfigurationLog::DuplicatedPropertyName { prop_name } => log!(Error, "duplicated property name", format!("property name:\t{}", prop_name)),
+            ConfigurationLog::DuplicatePropertyName { prop_name } => log!(Error, "duplicate property name", format!("property name:\t{}", prop_name)),
             ConfigurationLog::FileError { err } => err.get_log(),
             ConfigurationLog::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
             ConfigurationLog::InvalidPropertyValueLength { prop_name } => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
@@ -214,7 +214,7 @@ impl Configuration {
                     let prop_name = both_sides.get(0).unwrap().to_string();
 
                     if prop_map.contains_key(&prop_name) {
-                        cons.borrow_mut().append_log(ConfigurationLog::DuplicatedPropertyName {
+                        cons.borrow_mut().append_log(ConfigurationLog::DuplicatePropertyName {
                             prop_name: prop_name,
                         }.get_log());
 

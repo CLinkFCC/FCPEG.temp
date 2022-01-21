@@ -108,11 +108,11 @@ pub enum BlockParseLog {
     Unknown(),
     BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
-    DuplicatedBlockName { pos: CharacterPosition, block_name: String },
-    DuplicatedFileAliasName { file_alias_name: String },
-    DuplicatedArgumentID { pos: CharacterPosition, arg_id: String },
-    DuplicatedRuleName { pos: CharacterPosition, rule_name: String },
-    DuplicatedStartCommand { pos: CharacterPosition },
+    DuplicateBlockName { pos: CharacterPosition, block_name: String },
+    DuplicateFileAliasName { file_alias_name: String },
+    DuplicateArgumentID { pos: CharacterPosition, arg_id: String },
+    DuplicateRuleName { pos: CharacterPosition, rule_name: String },
+    DuplicateStartCommand { pos: CharacterPosition },
     InternalError { msg: String },
     InvalidID { pos: CharacterPosition, id: String },
     InvalidLoopCountItem { pos: CharacterPosition, item: String },
@@ -130,11 +130,11 @@ impl ConsoleLogger for BlockParseLog {
             BlockParseLog::Unknown() => log!(Error, "unknown error"),
             BlockParseLog::BlockAliasNotFound { pos, block_alias_name } => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
             BlockParseLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
-            BlockParseLog::DuplicatedBlockName { pos, block_name } => log!(Error, &format!("duplicated block name '{}'", block_name), format!("at:\t{}", pos)),
-            BlockParseLog::DuplicatedFileAliasName { file_alias_name } => log!(Error, &format!("duplicated file alias name '{}'", file_alias_name)),
-            BlockParseLog::DuplicatedArgumentID { pos, arg_id } => log!(Error, &format!("duplicated argument id '{}'", arg_id), format!("at:\t{}", pos)),
-            BlockParseLog::DuplicatedRuleName { pos, rule_name } => log!(Error, &format!("duplicated rule name '{}'", rule_name), format!("at:\t{}", pos)),
-            BlockParseLog::DuplicatedStartCommand { pos } => log!(Error, "duplicated start command", format!("at:\t{}", pos)),
+            BlockParseLog::DuplicateBlockName { pos, block_name } => log!(Error, &format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicateFileAliasName { file_alias_name } => log!(Error, &format!("duplicate file alias name '{}'", file_alias_name)),
+            BlockParseLog::DuplicateArgumentID { pos, arg_id } => log!(Error, &format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicateRuleName { pos, rule_name } => log!(Error, &format!("duplicate rule name '{}'", rule_name), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicateStartCommand { pos } => log!(Error, "duplicate start command", format!("at:\t{}", pos)),
             BlockParseLog::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
             BlockParseLog::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
             BlockParseLog::InvalidLoopCountItem { pos, item } => log!(Error, &format!("invalid loop count item"), format!("at:\t{}", pos), format!("item:\t{}", item)),
@@ -259,7 +259,7 @@ impl BlockParser {
             }
 
             if block_map.contains_key(&self.block_name) {
-                self.cons.borrow_mut().append_log(BlockParseLog::DuplicatedBlockName {
+                self.cons.borrow_mut().append_log(BlockParseLog::DuplicateBlockName {
                     pos: block_name_node.get_position(&self.cons)?,
                     block_name: self.block_name.clone(),
                 }.get_log());
@@ -280,7 +280,7 @@ impl BlockParser {
                         match &new_cmd {
                             BlockCommand::Define { pos: _, rule } => {
                                 if rule_names.contains(&rule.name) {
-                                    self.cons.borrow_mut().append_log(BlockParseLog::DuplicatedRuleName {
+                                    self.cons.borrow_mut().append_log(BlockParseLog::DuplicateRuleName {
                                         pos: rule.pos.clone(),
                                         rule_name: rule.name.clone(),
                                     }.get_log());
@@ -335,7 +335,7 @@ impl BlockParser {
 
                             if self.file_alias_name == "" {
                                 if self.start_rule_id.is_some() {
-                                    self.cons.borrow_mut().append_log(BlockParseLog::DuplicatedStartCommand {
+                                    self.cons.borrow_mut().append_log(BlockParseLog::DuplicateStartCommand {
                                         pos: pos,
                                     }.get_log());
 
@@ -431,7 +431,7 @@ impl BlockParser {
                         let new_arg = each_node.join_child_leaf_values();
 
                         if args.contains(&new_arg) {
-                            self.cons.borrow_mut().append_log(BlockParseLog::DuplicatedArgumentID {
+                            self.cons.borrow_mut().append_log(BlockParseLog::DuplicateArgumentID {
                                 pos: each_node.get_position(&self.cons)?,
                                 arg_id: new_arg.clone(),
                             }.get_log());
