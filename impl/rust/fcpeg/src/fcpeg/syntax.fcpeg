@@ -29,7 +29,7 @@
 
     Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
     Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
-    CommentCmd <- "%"# (!"," !Symbol.LineEnd .)*## ","#,
+    CommentCmd <- "%"# (!"," . : ",,")*## ","#,
     DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
     DefineCmdGenericsIDs <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
     DefineCmdFuncIDs <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,

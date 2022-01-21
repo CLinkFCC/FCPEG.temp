@@ -1132,7 +1132,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: CommentCmd <- "%"# (!"," !Symbol.LineEnd .)*## ","#,
+        // code: CommentCmd <- "%"# (!"," . : ",,")*## ","#,
         let comment_rule = rule!{
             ".Block.CommentCmd",
             choice!{
@@ -1141,10 +1141,16 @@ impl FCPEGBlock {
                 choice!{
                     vec!["*", "##"],
                     choice!{
-                        vec![],
-                        expr!(String, ",", "!"),
-                        expr!(ID, ".Symbol.LineEnd", "!"),
-                        expr!(Wildcard, "."),
+                        vec![":"],
+                        choice!{
+                            vec![],
+                            expr!(String, ",", "!"),
+                            expr!(Wildcard, "."),
+                        },
+                        choice!{
+                            vec![],
+                            expr!(String, ",,"),
+                        },
                     },
                 },
                 expr!(String, ",", "#"),
