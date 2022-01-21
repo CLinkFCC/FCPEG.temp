@@ -237,7 +237,10 @@ impl BlockParser {
         let root = tree.get_child_ref();
         let block_nodes = match root.get_node(&self.cons)?.get_node_child_at(&self.cons, 0) {
             Ok(v) => v.get_reflectable_children(),
-            Err(()) => return Ok(block_map),
+            Err(()) => {
+                self.cons.borrow_mut().pop_log();
+                return Ok(block_map)
+            },
         };
 
         for each_block_elem in &block_nodes {
