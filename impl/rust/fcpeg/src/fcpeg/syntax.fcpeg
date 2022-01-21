@@ -12,6 +12,8 @@
 [Symbol]{
     Space <- " ",
     LineEnd <- Space* "\n" Space*,
+    Div <- Space : "\n",
+    CommaDiv <- Div* (",," LineEnd Div* : "," Space*),
     EOF <- "\z",
 }
 
@@ -25,15 +27,15 @@
     + use Rule,
     + use Symbol,
 
-    Block <- "["# Symbol.Space*# Misc.SingleID Symbol.Space*# "]"# Symbol.Space*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
+    Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
     Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
     CommentCmd <- "%"# (!"," !Symbol.LineEnd .)*## ","#,
-    DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Space*# "<-"# Symbol.Space*# Rule.PureChoice Symbol.Space*# ","#,
-    DefineCmdGenericsIDs <- "<"# Rule.ArgID (","# Symbol.Space# Rule.ArgID)*## ">"#,
-    DefineCmdFuncIDs <- "("# Rule.ArgID (","# Symbol.Space# Rule.ArgID)*## ")"#,
-    StartCmd <- "+"# Symbol.Space*# "start"# Symbol.Space+# Misc.ChainID Symbol.Space*# ","#,
-    UseCmd <- "+"# Symbol.Space*# "use"# Symbol.Space+# Misc.ChainID UseCmdBlockAlias? Symbol.Space*# ","#,
-    UseCmdBlockAlias <- Symbol.Space+# "as" Symbol.Space+# Misc.SingleID,
+    DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
+    DefineCmdGenericsIDs <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
+    DefineCmdFuncIDs <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,
+    StartCmd <- "+"# Symbol.Div*# "start"# Symbol.Div+# Misc.ChainID Symbol.Div*# ","#,
+    UseCmd <- "+"# Symbol.Div*# "use"# Symbol.Div+# Misc.ChainID UseCmdBlockAlias? Symbol.Div*# ","#,
+    UseCmdBlockAlias <- Symbol.Div+# "as" Symbol.Div+# Misc.SingleID,
 }
 
 [Rule]{
@@ -41,11 +43,10 @@
     + use Symbol,
 
     InstantPureChoice <- Seq ("," Symbol.Space# Seq)*##,
-    PureChoice <- Seq ((SeqDiv+# ":" SeqDiv+# : ",")## Seq)*##,
+    PureChoice <- Seq ((Symbol.Div+# ":" Symbol.Div+# : ",")## Seq)*##,
     Choice <- "("# PureChoice ")"#,
 
-    SeqDiv <- Symbol.Space# : "\n"#,
-    Seq <- SeqElem (SeqDiv+# SeqElem)*##,
+    Seq <- SeqElem (Symbol.Div+# SeqElem)*##,
     % (Choice : Expr) に命名する,
     SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
 
@@ -53,16 +54,16 @@
 
     Lookahead <- "!" : "&",
     Loop <- "?" : "*" : "+" : LoopRange,
-    LoopRange <- "{"# (Num : "")## ","# (Num : "")## "}"#,
+    LoopRange <- "{"# Symbol.Div*# (Num : "")## Symbol.CommaDiv# (Num : "")## Symbol.Div*# "}"#,
     RandomOrder <- "^"# RandomOrderRange?,
-    RandomOrderRange <- "["# Num? ","# Num? "]"#,
+    RandomOrderRange <- "["# Symbol.Div*# Num? Symbol.CommaDiv# Num? Symbol.Div*# "]"#,
     ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,
 
     Num <- [0-9]+,
     ID <- Misc.ChainID,
     ArgID <- "$"# Misc.SingleID##,
-    Generics <- Misc.ChainID "<"# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ">"#,
-    Func <- Misc.ChainID "("# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ")"#,
+    Generics <- Misc.ChainID "<"# Symbol.Div*# InstantPureChoice (Symbol.Div*# ","# Symbol.Div*# InstantPureChoice)*## Symbol.Div*# ">"#,
+    Func <- Misc.ChainID "("# Symbol.Div*# InstantPureChoice (Symbol.Div*# ","# Symbol.Div*# InstantPureChoice)*## Symbol.Div*# ")"#,
     EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
     Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))*## "\""#,
     CharClass <- "["# (!"[" !"]" !Symbol.LineEnd (("\\[" : "\\]" : "\\\\" : .))##)+## "]"#,

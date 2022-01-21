@@ -994,6 +994,48 @@ impl FCPEGBlock {
             },
         };
 
+        // code: Div <- Space : "\n",
+        let div_rule = rule!{
+            ".Symbol.Div",
+            choice!{
+                vec![],
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(ID, ".Symbol.Space"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(String, "\n"),
+                    },
+                },
+            },
+        };
+
+        // note: CommaDiv <- Div* (",," LineEnd Div* : "," Space*),
+        let comma_div_rule = rule!{
+            ".Symbol.CommaDiv",
+            choice!{
+                vec![],
+                expr!(ID, ".Symbol.Div", "*"),
+                choice!{
+                    vec![":"],
+                    choice!{
+                        vec![],
+                        expr!(String, ",,"),
+                        expr!(ID, ".Symbol.LineEnd"),
+                        expr!(ID, ".Symbol.Div", "*"),
+                    },
+                    choice!{
+                        vec![],
+                        expr!(String, ","),
+                        expr!(ID, ".Symbol.Space", "*"),
+                    },
+                },
+            },
+        };
+
         // code: EOF <- "\z",
         let eof_rule = rule!{
             ".Symbol.EOF",
@@ -1003,7 +1045,7 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Symbol", vec![space_rule, line_end_rule, eof_rule]);
+        return block!(".Symbol", vec![space_rule, line_end_rule, div_rule, comma_div_rule, eof_rule]);
     }
 
     fn get_misc_block() -> Block {
@@ -1038,17 +1080,17 @@ impl FCPEGBlock {
     }
 
     fn get_block_block() -> Block {
-        // code: Block <- "["# Symbol.Space*# Misc.SingleID Symbol.Space*# "]"# Symbol.Space*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
+        // code: Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
         let block_rule = rule!{
             ".Block.Block",
             choice!{
                 vec![],
                 expr!(String, "[", "#"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(ID, ".Misc.SingleID"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, "]", "#"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, "{", "#"),
                 expr!(ID, ".Symbol.LineEnd", "+", "#"),
                 choice!{
@@ -1106,7 +1148,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Space*# "<-"# Symbol.Space*# Rule.PureChoice Symbol.Space*# ","#,
+        // code: DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
         let define_cmd_rule = rule!{
             ".Block.DefineCmd",
             choice!{
@@ -1114,88 +1156,98 @@ impl FCPEGBlock {
                 expr!(ID, ".Misc.SingleID"),
                 expr!(ID, ".Block.DefineCmdGenericsIDs", "?"),
                 expr!(ID, ".Block.DefineCmdFuncIDs", "?"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, "<-", "#"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(ID, ".Rule.PureChoice"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, ",", "#"),
             },
         };
 
-        // code: DefineCmdGenericsIDs <- "<"# Rule.ArgID (","# Symbol.Space# Rule.ArgID)*## ">"#,
+        // code: DefineCmdGenericsIDs <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
         let define_cmd_generics_ids_rule = rule!{
             ".Block.DefineCmdGenericsIDs",
             choice!{
                 vec![],
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, "<", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(ID, ".Rule.ArgID"),
                 choice!{
                     vec!["*", "##"],
+                    expr!(ID, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
-                    expr!(ID, ".Symbol.Space", "#"),
+                    expr!(ID, ".Symbol.Div", "*", "#"),
                     expr!(ID, ".Rule.ArgID"),
                 },
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, ">", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
             },
         };
 
-        // code: DefineCmdFuncIDs <- "("# Rule.ArgID (","# Symbol.Space# Rule.ArgID)*## ")"#,
+        // code: DefineCmdFuncIDs <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,
         let define_cmd_func_ids_rule = rule!{
             ".Block.DefineCmdFuncIDs",
             choice!{
                 vec![],
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, "(", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(ID, ".Rule.ArgID"),
                 choice!{
                     vec!["*", "##"],
+                    expr!(ID, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
-                    expr!(ID, ".Symbol.Space", "#"),
+                    expr!(ID, ".Symbol.Div", "*", "#"),
                     expr!(ID, ".Rule.ArgID"),
                 },
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, ")", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
             },
         };
 
-        // code: StartCmd <- "+"# Symbol.Space*# "start"# Symbol.Space+# Misc.ChainID Symbol.Space*# ","#,
+        // code: StartCmd <- "+"# Symbol.Div*# "start"# Symbol.Div+# Misc.ChainID Symbol.Div*# ","#,
         let start_cmd_rule = rule!{
             ".Block.StartCmd",
             choice!{
                 vec![],
                 expr!(String, "+", "#"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, "start", "#"),
-                expr!(ID, ".Symbol.Space", "+", "#"),
+                expr!(ID, ".Symbol.Div", "+", "#"),
                 expr!(ID, ".Misc.ChainID"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, ",", "#"),
             },
         };
 
-        // code: UseCmd <- "+"# Symbol.Space*# "use"# Symbol.Space+# Misc.ChainID UseCmdBlockAlias? Symbol.Space*# ","#,
+        // code: UseCmd <- "+"# Symbol.Div*# "use"# Symbol.Div+# Misc.ChainID UseCmdBlockAlias? Symbol.Div*# ","#,
         let use_cmd_rule = rule!{
             ".Block.UseCmd",
             choice!{
                 vec![],
                 expr!(String, "+", "#"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, "use", "#"),
-                expr!(ID, ".Symbol.Space", "+", "#"),
+                expr!(ID, ".Symbol.Div", "+", "#"),
                 expr!(ID, ".Misc.ChainID"),
                 expr!(ID, ".Block.UseCmdBlockAlias", "?"),
-                expr!(ID, ".Symbol.Space", "*", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, ",", "#"),
             },
         };
 
-        // code: UseCmdBlockAlias <- Symbol.Space+# "as" Symbol.Space+# Misc.SingleID,
+        // code: UseCmdBlockAlias <- Symbol.Div+# "as" Symbol.Div+# Misc.SingleID,
         let use_cmd_block_alias_rule = rule!{
             ".Block.UseCmdBlockAlias",
             choice!{
                 vec![],
-                expr!(ID, ".Symbol.Space", "+", "#"),
+                expr!(ID, ".Symbol.Div", "+", "#"),
                 expr!(String, "as", "#"),
-                expr!(ID, ".Symbol.Space", "+", "#"),
+                expr!(ID, ".Symbol.Div", "+", "#"),
                 expr!(ID, ".Misc.SingleID"),
             },
         };
@@ -1222,7 +1274,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: PureChoice <- Seq ((SeqDiv+# ":" SeqDiv+# : ",")## Seq)*##,
+        // code: PureChoice <- Seq ((Symbol.Div+# ":" Symbol.Div+# : ",")## Seq)*##,
         let pure_choice_rule = rule!{
             ".Rule.PureChoice",
             choice!{
@@ -1236,9 +1288,9 @@ impl FCPEGBlock {
                             vec![":"],
                             choice!{
                                 vec!["##"],
-                                expr!(ID, ".Rule.SeqDiv", "+", "#"),
+                                expr!(ID, ".Symbol.Div", "+", "#"),
                                 expr!(String, ":"),
-                                expr!(ID, ".Rule.SeqDiv", "+", "#"),
+                                expr!(ID, ".Symbol.Div", "+", "#"),
                             },
                             choice!{
                                 vec!["##"],
@@ -1263,26 +1315,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: SeqDiv <- Symbol.Space# : "\n"#,
-        let seq_div_rule = rule!{
-            ".Rule.SeqDiv",
-            choice!{
-                vec![],
-                choice!{
-                    vec![":"],
-                    choice!{
-                        vec![],
-                        expr!(ID, ".Symbol.Space", "#"),
-                    },
-                    choice!{
-                        vec![],
-                        expr!(String, "\n", "#"),
-                    },
-                },
-            },
-        };
-
-        // code: Seq <- SeqElem (SeqDiv+# SeqElem)*##,
+        // code: Seq <- SeqElem (Symbol.Div+# SeqElem)*##,
         let seq_rule = rule!{
             ".Rule.Seq",
             choice!{
@@ -1294,7 +1327,7 @@ impl FCPEGBlock {
                         vec![],
                         choice!{
                             vec![],
-                            expr!(ID, ".Rule.SeqDiv", "+", "#"),
+                            expr!(ID, ".Symbol.Div", "+", "#"),
                             expr!(ID, ".Rule.SeqElem"),
                         },
                     },
@@ -1413,12 +1446,13 @@ impl FCPEGBlock {
             },
         };
 
-        // code: LoopRange <- "{"# (Num : "")## ","# (Num : "")## "}"#,
+        // code: LoopRange <- "{"# Symbol.Div*# (Num : "")## Symbol.CommaDiv# (Num : "")## Symbol.Div*# "}"#,
         let loop_range_rule = rule!{
             ".Rule.LoopRange",
             choice!{
                 vec![],
                 expr!(String, "{", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 choice!{
                     vec![":"],
                     choice!{
@@ -1430,7 +1464,7 @@ impl FCPEGBlock {
                         expr!(String, ""),
                     },
                 },
-                expr!(String, ",", "#"),
+                expr!(ID, ".Symbol.CommaDiv", "#"),
                 choice!{
                     vec![":"],
                     choice!{
@@ -1442,6 +1476,7 @@ impl FCPEGBlock {
                         expr!(String, ""),
                     },
                 },
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, "}", "#"),
             },
         };
@@ -1452,18 +1487,22 @@ impl FCPEGBlock {
             choice!{
                 vec![],
                 expr!(String, "^", "#"),
-                expr!(String, "RandomOrderRange", "?"),
+                expr!(ID, ".Rule.RandomOrderRange", "?"),
             },
         };
 
-        // code: RandomOrderRange <- "["# Num? ","# Num? "]"#,
+        // code: RandomOrderRange <- "["# Symbol.Div*# Num? Symbol.CommaDiv# Num? Symbol.Div*# "]"#,
         let random_order_range_rule = rule!{
             ".Rule.RandomOrderRange",
             choice!{
                 vec![],
                 expr!(String, "[", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(ID, ".Rule.Num", "?"),
-                expr!(String, "ID", "#"),
+                expr!(ID, ".Symbol.CommaDiv", "#"),
+                expr!(ID, ".Rule.Num", "?"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
+                expr!(String, "]", "#"),
             },
         };
 
@@ -1515,44 +1554,50 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Generics <- Misc.ChainID "<"# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ">"#,
+        // code: Generics <- Misc.ChainID "<"# Symbol.Div*# InstantPureChoice (Symbol.Div*# ","# Symbol.Div*# InstantPureChoice)*## Symbol.Div*# ">"#,
         let generics_rule = rule!{
             ".Rule.Generics",
             choice!{
                 vec![],
                 expr!(ID, ".Misc.ChainID"),
                 expr!(String, "<", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(ID, ".Rule.InstantPureChoice"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec!["##"],
+                        expr!(ID, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
-                        expr!(ID, ".Symbol.Space", "#"),
+                        expr!(ID, ".Symbol.Div", "*", "#"),
                         expr!(ID, ".Rule.InstantPureChoice"),
                     },
                 },
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, ">", "#"),
             },
         };
 
-        // code: Func <- Misc.ChainID "("# InstantPureChoice (","# Symbol.Space# InstantPureChoice)*## ")"#,
+        // code: Func <- Misc.ChainID "("# Symbol.Div*# InstantPureChoice (Symbol.Div*# ","# Symbol.Div*# InstantPureChoice)*## Symbol.Div*# ")"#,
         let func_rule = rule!{
             ".Rule.Func",
             choice!{
                 vec![],
                 expr!(ID, ".Misc.ChainID"),
                 expr!(String, "(", "#"),
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(ID, ".Rule.InstantPureChoice"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
                         vec!["##"],
+                        expr!(ID, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
-                        expr!(ID, ".Symbol.Space", "#"),
+                        expr!(ID, ".Symbol.Div", "*", "#"),
                         expr!(ID, ".Rule.InstantPureChoice"),
                     },
                 },
+                expr!(ID, ".Symbol.Div", "*", "#"),
                 expr!(String, ")", "#"),
             },
         };
@@ -1677,6 +1722,6 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Rule", vec![instant_pure_choice_rule, pure_choice_rule, choice_rule, seq_div_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
+        return block!(".Rule", vec![instant_pure_choice_rule, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }
