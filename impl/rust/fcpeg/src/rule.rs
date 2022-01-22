@@ -11,13 +11,18 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct RuleMap {
     pub rule_map: HashMap<String, Box<Rule>>,
+    pub start_rule_pos: CharacterPosition,
     pub start_rule_id: String,
 }
 
 impl RuleMap {
     pub fn new(block_map: Vec<BlockMap>, start_rule_id: String) -> ConsoleResult<RuleMap> {
+        let raw_rule_map = RuleMap::to_rule_map(block_map)?;
+        let start_rule_pos = raw_rule_map.get(&start_rule_id).unwrap().pos.clone();
+
         let rule_map = RuleMap {
-            rule_map: RuleMap::to_rule_map(block_map)?,
+            rule_map: raw_rule_map,
+            start_rule_pos: start_rule_pos,
             start_rule_id: start_rule_id,
         };
 

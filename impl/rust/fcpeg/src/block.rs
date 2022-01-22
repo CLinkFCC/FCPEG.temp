@@ -124,6 +124,7 @@ pub enum BlockParseLog {
     NoStartCommandInMainBlock {},
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
+    UnknownRuleID { pos: CharacterPosition, rule_id: String },
     UnnecessaryLoopRangeItem { pos: CharacterPosition, msg: String },
 }
 
@@ -143,6 +144,7 @@ impl ConsoleLogger for BlockParseLog {
             BlockParseLog::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
             BlockParseLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParseLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
+            BlockParseLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
             BlockParseLog::UnnecessaryLoopRangeItem { pos, msg } => log!(Warning, format!("unnecessary loop range item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
         }
     }
@@ -187,6 +189,8 @@ impl BlockParser {
             };
 
             let tree = Box::new(block_parser.to_syntax_tree(&mut parser)?);
+            // todo: rem
+            tree.print(false);
             block_maps.push(block_parser.to_block_map(tree)?);
 
             if block_parser.file_alias_name == "" {
@@ -208,8 +212,9 @@ impl BlockParser {
 
         for (each_rule_id, each_pos) in *appeared_block_ids {
             if !rule_map.rule_map.contains_key(&each_rule_id) {
-                cons.borrow_mut().append_log(SyntaxParseLog::UnknownRuleID {
-                    pos: each_pos, rule_id: each_rule_id,
+                cons.borrow_mut().append_log(BlockParseLog::UnknownRuleID {
+                    pos: each_pos,
+                    rule_id: each_rule_id,
                 }.get_log());
 
                 has_id_error = true;
@@ -370,7 +375,7 @@ impl BlockParser {
     }
 
     fn to_comment_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
-        return Ok(BlockCommand::Comment { pos: CharacterPosition::get_empty(), value: cmd_node.join_child_leaf_values() });
+        return Ok(BlockCommand::Comment { pos: cmd_node.get_position(&self.cons)?, value: cmd_node.join_child_leaf_values() });
     }
 
     fn to_define_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
@@ -406,8 +411,8 @@ impl BlockParser {
             },
         };
 
-        let rule = Rule::new(rule_pos, format!("{}.{}.{}", self.file_alias_name, self.block_name, rule_name), rule_name, generics_args, func_args, new_choice);
-        return Ok(BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule });
+        let rule = Rule::new(rule_pos.clone(), format!("{}.{}.{}", self.file_alias_name, self.block_name, rule_name), rule_name, generics_args, func_args, new_choice);
+        return Ok(BlockCommand::Define { pos: rule_pos, rule: rule });
     }
 
     fn to_define_cmd_arg_ids(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<Vec<String>> {
@@ -442,8 +447,8 @@ impl BlockParser {
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
         let cmd = match divided_raw_id.len() {
-            2 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), rule_name: divided_raw_id.get(1).unwrap().to_string() },
-            3 => BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), rule_name: divided_raw_id.get(2).unwrap().to_string() },
+            2 => BlockCommand::Start { pos: cmd_node.get_position(&self.cons)?, file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), rule_name: divided_raw_id.get(1).unwrap().to_string() },
+            3 => BlockCommand::Start { pos: cmd_node.get_position(&self.cons)?, file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), rule_name: divided_raw_id.get(2).unwrap().to_string() },
             _ => {
                 self.cons.borrow_mut().append_log(BlockParseLog::InvalidID {
                     pos: raw_id_node.get_node_child_at(&self.cons, 0)?.get_position(&self.cons)?,
@@ -479,8 +484,8 @@ impl BlockParser {
         };
 
         return match divided_raw_id.len() {
-            1 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: file_alias_name, block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
-            2 => Ok(BlockCommand::Use { pos: CharacterPosition::get_empty(), file_alias_name: file_alias_name, block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
+            1 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
+            2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
             _ => {
                 self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                     msg: "invalid chain ID length on use command".to_string(),
@@ -525,6 +530,8 @@ impl BlockParser {
                 Some(v) => {
                     match v.get_child_at(&self.cons, 0)? {
                         SyntaxNodeElement::Node(range_node) => {
+                            let range_node_pos = range_node.get_position(&self.cons)?;
+
                             let (min_num, is_min_num_specified) = match range_node.find_child_nodes(vec!["MinNum"]).get(0) {
                                 Some(min_num_node) => {
                                     let min_str = min_num_node.join_child_leaf_values();
@@ -533,7 +540,7 @@ impl BlockParser {
                                         Ok(v) => (v, true),
                                         Err(_) => {
                                             self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopRangeItem {
-                                                pos: CharacterPosition::get_empty(),
+                                                pos: min_num_node.get_position(&self.cons)?,
                                                 msg: format!("'{}' is too long or not a number", min_str),
                                             }.get_log());
 
@@ -544,18 +551,19 @@ impl BlockParser {
                                 None => (0usize, false),
                             };
 
-                            let (max_num, is_max_num_specified) = match range_node.find_child_nodes(vec!["MaxNumGroup"]).get(0) {
+                            let (max_num, max_num_pos, is_max_num_specified) = match range_node.find_child_nodes(vec!["MaxNumGroup"]).get(0) {
                                 Some(max_node_group) => {
                                     match max_node_group.find_child_nodes(vec!["MaxNum"]).get(0) {
                                         Some(max_num_node) => {
                                             // note: {n,m} の場合 (#MaxNumGroup 内に #MaxNum が存在する)
+                                            let max_num_pos = max_num_node.get_position(&self.cons)?;
                                             let max_str = max_num_node.join_child_leaf_values();
 
                                             match max_str.parse::<usize>() {
-                                                Ok(v) => (Infinitable::Finite(v), true),
+                                                Ok(v) => (Infinitable::Finite(v), Some(max_num_pos), true),
                                                 Err(_) => {
                                                     self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopRangeItem {
-                                                        pos: CharacterPosition::get_empty(),
+                                                        pos: max_num_pos,
                                                         msg: format!("'{}' is too long or not a number", max_str),
                                                     }.get_log());
 
@@ -563,7 +571,7 @@ impl BlockParser {
                                                 },
                                             }
                                         },
-                                        None => (Infinitable::Infinite, false),
+                                        None => (Infinitable::Infinite, None, false),
                                     }
                                 },
                                 // note: {n} の場合 (#MaxNumGroup が存在しない)
@@ -571,14 +579,14 @@ impl BlockParser {
                                     if !is_min_num_specified {
                                         // note: 最小, 最大回数どちらも指定されていない場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopRangeItem {
-                                            pos: CharacterPosition::get_empty(),
+                                            pos: range_node_pos,
                                             msg: format!("no number specified"),
                                         }.get_log());
 
                                         return Err(());
                                     }
 
-                                    (Infinitable::Finite(min_num), false)
+                                    (Infinitable::Finite(min_num), None, false)
                                 },
                             };
 
@@ -592,7 +600,7 @@ impl BlockParser {
                                     if min_num > *max_v {
                                         // note: 最小回数が最大回数より大きかった場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopRangeItem {
-                                            pos: CharacterPosition::get_empty(),
+                                            pos: range_node_pos,
                                             msg: format!("min value '{}' is bigger than max value '{}'", min_num, max_v),
                                         }.get_log());
 
@@ -602,7 +610,7 @@ impl BlockParser {
                                     if is_min_num_specified && !is_max_num_specified && min_num == 0 && *max_v == 0 {
                                         // note: {0} の場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopRangeItem {
-                                            pos: CharacterPosition::get_empty(),
+                                            pos: range_node_pos,
                                             msg: format!("loop range '{{0}}' is invalid"),
                                         }.get_log());
 
@@ -611,20 +619,20 @@ impl BlockParser {
                                         if is_min_num_specified && !is_max_num_specified {
                                             // note: {1} の場合
                                             self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopRangeItem {
-                                                pos: CharacterPosition::get_empty(),
+                                                pos: range_node_pos,
                                                 msg: format!("loop range '{{1}}' is unnecessary"),
                                             }.get_log());
                                         } else {
                                             // note: {1,1} の場合
                                             self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopRangeItem {
-                                                pos: CharacterPosition::get_empty(),
+                                                pos: range_node_pos,
                                                 msg: format!("loop range '{{1,1}}' is unnecessary"),
                                             }.get_log());
                                         }
                                     } else if *max_v == 0 {
                                         // note: 最大回数に 0 が指定された場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopRangeItem {
-                                            pos: CharacterPosition::get_empty(),
+                                            pos: max_num_pos.unwrap(),
                                             msg: format!("max number '{}' is invalid", min_num),
                                         }.get_log());
 
@@ -632,13 +640,13 @@ impl BlockParser {
                                     } else if is_max_num_specified && min_num == *max_v {
                                         // note: 最小回数と最大回数が同じだった場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopRangeItem {
-                                            pos: CharacterPosition::get_empty(),
+                                            pos: range_node_pos,
                                             msg: format!("modify '{}' to '{{{}}}'", raw_loop_range_txt, min_num),
                                         }.get_log());
                                     } else if is_min_num_specified && min_num == 0 {
                                         // note: 最小回数に 0 が指定された場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopRangeItem {
-                                            pos: CharacterPosition::get_empty(),
+                                            pos: range_node_pos,
                                             msg: format!("modify '{}' to '{{,{}}}'", raw_loop_range_txt, max_v),
                                         }.get_log());
                                     }
@@ -646,7 +654,7 @@ impl BlockParser {
                                 Infinitable::Infinite if is_min_num_specified && min_num == 0 => {
                                     // note: 最小回数に 0 が指定された場合
                                     self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopRangeItem {
-                                        pos: CharacterPosition::get_empty(),
+                                        pos: range_node_pos,
                                         msg: format!("modify '{}' to '{{,}}'", raw_loop_range_txt),
                                     }.get_log());
                                 },
@@ -853,7 +861,7 @@ impl BlockParser {
 
                         (pos, RuleExpressionKind::Id, id)
                     },
-                    ".Rule.Str" => (CharacterPosition::get_empty(), RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
+                    ".Rule.Str" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
                     ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
                     _ => {
                         self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {

@@ -153,8 +153,8 @@ impl SyntaxParser {
             return Ok(SyntaxTree::from_node_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
         }
 
-        // todo: CharacterPosition を修正
-        let mut root_node = match self.parse_rule(&start_rule_id, &CharacterPosition::get_empty())? {
+        let start_rule_pos = self.rule_map.start_rule_pos.clone();
+        let mut root_node = match self.parse_rule(&start_rule_id, &start_rule_pos)? {
             Some(v) => v,
             None => {
                 self.cons.borrow_mut().append_log(SyntaxParseLog::NoSucceededRule {

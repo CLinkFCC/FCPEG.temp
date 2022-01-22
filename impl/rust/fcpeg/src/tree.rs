@@ -460,7 +460,7 @@ impl SyntaxLeaf {
             ASTReflectionStyle::Expansion => "[expandable]".to_string(),
         };
 
-        let pos_str = format!("{}/{}/{}", self.pos.index, self.pos.line, self.pos.column);
+        let pos_str = format!("{}:{}", self.pos.line + 1, self.pos.column + 1);
         let uuid_str = self.uuid.to_string()[..8].to_string();
 
         writeln!(writer, "|{}- \"{}\" {} {} *{}", "   |".repeat(nest), value, pos_str, ast_reflection_str, uuid_str).unwrap();
