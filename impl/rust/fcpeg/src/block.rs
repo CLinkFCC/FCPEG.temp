@@ -134,22 +134,22 @@ impl ConsoleLogger for BlockParseLog {
     fn get_log(&self) -> ConsoleLog {
         match self {
             BlockParseLog::Unknown() => log!(Error, "unknown error"),
-            BlockParseLog::BlockAliasNotFound { pos, block_alias_name } => log!(Error, &format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
+            BlockParseLog::BlockAliasNotFound { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
             BlockParseLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
-            BlockParseLog::DuplicateBlockName { pos, block_name } => log!(Error, &format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
-            BlockParseLog::DuplicateFileAliasName { file_alias_name } => log!(Error, &format!("duplicate file alias name '{}'", file_alias_name)),
-            BlockParseLog::DuplicateArgumentID { pos, arg_id } => log!(Error, &format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
-            BlockParseLog::DuplicateRuleName { pos, rule_name } => log!(Error, &format!("duplicate rule name '{}'", rule_name), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicateBlockName { pos, block_name } => log!(Error, format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicateFileAliasName { file_alias_name } => log!(Error, format!("duplicate file alias name '{}'", file_alias_name)),
+            BlockParseLog::DuplicateArgumentID { pos, arg_id } => log!(Error, format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
+            BlockParseLog::DuplicateRuleName { pos, rule_name } => log!(Error, format!("duplicate rule name '{}'", rule_name), format!("at:\t{}", pos)),
             BlockParseLog::DuplicateStartCommand { pos } => log!(Error, "duplicate start command", format!("at:\t{}", pos)),
-            BlockParseLog::InternalError { msg } => log!(Error, &format!("internal error: {}", msg)),
-            BlockParseLog::InvalidID { pos, id } => log!(Error, &format!("invalid id '{}'", id), format!("at:\t{}", pos)),
-            BlockParseLog::InvalidLoopCountItem { pos, msg } => log!(Error, &format!("invalid loop count item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
+            BlockParseLog::InternalError { msg } => log!(Error, format!("internal error: {}", msg)),
+            BlockParseLog::InvalidID { pos, id } => log!(Error, format!("invalid id '{}'", id), format!("at:\t{}", pos)),
+            BlockParseLog::InvalidLoopCountItem { pos, msg } => log!(Error, format!("invalid loop count item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParseLog::MainBlockNotDefined {} => log!(Error, "main block not defined"),
             BlockParseLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
             BlockParseLog::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
             BlockParseLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParseLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
-            BlockParseLog::UnnecessaryLoopCountItem { pos, msg } => log!(Warning, &format!("unnecessary loop count item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
+            BlockParseLog::UnnecessaryLoopCountItem { pos, msg } => log!(Warning, format!("unnecessary loop count item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
         }
     }
 }

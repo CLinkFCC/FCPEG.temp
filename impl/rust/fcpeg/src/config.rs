@@ -31,8 +31,8 @@ impl ConsoleLogger for ConfigurationLog {
             ConfigurationLog::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
             ConfigurationLog::InvalidPropertyValueLength { prop_name } => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
             ConfigurationLog::InvalidSyntax { line, msg } => log!(Error, "invalid syntax", format!("{}", msg), format!("line:\t{}", line)),
-            ConfigurationLog::UnknownPropertyName { prop_name } => log!(Error, &format!("unknown property name '{}'", prop_name)),
-            ConfigurationLog::UnknownRegexMode { input } => log!(Error, &format!("unknown regex mode '{}'", input)),
+            ConfigurationLog::UnknownPropertyName { prop_name } => log!(Error, format!("unknown property name '{}'", prop_name)),
+            ConfigurationLog::UnknownRegexMode { input } => log!(Error, format!("unknown regex mode '{}'", input)),
         };
     }
 }
