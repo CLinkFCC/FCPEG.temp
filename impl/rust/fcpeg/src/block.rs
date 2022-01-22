@@ -64,7 +64,7 @@ macro_rules! choice {
             for opt in $options {
                 match opt {
                     "&" | "!" => group.lookahead_kind = RuleElementLookaheadKind::new(opt),
-                    "?" | "*" | "+" => group.loop_range = RuleElementLoopRange::from_symbol(opt),
+                    "?" | "*" | "+" => group.loop_range = RuleElementLoopRange::from(opt),
                     "#" => group.ast_reflection_style = ASTReflectionStyle::NoReflection,
                     "##" => group.ast_reflection_style = ASTReflectionStyle::Expansion,
                     ":" => group.kind = RuleGroupKind::Choice,
@@ -94,7 +94,7 @@ macro_rules! expr {
             $(
                 match $option {
                     "&" | "!" => expr.lookahead_kind = RuleElementLookaheadKind::new($option),
-                    "?" | "*" | "+" => expr.loop_range = RuleElementLoopRange::from_symbol($option),
+                    "?" | "*" | "+" => expr.loop_range = RuleElementLoopRange::from($option),
                     "#" => expr.ast_reflection_style = ASTReflectionStyle::NoReflection,
                     "##" => expr.ast_reflection_style = ASTReflectionStyle::Expansion,
                     _ if $option.len() >= 2 && $option.starts_with("#") =>
@@ -119,16 +119,16 @@ pub enum BlockParsingLog {
     DuplicateStartCommand { pos: CharacterPosition },
     InternalError { msg: String },
     InvalidID { pos: CharacterPosition, id: String },
-    InvalidLoopRangeItem { pos: CharacterPosition, msg: String },
+    InvalidLoopRange { pos: CharacterPosition, msg: String },
     NamingRuleViolation { pos: CharacterPosition, id: String },
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
     UnknownBlockID { pos: CharacterPosition, block_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
     UnnecessaryBlockAliasName { pos: CharacterPosition, alias_name: String, },
-    UnnecessaryLoopRangeItem { pos: CharacterPosition, msg: String },
     UnnecessaryStartCommand { pos: CharacterPosition, msg: String },
     UnnecessaryUseCommand { pos: CharacterPosition, msg: String },
+    UnrecommendedLoopRange { pos: CharacterPosition, msg: String },
 }
 
 impl ConsoleLogger for BlockParsingLog {
@@ -142,16 +142,16 @@ impl ConsoleLogger for BlockParsingLog {
             BlockParsingLog::DuplicateStartCommand { pos } => log!(Error, "duplicate start command", format!("at:\t{}", pos)),
             BlockParsingLog::InternalError { msg } => log!(Error, format!("internal error:\t{}", msg)),
             BlockParsingLog::InvalidID { pos, id } => log!(Error, format!("invalid id '{}'", id), format!("at:\t{}", pos)),
-            BlockParsingLog::InvalidLoopRangeItem { pos, msg } => log!(Error, format!("invalid loop range item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
+            BlockParsingLog::InvalidLoopRange { pos, msg } => log!(Error, format!("invalid loop range"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParsingLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
             BlockParsingLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParsingLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
             BlockParsingLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at:\t{}", pos)),
             BlockParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
             BlockParsingLog::UnnecessaryBlockAliasName { pos, alias_name } => log!(Warning, format!("unnecessary block alias name"), format!("at:\t{}", pos), format!("alias name:\t{}", alias_name)),
-            BlockParsingLog::UnnecessaryLoopRangeItem { pos, msg } => log!(Warning, format!("unnecessary loop range item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParsingLog::UnnecessaryStartCommand { pos, msg } => log!(Warning, format!("unnecessary start command"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParsingLog::UnnecessaryUseCommand { pos, msg } => log!(Warning, format!("unnecessary use command"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
+            BlockParsingLog::UnrecommendedLoopRange { pos, msg } => log!(Warning, format!("unrecommended loop range"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
         }
     }
 }
@@ -610,7 +610,7 @@ impl BlockParser {
                                     match min_str.parse::<usize>() {
                                         Ok(v) => (v, true),
                                         Err(_) => {
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRangeItem {
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
                                                 pos: min_num_node.get_position(&self.cons)?,
                                                 msg: format!("'{}' is too long or not a number", min_str),
                                             }.get_log());
@@ -633,7 +633,7 @@ impl BlockParser {
                                             match max_str.parse::<usize>() {
                                                 Ok(v) => (Infinitable::Finite(v), Some(max_num_pos), true),
                                                 Err(_) => {
-                                                    self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRangeItem {
+                                                    self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
                                                         pos: max_num_pos,
                                                         msg: format!("'{}' is too long or not a number", max_str),
                                                     }.get_log());
@@ -649,7 +649,7 @@ impl BlockParser {
                                 None => {
                                     if !is_min_num_specified {
                                         // note: 最小, 最大回数どちらも指定されていない場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRangeItem {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
                                             pos: range_node_pos,
                                             msg: format!("no number specified"),
                                         }.get_log());
@@ -670,8 +670,8 @@ impl BlockParser {
                                 Infinitable::Finite(max_v) => {
                                     if min_num > *max_v {
                                         // note: 最小回数が最大回数より大きかった場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRangeItem {
-                                            pos: range_node_pos,
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                            pos: range_node_pos.clone(),
                                             msg: format!("min value '{}' is bigger than max value '{}'", min_num, max_v),
                                         }.get_log());
 
@@ -680,8 +680,8 @@ impl BlockParser {
 
                                     if is_min_num_specified && !is_max_num_specified && min_num == 0 && *max_v == 0 {
                                         // note: {0} の場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRangeItem {
-                                            pos: range_node_pos,
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                            pos: range_node_pos.clone(),
                                             msg: format!("loop range '{{0}}' is invalid"),
                                         }.get_log());
 
@@ -689,20 +689,20 @@ impl BlockParser {
                                     } else if min_num == 1 && *max_v == 1 {
                                         if is_min_num_specified && !is_max_num_specified {
                                             // note: {1} の場合
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryLoopRangeItem {
-                                                pos: range_node_pos,
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                                pos: range_node_pos.clone(),
                                                 msg: format!("loop range '{{1}}' is unnecessary"),
                                             }.get_log());
                                         } else {
                                             // note: {1,1} の場合
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryLoopRangeItem {
-                                                pos: range_node_pos,
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                                pos: range_node_pos.clone(),
                                                 msg: format!("loop range '{{1,1}}' is unnecessary"),
                                             }.get_log());
                                         }
                                     } else if *max_v == 0 {
                                         // note: 最大回数に 0 が指定された場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRangeItem {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
                                             pos: max_num_pos.unwrap(),
                                             msg: format!("max number '{}' is invalid", min_num),
                                         }.get_log());
@@ -710,35 +710,47 @@ impl BlockParser {
                                         return Err(());
                                     } else if is_max_num_specified && min_num == *max_v {
                                         // note: 最小回数と最大回数が同じだった場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryLoopRangeItem {
-                                            pos: range_node_pos,
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            pos: range_node_pos.clone(),
                                             msg: format!("modify '{}' to '{{{}}}'", raw_loop_range_txt, min_num),
                                         }.get_log());
                                     } else if is_min_num_specified && min_num == 0 {
                                         // note: 最小回数に 0 が指定された場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryLoopRangeItem {
-                                            pos: range_node_pos,
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            pos: range_node_pos.clone(),
                                             msg: format!("modify '{}' to '{{,{}}}'", raw_loop_range_txt, max_v),
                                         }.get_log());
                                     }
                                 },
                                 Infinitable::Infinite if is_min_num_specified && min_num == 0 => {
                                     // note: 最小回数に 0 が指定された場合
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryLoopRangeItem {
-                                        pos: range_node_pos,
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                        pos: range_node_pos.clone(),
                                         msg: format!("modify '{}' to '{{,}}'", raw_loop_range_txt),
                                     }.get_log());
                                 },
                                 _ => (),
                             }
 
-                            RuleElementLoopRange::new(min_num, max_num)
+                            let loop_range = RuleElementLoopRange::new(min_num, max_num);
+
+                            match loop_range.to_symbol_string() {
+                                Some(symbol_str) => {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                        pos: range_node_pos.clone(),
+                                        msg: format!("prefer {} to {}", raw_loop_range_txt, symbol_str),
+                                    }.get_log());
+                                },
+                                None => (),
+                            }
+
+                            loop_range
                         },
                         SyntaxNodeElement::Leaf(leaf) => {
                             let kind_str = leaf.value.as_str();
 
                             match kind_str {
-                                "?" | "*" | "+" => RuleElementLoopRange::from_symbol(&leaf.value),
+                                "?" | "*" | "+" => RuleElementLoopRange::from(&leaf.value),
                                 _ => {
                                     self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownLookaheadKind {
                                         uuid: leaf.uuid.clone(),

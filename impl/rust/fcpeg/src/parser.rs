@@ -278,7 +278,7 @@ impl SyntaxParser {
 
                 if tmp_max_count != -1 {
                     let max_num = match group.loop_range.max {
-                        Infinitable::Finite(v) => v as i32,
+                        Infinitable::Finite(v) => v as isize,
                         Infinitable::Infinite => -1,
                     };
 
@@ -290,7 +290,7 @@ impl SyntaxParser {
             RuleElementOrder::Sequential => group.loop_range.to_tuple(),
         };
 
-        if max_count != -1 && min_count as i32 > max_count {
+        if max_count != -1 && min_count as isize > max_count {
             self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
                 msg: format!("invalid loop count {{{},{}}}", min_count, max_count),
             }.get_log());
@@ -299,10 +299,10 @@ impl SyntaxParser {
         }
 
         let mut children = Vec::<SyntaxNodeElement>::new();
-        let mut loop_count = 0i32;
+        let mut loop_count = 0isize;
 
         while self.src_i < self.src_content.chars().count() {
-            if loop_count > self.loop_limit as i32 {
+            if loop_count > self.loop_limit as isize {
                 self.cons.borrow_mut().append_log(SyntaxParsingLog::TooLongRepetition {
                     loop_limit: self.loop_limit as usize,
                 }.get_log());
@@ -330,7 +330,7 @@ impl SyntaxParser {
                     }
                 },
                 None => {
-                    if loop_count >= min_count as i32 && (max_count == -1 || loop_count <= max_count) {
+                    if loop_count >= min_count as isize && (max_count == -1 || loop_count <= max_count) {
                         return Ok(Some(children));
                     } else {
                         return Ok(None);
@@ -339,7 +339,7 @@ impl SyntaxParser {
             }
         }
 
-        if loop_count >= min_count as i32 && (max_count == -1 || loop_count <= max_count) {
+        if loop_count >= min_count as isize && (max_count == -1 || loop_count <= max_count) {
             return Ok(Some(children));
         } else {
             return Ok(None);
@@ -533,7 +533,7 @@ impl SyntaxParser {
     fn parse_loop_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         let (min_count, max_count) = expr.loop_range.to_tuple();
 
-        if max_count != -1 && min_count as i32 > max_count {
+        if max_count != -1 && min_count as isize > max_count {
             self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
                 msg: format!("invalid loop count {{{},{}}}", min_count, max_count),
             }.get_log());
@@ -564,12 +564,12 @@ impl SyntaxParser {
 
                     loop_count += 1;
 
-                    if max_count != -1 && loop_count as i32 == max_count {
+                    if max_count != -1 && loop_count as isize == max_count {
                         return Ok(Some(children));
                     }
                 },
                 None => {
-                    return if loop_count >= min_count && (max_count == -1 || loop_count as i32 <= max_count) {
+                    return if loop_count >= min_count && (max_count == -1 || loop_count as isize <= max_count) {
                         Ok(Some(children))
                     } else {
                         Ok(None)
@@ -578,7 +578,7 @@ impl SyntaxParser {
             }
         }
 
-        return if loop_count >= min_count && (max_count == -1 || loop_count as i32 <= max_count) {
+        return if loop_count >= min_count && (max_count == -1 || loop_count as isize <= max_count) {
             Ok(Some(children))
         } else {
             Ok(None)

@@ -171,7 +171,7 @@ impl RuleElementLoopRange {
         };
     }
 
-    pub fn from_symbol(value: &str) -> RuleElementLoopRange {
+    pub fn from(value: &str) -> RuleElementLoopRange {
         return match value {
             "?" => RuleElementLoopRange::new(0, Infinitable::Finite(1)),
             "*" => RuleElementLoopRange::new(0, Infinitable::Infinite),
@@ -188,17 +188,24 @@ impl RuleElementLoopRange {
         return self.min == 1 && self.max == Infinitable::Finite(1);
     }
 
+    pub fn to_symbol_string(&self) -> Option<String> {
+        return match self.to_tuple() {
+            (0, 1) => Some("?".to_string()),
+            (0, -1) => Some("*".to_string()),
+            (1, -1) => Some("+".to_string()),
+            _ => None,
+        }
+    }
+
     pub fn to_string(&self, is_loop_count: bool, prefix: &str, separator: &str, suffix: &str) -> String {
         if self.is_single_loop() {
             return String::new();
         }
 
         if is_loop_count {
-            match self.to_tuple() {
-                (0, 1) => return "?".to_string(),
-                (0, -1) => return "*".to_string(),
-                (1, -1) => return "+".to_string(),
-                _ => (),
+            match self.to_symbol_string() {
+                Some(v) => return v,
+                None => (),
             }
         }
 
@@ -207,9 +214,9 @@ impl RuleElementLoopRange {
         return format!("{}{}{}{}{}", prefix, min_count, separator, max_count, suffix);
     }
 
-    pub fn to_tuple(&self) -> (usize, i32) {
+    pub fn to_tuple(&self) -> (usize, isize) {
         let max_num = match self.max {
-            Infinitable::Finite(num) => num as i32,
+            Infinitable::Finite(num) => num as isize,
             Infinitable::Infinite => -1,
         };
 
