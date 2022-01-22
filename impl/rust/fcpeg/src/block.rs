@@ -124,6 +124,7 @@ pub enum BlockParseLog {
     NoStartCommandInMainBlock {},
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
+    UnknownBlockID { pos: CharacterPosition, block_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
     UnnecessaryLoopRangeItem { pos: CharacterPosition, msg: String },
 }
@@ -144,6 +145,7 @@ impl ConsoleLogger for BlockParseLog {
             BlockParseLog::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
             BlockParseLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParseLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
+            BlockParseLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at: {}", pos)),
             BlockParseLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
             BlockParseLog::UnnecessaryLoopRangeItem { pos, msg } => log!(Warning, format!("unnecessary loop range item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
         }
@@ -158,8 +160,10 @@ pub struct BlockParser {
     start_rule_id: Option<String>,
     file_alias_name: String,
     appeared_block_ids: Box<HashMap<String, CharacterPosition>>,
+    appeared_rule_ids: Box<HashMap<String, CharacterPosition>>,
     block_name: String,
     block_alias_map: HashMap<String, String>,
+    block_id_map: Vec::<String>,
     file_path: String,
     file_content: Box<String>,
 }
@@ -171,9 +175,13 @@ impl BlockParser {
         let rule_map = Box::new(RuleMap::new(vec![block_map], ".Syntax.FCPEG".to_string())?);
 
         let mut parser = SyntaxParser::new(cons.clone(), rule_map, enable_memoization)?;
-        // note: HashMap<エイリアス名, ブロックマップ>
         let mut block_maps = Vec::<BlockMap>::new();
+
+        // note: HashMap<エイリアス名, ブロックマップ>
         let mut appeared_block_ids = Box::new(HashMap::<String, CharacterPosition>::new());
+        let mut appeared_rule_ids = Box::new(HashMap::<String, CharacterPosition>::new());
+        let mut block_id_map = Vec::<String>::new();
+
         let mut start_rule_id = Option::<String>::None;
 
         for (file_alias_name, fcpeg_file) in fcpeg_file_map.iter() {
@@ -182,8 +190,10 @@ impl BlockParser {
                 start_rule_id: None,
                 file_alias_name: file_alias_name.clone(),
                 appeared_block_ids: appeared_block_ids,
+                appeared_rule_ids: appeared_rule_ids,
                 block_name: String::new(),
                 block_alias_map: HashMap::new(),
+                block_id_map: block_id_map,
                 file_path: fcpeg_file.file_path.clone(),
                 file_content: fcpeg_file.file_content.clone(),
             };
@@ -198,6 +208,8 @@ impl BlockParser {
             }
 
             appeared_block_ids = block_parser.appeared_block_ids;
+            appeared_rule_ids = block_parser.appeared_rule_ids;
+            block_id_map = block_parser.block_id_map;
         }
 
         let rule_map = match start_rule_id {
@@ -210,7 +222,18 @@ impl BlockParser {
 
         let mut has_id_error = false;
 
-        for (each_rule_id, each_pos) in *appeared_block_ids {
+        for (each_block_id, each_pos) in *appeared_block_ids {
+            if !block_id_map.contains(&each_block_id) {
+                cons.borrow_mut().append_log(BlockParseLog::UnknownBlockID {
+                    pos: each_pos,
+                    block_id: each_block_id,
+                }.get_log());
+
+                has_id_error = true;
+            }
+        }
+
+        for (each_rule_id, each_pos) in *appeared_rule_ids {
             if !rule_map.rule_map.contains_key(&each_rule_id) {
                 cons.borrow_mut().append_log(BlockParseLog::UnknownRuleID {
                     pos: each_pos,
@@ -299,6 +322,7 @@ impl BlockParser {
                 Err(()) => self.cons.borrow_mut().pop_log(),
             }
 
+            self.block_id_map.push(format!("{}.{}", self.file_alias_name, self.block_name));
             block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds)));
             self.block_alias_map.clear();
         }
@@ -334,7 +358,13 @@ impl BlockParser {
                                     return Err(());
                                 }
 
-                                self.start_rule_id = Some(format!("{}.{}.{}", file_alias_name, block_name, rule_name));
+                                let rule_id = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
+
+                                if !self.appeared_rule_ids.contains_key(&rule_id) {
+                                    self.appeared_rule_ids.insert(rule_id.clone(), pos.clone());
+                                }
+
+                                self.start_rule_id = Some(rule_id);
                             }
                         }
                         _ => (),
@@ -346,8 +376,13 @@ impl BlockParser {
                     let use_cmd = self.to_use_cmd(cmd_node)?;
 
                     match &use_cmd {
-                        BlockCommand::Use { pos: _, file_alias_name, block_name, block_alias_name } => {
-                            self.block_alias_map.insert(block_alias_name.clone(), format!("{}.{}", file_alias_name, block_name));
+                        BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
+                            let block_id = format!("{}.{}", file_alias_name, block_name);
+                            self.block_alias_map.insert(block_alias_name.clone(), block_id.clone());
+
+                            if !self.appeared_block_ids.contains_key(&block_id) {
+                                self.appeared_block_ids.insert(block_id, pos.clone());
+                            }
                         },
                         _ => (),
                     }
@@ -410,8 +445,8 @@ impl BlockParser {
                 return Err(());
             },
         };
-
-        let rule = Rule::new(rule_pos.clone(), format!("{}.{}.{}", self.file_alias_name, self.block_name, rule_name), rule_name, generics_args, func_args, new_choice);
+        let rule_id = format!("{}.{}.{}", self.file_alias_name, self.block_name, rule_name);
+        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, func_args, new_choice);
         return Ok(BlockCommand::Define { pos: rule_pos, rule: rule });
     }
 
@@ -831,8 +866,8 @@ impl BlockParser {
                         } else {
                             match BlockParser::to_rule_id(&self.cons, &pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
                                 Ok(id) => {
-                                    if !self.appeared_block_ids.contains_key(&id) {
-                                        self.appeared_block_ids.insert(id.clone(), pos.clone());
+                                    if !self.appeared_rule_ids.contains_key(&id) {
+                                        self.appeared_rule_ids.insert(id.clone(), pos.clone());
                                     }
 
                                     id
@@ -850,8 +885,8 @@ impl BlockParser {
 
                         let id = match BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
                             Ok(id) => {
-                                if !self.appeared_block_ids.contains_key(&id) {
-                                    self.appeared_block_ids.insert(id.clone(), pos.clone());
+                                if !self.appeared_rule_ids.contains_key(&id) {
+                                    self.appeared_rule_ids.insert(id.clone(), pos.clone());
                                 }
 
                                 id

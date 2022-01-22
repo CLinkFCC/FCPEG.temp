@@ -18,7 +18,11 @@ pub struct RuleMap {
 impl RuleMap {
     pub fn new(block_map: Vec<BlockMap>, start_rule_id: String) -> ConsoleResult<RuleMap> {
         let raw_rule_map = RuleMap::to_rule_map(block_map)?;
-        let start_rule_pos = raw_rule_map.get(&start_rule_id).unwrap().pos.clone();
+
+        let start_rule_pos = match raw_rule_map.get(&start_rule_id) {
+            Some(v) => v.pos.clone(),
+            None => CharacterPosition::get_empty(),
+        };
 
         let rule_map = RuleMap {
             rule_map: raw_rule_map,
