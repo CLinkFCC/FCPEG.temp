@@ -276,7 +276,18 @@ impl SyntaxNode {
 
     // todo: 最初に出現したリーフの位置を返す; Unreflectable なリーフも対象にする
     pub fn get_position(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<CharacterPosition> {
-        return Ok(self.get_leaf_child_at(cons, 0)?.pos.clone());
+        for each_child in self.get_children() {
+            match each_child {
+                SyntaxNodeElement::Leaf(each_leaf) => return Ok(each_leaf.pos.clone()),
+                _ => (),
+            }
+        };
+
+        cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
+            msg: "character position not found".to_string()
+        }.get_log());
+
+        return Err(());
     }
 
     pub fn get_children(&self) -> &Vec<SyntaxNodeElement> {

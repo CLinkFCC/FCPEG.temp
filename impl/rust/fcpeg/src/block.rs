@@ -526,8 +526,6 @@ impl BlockParser {
                 Some(v) => {
                     match v.get_child_at(&self.cons, 0)? {
                         SyntaxNodeElement::Node(range_node) => {
-                            range_node.print(false);
-
                             let (min_num, is_min_num_specified) = match range_node.find_child_nodes(vec!["MinNum"]).get(0) {
                                 Some(min_num_node) => {
                                     let min_str = min_num_node.join_child_leaf_values();
