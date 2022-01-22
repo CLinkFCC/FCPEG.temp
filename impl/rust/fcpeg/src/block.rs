@@ -159,8 +159,8 @@ pub struct BlockParser {
     cons: Rc<RefCell<Console>>,
     start_rule_id: Option<String>,
     file_alias_name: String,
-    appeared_block_ids: Box<HashMap<String, CharacterPosition>>,
-    appeared_rule_ids: Box<HashMap<String, CharacterPosition>>,
+    used_block_ids: Box<HashMap<String, CharacterPosition>>,
+    used_rule_ids: Box<HashMap<String, CharacterPosition>>,
     block_name: String,
     block_alias_map: HashMap<String, String>,
     block_id_map: Vec::<String>,
@@ -178,8 +178,8 @@ impl BlockParser {
         let mut block_maps = Vec::<BlockMap>::new();
 
         // note: HashMap<エイリアス名, ブロックマップ>
-        let mut appeared_block_ids = Box::new(HashMap::<String, CharacterPosition>::new());
-        let mut appeared_rule_ids = Box::new(HashMap::<String, CharacterPosition>::new());
+        let mut used_block_ids = Box::new(HashMap::<String, CharacterPosition>::new());
+        let mut used_rule_ids = Box::new(HashMap::<String, CharacterPosition>::new());
         let mut block_id_map = Vec::<String>::new();
 
         let mut start_rule_id = Option::<String>::None;
@@ -189,8 +189,8 @@ impl BlockParser {
                 cons: cons.clone(),
                 start_rule_id: None,
                 file_alias_name: file_alias_name.clone(),
-                appeared_block_ids: appeared_block_ids,
-                appeared_rule_ids: appeared_rule_ids,
+                used_block_ids: used_block_ids,
+                used_rule_ids: used_rule_ids,
                 block_name: String::new(),
                 block_alias_map: HashMap::new(),
                 block_id_map: block_id_map,
@@ -207,8 +207,8 @@ impl BlockParser {
                 start_rule_id = block_parser.start_rule_id.clone();
             }
 
-            appeared_block_ids = block_parser.appeared_block_ids;
-            appeared_rule_ids = block_parser.appeared_rule_ids;
+            used_block_ids = block_parser.used_block_ids;
+            used_rule_ids = block_parser.used_rule_ids;
             block_id_map = block_parser.block_id_map;
         }
 
@@ -222,7 +222,7 @@ impl BlockParser {
 
         let mut has_id_error = false;
 
-        for (each_block_id, each_pos) in *appeared_block_ids {
+        for (each_block_id, each_pos) in *used_block_ids {
             if !block_id_map.contains(&each_block_id) {
                 cons.borrow_mut().append_log(BlockParseLog::UnknownBlockID {
                     pos: each_pos,
@@ -233,7 +233,7 @@ impl BlockParser {
             }
         }
 
-        for (each_rule_id, each_pos) in *appeared_rule_ids {
+        for (each_rule_id, each_pos) in *used_rule_ids {
             if !rule_map.rule_map.contains_key(&each_rule_id) {
                 cons.borrow_mut().append_log(BlockParseLog::UnknownRuleID {
                     pos: each_pos,
@@ -360,8 +360,8 @@ impl BlockParser {
 
                                 let rule_id = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
 
-                                if !self.appeared_rule_ids.contains_key(&rule_id) {
-                                    self.appeared_rule_ids.insert(rule_id.clone(), pos.clone());
+                                if !self.used_rule_ids.contains_key(&rule_id) {
+                                    self.used_rule_ids.insert(rule_id.clone(), pos.clone());
                                 }
 
                                 self.start_rule_id = Some(rule_id);
@@ -380,8 +380,8 @@ impl BlockParser {
                             let block_id = format!("{}.{}", file_alias_name, block_name);
                             self.block_alias_map.insert(block_alias_name.clone(), block_id.clone());
 
-                            if !self.appeared_block_ids.contains_key(&block_id) {
-                                self.appeared_block_ids.insert(block_id, pos.clone());
+                            if !self.used_block_ids.contains_key(&block_id) {
+                                self.used_block_ids.insert(block_id, pos.clone());
                             }
                         },
                         _ => (),
@@ -866,8 +866,8 @@ impl BlockParser {
                         } else {
                             match BlockParser::to_rule_id(&self.cons, &pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
                                 Ok(id) => {
-                                    if !self.appeared_rule_ids.contains_key(&id) {
-                                        self.appeared_rule_ids.insert(id.clone(), pos.clone());
+                                    if !self.used_rule_ids.contains_key(&id) {
+                                        self.used_rule_ids.insert(id.clone(), pos.clone());
                                     }
 
                                     id
@@ -885,8 +885,8 @@ impl BlockParser {
 
                         let id = match BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
                             Ok(id) => {
-                                if !self.appeared_rule_ids.contains_key(&id) {
-                                    self.appeared_rule_ids.insert(id.clone(), pos.clone());
+                                if !self.used_rule_ids.contains_key(&id) {
+                                    self.used_rule_ids.insert(id.clone(), pos.clone());
                                 }
 
                                 id
