@@ -356,16 +356,18 @@ impl BlockParser {
                     Ok(use_cmd)
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                        cause: format!("invalid node name '{}'", node_name),
+                    self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownNodeName {
+                        uuid: cmd_node.uuid.clone(),
+                        name: node_name.clone(),
                     }.get_log());
 
                     return Err(());
                 },
             },
             _ => {
-                self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                    cause: "invalid operation".to_string(),
+                self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownNodeName {
+                    uuid: cmd_node.uuid.clone(),
+                    name: "[no name]".to_string(),
                 }.get_log());
 
                 return Err(());
@@ -505,17 +507,20 @@ impl BlockParser {
 
             // note: Lookahead ノード
             let lookahead_kind = match each_seq_elem_node.find_first_child_node(vec![".Rule.Lookahead"]) {
-                Some(v) => {
-                    match v.get_leaf_child_at(&self.cons, 0)?.value.as_str() {
-                        "&" => RuleElementLookaheadKind::Positive,
-                        "!" => RuleElementLookaheadKind::Negative,
-                        _ => {
-                            self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                                cause: format!("unknown lookahead kind"),
+                Some(lookahead_node) => {
+                    let kind_str = lookahead_node.get_leaf_child_at(&self.cons, 0)?.value.as_str();
+                    let kind = RuleElementLookaheadKind::new(kind_str);
+
+                    match kind {
+                        RuleElementLookaheadKind::None => {
+                            self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownLookaheadKind {
+                                uuid: lookahead_node.uuid,
+                                kind: kind_str.to_string(),
                             }.get_log());
 
                             return Err(());
                         },
+                        _ => kind,
                     }
                 },
                 None => RuleElementLookaheadKind::None,
@@ -657,11 +662,14 @@ impl BlockParser {
                             RuleElementLoopRange::new(min_num, max_num)
                         },
                         SyntaxNodeElement::Leaf(leaf) => {
-                            match leaf.value.as_str() {
+                            let kind_str = leaf.value.as_str();
+
+                            match kind_str {
                                 "?" | "*" | "+" => RuleElementLoopRange::from_symbol(&leaf.value),
                                 _ => {
-                                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                                        cause: format!("unknown lookahead kind"),
+                                    self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownLookaheadKind {
+                                        uuid: leaf.uuid.clone(),
+                                        kind: kind_str.to_string(),
                                     }.get_log());
 
                                     return Err(());
@@ -698,8 +706,8 @@ impl BlockParser {
             let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec![".Rule.Choice", ".Rule.Expr"]) {
                 Some(v) => v,
                 None => {
-                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                        cause: "invalid operation".to_string(),
+                    self.cons.borrow_mut().append_log(SyntaxParseLog::ChoiceOrExpressionChildNotMatched {
+                        parent_uuid: each_seq_elem_node.uuid.clone(),
                     }.get_log());
 
                     return Err(());
@@ -724,8 +732,9 @@ impl BlockParser {
                             RuleElement::Expression(new_expr)
                         },
                         _ => {
-                            self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                                cause: format!("invalid node name '{}'", name),
+                            self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownNodeName {
+                                uuid: choice_or_expr_node.uuid.clone(),
+                                name: name.to_string(),
                             }.get_log());
 
                             return Err(());
@@ -735,10 +744,11 @@ impl BlockParser {
                     children.push(new_elem);
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                        cause: "invalid operation".to_string()
+                    self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownNodeName {
+                        uuid: choice_or_expr_node.uuid.clone(),
+                        name: "[no name]".to_string(),
                     }.get_log());
-
+    
                     return Err(());
                 },
             };

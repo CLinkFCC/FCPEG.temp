@@ -4,7 +4,6 @@ use std::io::*;
 use std::io::Write;
 use std::rc::Rc;
 
-use crate::parser::*;
 use crate::rule::*;
 
 use rustnutlib::*;
@@ -18,6 +17,7 @@ pub enum TreeLog {
     ElementNotNode { uuid: Uuid },
     ElementNotLeaf { uuid: Uuid },
     NodeChildNotFound { parent_uuid: Uuid, index: usize },
+    ReflectableChildNotFound { parent_uuid: Uuid, index: usize },
 }
 
 impl ConsoleLogger for TreeLog {
@@ -28,6 +28,7 @@ impl ConsoleLogger for TreeLog {
             TreeLog::ElementNotNode { uuid } => log!(Error, "element not node", format!("uuid: {}", uuid)),
             TreeLog::ElementNotLeaf { uuid } => log!(Error, "element not leaf", format!("uuid: {}", uuid)),
             TreeLog::NodeChildNotFound { parent_uuid, index } => log!(Error, "node child not found", format!("parent: {}", parent_uuid), format!("index: {}", index)),
+            TreeLog::ReflectableChildNotFound { parent_uuid, index } => log!(Error, "reflectable child not found", format!("parent: {}", parent_uuid), format!("index: {}", index)),
         };
     }
 }
@@ -345,8 +346,9 @@ impl SyntaxNode {
             elem_i += 1;
         }
 
-        cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-            cause: format!("{}th reflectable element not matched", index + 1),
+        cons.borrow_mut().append_log(TreeLog::ReflectableChildNotFound {
+            parent_uuid: self.uuid,
+            index: index,
         }.get_log());
 
         return Err(());

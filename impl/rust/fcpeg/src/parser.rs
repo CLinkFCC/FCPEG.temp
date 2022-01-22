@@ -14,14 +14,16 @@ use uuid::Uuid;
 
 pub enum SyntaxParseLog {
     Unknown {},
+    ChoiceOrExpressionChildNotMatched { parent_uuid: Uuid },
     InternalError { msg: String },
     InvalidCharClassFormat { value: String },
     InvalidGenericsArgumentLength { arg_ids: Vec<String> },
     InvalidFunctionArgumentLength { arg_ids: Vec<String> },
-    InvalidSyntaxTreeStructure { cause: String },
     NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
     TooLongRepetition { loop_limit: usize },
     UnknownArgumentID { arg_id: String },
+    UnknownLookaheadKind { uuid: Uuid, kind: String },
+    UnknownNodeName { uuid: Uuid, name: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
 }
 
@@ -30,13 +32,15 @@ impl ConsoleLogger for SyntaxParseLog {
         return match self {
             SyntaxParseLog::Unknown {} => log!(Error, "unknown error"),
             SyntaxParseLog::InternalError { msg } => log!(Error, format!("internal error: {}", msg)),
+            SyntaxParseLog::ChoiceOrExpressionChildNotMatched { parent_uuid } => log!(Error, format!("choice or expression child not matched"), format!("parent: {}", parent_uuid)),
             SyntaxParseLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),
             SyntaxParseLog::InvalidGenericsArgumentLength { arg_ids } => log!(Error, format!("invalid generics argument length ({:?})", arg_ids)),
             SyntaxParseLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, format!("invalid function argument length ({:?})", arg_ids)),
-            SyntaxParseLog::InvalidSyntaxTreeStructure { cause } => log!(Error, format!("invalid syntax tree structure ({})", cause)),
             SyntaxParseLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
             SyntaxParseLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
             SyntaxParseLog::UnknownArgumentID { arg_id } => log!(Error, format!("unknown argument id '{}'", arg_id)),
+            SyntaxParseLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid: {}", uuid)),
+            SyntaxParseLog::UnknownNodeName { uuid, name } => log!(Error, format!("unknown node name '{}'", name), format!("uuid: {}", uuid)),
             SyntaxParseLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
         };
     }
