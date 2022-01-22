@@ -12,7 +12,7 @@ use rustnutlib::console::*;
 
 use uuid::Uuid;
 
-pub enum SyntaxParseLog {
+pub enum SyntaxParsingLog {
     ChoiceOrExpressionChildNotMatched { parent_uuid: Uuid },
     InternalError { msg: String },
     InvalidCharClassFormat { value: String },
@@ -26,20 +26,20 @@ pub enum SyntaxParseLog {
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
 }
 
-impl ConsoleLogger for SyntaxParseLog {
+impl ConsoleLogger for SyntaxParsingLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            SyntaxParseLog::InternalError { msg } => log!(Error, format!("internal error: {}", msg)),
-            SyntaxParseLog::ChoiceOrExpressionChildNotMatched { parent_uuid } => log!(Error, format!("choice or expression child not matched"), format!("parent: {}", parent_uuid)),
-            SyntaxParseLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),
-            SyntaxParseLog::InvalidGenericsArgumentLength { arg_ids } => log!(Error, format!("invalid generics argument length ({:?})", arg_ids)),
-            SyntaxParseLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, format!("invalid function argument length ({:?})", arg_ids)),
-            SyntaxParseLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
-            SyntaxParseLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
-            SyntaxParseLog::UnknownArgumentID { arg_id } => log!(Error, format!("unknown argument id '{}'", arg_id)),
-            SyntaxParseLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid: {}", uuid)),
-            SyntaxParseLog::UnknownNodeName { uuid, name } => log!(Error, format!("unknown node name '{}'", name), format!("uuid: {}", uuid)),
-            SyntaxParseLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
+            SyntaxParsingLog::InternalError { msg } => log!(Error, format!("internal error: {}", msg)),
+            SyntaxParsingLog::ChoiceOrExpressionChildNotMatched { parent_uuid } => log!(Error, format!("choice or expression child not matched"), format!("parent: {}", parent_uuid)),
+            SyntaxParsingLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),
+            SyntaxParsingLog::InvalidGenericsArgumentLength { arg_ids } => log!(Error, format!("invalid generics argument length ({:?})", arg_ids)),
+            SyntaxParsingLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, format!("invalid function argument length ({:?})", arg_ids)),
+            SyntaxParsingLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
+            SyntaxParsingLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
+            SyntaxParsingLog::UnknownArgumentID { arg_id } => log!(Error, format!("unknown argument id '{}'", arg_id)),
+            SyntaxParsingLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid: {}", uuid)),
+            SyntaxParsingLog::UnknownNodeName { uuid, name } => log!(Error, format!("unknown node name '{}'", name), format!("uuid: {}", uuid)),
+            SyntaxParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
         };
     }
 }
@@ -157,7 +157,7 @@ impl SyntaxParser {
         let mut root_node = match self.parse_rule(&start_rule_id, &start_rule_pos)? {
             Some(v) => v,
             None => {
-                self.cons.borrow_mut().append_log(SyntaxParseLog::NoSucceededRule {
+                self.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
                     rule_id: start_rule_id.clone(),
                     pos: self.get_char_position(),
                     rule_stack: *self.rule_stack.clone(),
@@ -172,7 +172,7 @@ impl SyntaxParser {
 
         // note: 入力位置が length を超えると失敗
         if self.src_i < self.src_content.chars().count() {
-            self.cons.borrow_mut().append_log(SyntaxParseLog::NoSucceededRule {
+            self.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
                 rule_id: start_rule_id.clone(),
                 pos: self.get_char_position(),
                 rule_stack: *self.rule_stack.clone(),
@@ -188,7 +188,7 @@ impl SyntaxParser {
         let rule_group = match self.rule_map.rule_map.get(rule_id) {
             Some(rule) => rule.group.clone(),
             None => {
-                self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownRuleID {
+                self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
                     pos: pos.clone(),
                     rule_id: rule_id.clone(),
                 }.get_log());
@@ -291,7 +291,7 @@ impl SyntaxParser {
         };
 
         if max_count != -1 && min_count as i32 > max_count {
-            self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
+            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
                 msg: format!("invalid loop count {{{},{}}}", min_count, max_count),
             }.get_log());
 
@@ -303,7 +303,7 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.loop_limit as i32 {
-                self.cons.borrow_mut().append_log(SyntaxParseLog::TooLongRepetition {
+                self.cons.borrow_mut().append_log(SyntaxParsingLog::TooLongRepetition {
                     loop_limit: self.loop_limit as usize,
                 }.get_log());
 
@@ -534,7 +534,7 @@ impl SyntaxParser {
         let (min_count, max_count) = expr.loop_range.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
-            self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
+            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
                 msg: format!("invalid loop count {{{},{}}}", min_count, max_count),
             }.get_log());
 
@@ -546,7 +546,7 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.loop_limit {
-                self.cons.borrow_mut().append_log(SyntaxParseLog::TooLongRepetition {
+                self.cons.borrow_mut().append_log(SyntaxParsingLog::TooLongRepetition {
                     loop_limit: self.loop_limit as usize
                 }.get_log());
 
@@ -608,7 +608,7 @@ impl SyntaxParser {
                 let result = match &group {
                     Some(v) => self.parse_group(&RuleElementOrder::Sequential, &v),
                     None => {
-                        self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownArgumentID {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
                             arg_id: expr.value.clone(),
                         }.get_log());
 
@@ -651,7 +651,7 @@ impl SyntaxParser {
                         let pattern = match Regex::new(&expr.value.clone()) {
                             Ok(v) => v,
                             Err(_) => {
-                                self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidCharClassFormat {
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidCharClassFormat {
                                     value: expr.to_string(),
                                 }.get_log());
 
@@ -682,7 +682,7 @@ impl SyntaxParser {
                 let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
                     Some(rule) => &rule.generics_arg_ids,
                     None => {
-                        self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownRuleID {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
                             pos: expr.pos.clone(),
                             rule_id: rule_id.clone(),
                         }.get_log());
@@ -692,7 +692,7 @@ impl SyntaxParser {
                 };
 
                 if args.len() != new_arg_ids.len() {
-                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidGenericsArgumentLength {
+                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
                         arg_ids: new_arg_ids.clone(),
                     }.get_log());
 
@@ -703,7 +703,7 @@ impl SyntaxParser {
                     let new_arg_id = match new_arg_ids.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
                                 msg: "invalid operation".to_string(),
                             }.get_log());
 
@@ -714,7 +714,7 @@ impl SyntaxParser {
                     let new_arg_group = match args.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
                                 msg: "invalid operation".to_string(),
                             }.get_log());
 
@@ -757,7 +757,7 @@ impl SyntaxParser {
                                 };
                             },
                             _ => {
-                                self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidFunctionArgumentLength {
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidFunctionArgumentLength {
                                     arg_ids: vec!["Item".to_string()],
                                 }.get_log());
 
@@ -772,7 +772,7 @@ impl SyntaxParser {
                 let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
                     Some(rule) => &rule.func_arg_ids,
                     None => {
-                        self.cons.borrow_mut().append_log(SyntaxParseLog::UnknownRuleID {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
                             pos: expr.pos.clone(), rule_id: rule_id.clone(),
                         }.get_log());
 
@@ -781,7 +781,7 @@ impl SyntaxParser {
                 };
 
                 if args.len() != new_arg_ids.len() {
-                    self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidFunctionArgumentLength {
+                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidFunctionArgumentLength {
                         arg_ids: new_arg_ids.clone(),
                     }.get_log());
 
@@ -792,7 +792,7 @@ impl SyntaxParser {
                     let new_arg_id = match new_arg_ids.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
                                 msg: "invalid operation".to_string(),
                             }.get_log());
 
@@ -803,7 +803,7 @@ impl SyntaxParser {
                     let new_arg_group = match args.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
                                 msg: "invalid operation".to_string(),
                             }.get_log());
 
