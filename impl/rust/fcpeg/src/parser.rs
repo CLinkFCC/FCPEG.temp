@@ -29,17 +29,17 @@ pub enum SyntaxParsingLog {
 impl ConsoleLogger for SyntaxParsingLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            SyntaxParsingLog::InternalError { msg } => log!(Error, format!("internal error: {}", msg)),
-            SyntaxParsingLog::ChoiceOrExpressionChildNotMatched { parent_uuid } => log!(Error, format!("choice or expression child not matched"), format!("parent: {}", parent_uuid)),
+            SyntaxParsingLog::InternalError { msg } => log!(Error, format!("internal error:\t{}", msg)),
+            SyntaxParsingLog::ChoiceOrExpressionChildNotMatched { parent_uuid } => log!(Error, format!("choice or expression child not matched"), format!("parent:\t{}", parent_uuid)),
             SyntaxParsingLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),
             SyntaxParsingLog::InvalidGenericsArgumentLength { arg_ids } => log!(Error, format!("invalid generics argument length ({:?})", arg_ids)),
             SyntaxParsingLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, format!("invalid function argument length ({:?})", arg_ids)),
             SyntaxParsingLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
             SyntaxParsingLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
             SyntaxParsingLog::UnknownArgumentID { arg_id } => log!(Error, format!("unknown argument id '{}'", arg_id)),
-            SyntaxParsingLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid: {}", uuid)),
-            SyntaxParsingLog::UnknownNodeName { uuid, name } => log!(Error, format!("unknown node name '{}'", name), format!("uuid: {}", uuid)),
-            SyntaxParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
+            SyntaxParsingLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid:\t{}", uuid)),
+            SyntaxParsingLog::UnknownNodeName { uuid, name } => log!(Error, format!("unknown node name '{}'", name), format!("uuid:\t{}", uuid)),
+            SyntaxParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
         };
     }
 }

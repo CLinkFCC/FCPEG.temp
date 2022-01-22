@@ -24,11 +24,11 @@ impl ConsoleLogger for TreeLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
             TreeLog::Unknown {} => log!(Error, "unknown error"),
-            TreeLog::CharacterPositionNotFound { uuid } => log!(Error, "character position not found", format!("uuid: {}", uuid)),
-            TreeLog::ElementNotNode { uuid } => log!(Error, "element not node", format!("uuid: {}", uuid)),
-            TreeLog::ElementNotLeaf { uuid } => log!(Error, "element not leaf", format!("uuid: {}", uuid)),
-            TreeLog::NodeChildNotFound { parent_uuid, index } => log!(Error, "node child not found", format!("parent: {}", parent_uuid), format!("index: {}", index)),
-            TreeLog::ReflectableChildNotFound { parent_uuid, index } => log!(Error, "reflectable child not found", format!("parent: {}", parent_uuid), format!("index: {}", index)),
+            TreeLog::CharacterPositionNotFound { uuid } => log!(Error, "character position not found", format!("uuid:\t{}", uuid)),
+            TreeLog::ElementNotNode { uuid } => log!(Error, "element not node", format!("uuid:\t{}", uuid)),
+            TreeLog::ElementNotLeaf { uuid } => log!(Error, "element not leaf", format!("uuid:\t{}", uuid)),
+            TreeLog::NodeChildNotFound { parent_uuid, index } => log!(Error, "node child not found", format!("parent:\t{}", parent_uuid), format!("index:\t{}", index)),
+            TreeLog::ReflectableChildNotFound { parent_uuid, index } => log!(Error, "reflectable child not found", format!("parent:\t{}", parent_uuid), format!("index:\t{}", index)),
         };
     }
 }
