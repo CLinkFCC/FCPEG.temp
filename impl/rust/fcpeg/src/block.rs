@@ -12,6 +12,8 @@ use colored::*;
 use rustnutlib::*;
 use rustnutlib::console::*;
 
+use uuid::Uuid;
+
 macro_rules! block_map {
     ($($block_name:expr => $func_name:ident), *,) => {
         {
@@ -111,17 +113,19 @@ macro_rules! expr {
 pub type BlockMap = HashMap<String, Box<Block>>;
 
 pub enum BlockParsingLog {
-    BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
+    BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
+    // ChildElementNotMatched { parent_uuid: Uuid, expected: String, },
     DuplicateBlockName { pos: CharacterPosition, block_name: String },
     DuplicateArgumentID { pos: CharacterPosition, arg_id: String },
     DuplicateRuleName { pos: CharacterPosition, rule_name: String },
     DuplicateStartCommand { pos: CharacterPosition },
-    InternalError { msg: String },
     InvalidID { pos: CharacterPosition, id: String },
     InvalidLoopRange { pos: CharacterPosition, msg: String },
     NamingRuleViolation { pos: CharacterPosition, id: String },
     StartCommandOutsideMainBlock { pos: CharacterPosition },
+    UnexpectedChildName { parent_uuid: Uuid, unexpected: String, expected: String },
+    UnexpectedNodeName { uuid: Uuid, unexpected: String, expected: String },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
     UnknownBlockID { pos: CharacterPosition, block_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
@@ -134,17 +138,19 @@ pub enum BlockParsingLog {
 impl ConsoleLogger for BlockParsingLog {
     fn get_log(&self) -> ConsoleLog {
         match self {
-            BlockParsingLog::BlockAliasNotFound { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
             BlockParsingLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
+            BlockParsingLog::BlockAliasNotFound { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
+            // BlockParsingLog::ChildElementNotMatched { parent_uuid, expected } => log!(Error, format!("child element not matched"), format!("parent:\t{}", parent_uuid), format!("expected:\t{}", expected)),
             BlockParsingLog::DuplicateBlockName { pos, block_name } => log!(Error, format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateArgumentID { pos, arg_id } => log!(Error, format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateRuleName { pos, rule_name } => log!(Error, format!("duplicate rule name '{}'", rule_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateStartCommand { pos } => log!(Error, "duplicate start command", format!("at:\t{}", pos)),
-            BlockParsingLog::InternalError { msg } => log!(Error, format!("internal error:\t{}", msg)),
             BlockParsingLog::InvalidID { pos, id } => log!(Error, format!("invalid id '{}'", id), format!("at:\t{}", pos)),
             BlockParsingLog::InvalidLoopRange { pos, msg } => log!(Error, format!("invalid loop range"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParsingLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
             BlockParsingLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
+            BlockParsingLog::UnexpectedChildName { parent_uuid, unexpected, expected } => log!(Error, format!("unknown node name {}, expected {}", unexpected, expected), format!("parent uuid:\t{}", parent_uuid)),
+            BlockParsingLog::UnexpectedNodeName { uuid, unexpected, expected } => log!(Error, format!("unknown node name {}, expected {}", unexpected, expected), format!("uuid:\t{}", uuid)),
             BlockParsingLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
             BlockParsingLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at:\t{}", pos)),
             BlockParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
@@ -400,18 +406,20 @@ impl BlockParser {
                     Ok(use_cmd)
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownNodeName {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
                         uuid: cmd_node.uuid.clone(),
-                        name: node_name.clone(),
+                        unexpected: format!("'{}'", node_name),
+                        expected: "block command node name".to_string(),
                     }.get_log());
 
                     return Err(());
                 },
             },
             _ => {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownNodeName {
+                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
                     uuid: cmd_node.uuid.clone(),
-                    name: "[no name]".to_string(),
+                    unexpected: "no name".to_string(),
+                    expected: "block command node name".to_string(),
                 }.get_log());
 
                 return Err(());
@@ -448,8 +456,10 @@ impl BlockParser {
         let new_choice = match cmd_node.find_first_child_node(vec![".Rule.PureChoice"]) {
             Some(choice_node) => Box::new(self.to_rule_choice_elem(choice_node, &generics_args)?),
             None => {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                    msg: "pure choice not found".to_string(),
+                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
+                    parent_uuid: cmd_node.uuid.clone(),
+                    unexpected: "unknown".to_string(),
+                    expected: "pure choice node".to_string(),
                 }.get_log());
 
                 return Err(());
@@ -496,7 +506,7 @@ impl BlockParser {
             3 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), divided_raw_id.get(2).unwrap().to_string()),
             _ => {
                 self.cons.borrow_mut().append_log(BlockParsingLog::InvalidID {
-                    pos: raw_id_node.get_node_child_at(&self.cons, 0)?.get_position(&self.cons)?,
+                    pos: raw_id_node.get_position(&self.cons)?,
                     id: raw_id,
                 }.get_log());
 
@@ -523,15 +533,17 @@ impl BlockParser {
     }
 
     fn to_use_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
-        let raw_id = self.to_chain_id(cmd_node.get_node_child_at(&self.cons, 0)?)?;
+        let raw_id_node = cmd_node.get_node_child_at(&self.cons, 0)?;
+        let raw_id = self.to_chain_id(raw_id_node)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
         let (file_alias_name, block_name) = match divided_raw_id.len() {
             1 => (self.file_alias_name.clone(), divided_raw_id.get(0).unwrap().to_string()),
             2 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
             _ => {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                    msg: "invalid chain ID length on use command".to_string(),
+                self.cons.borrow_mut().append_log(BlockParsingLog::InvalidID {
+                    pos: raw_id_node.get_position(&self.cons)?,
+                    id: raw_id,
                 }.get_log());
 
                 return Err(());
@@ -558,8 +570,9 @@ impl BlockParser {
         return match divided_raw_id.len() {
             1 | 2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
             _ => {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                    msg: "invalid chain ID length on use command".to_string(),
+                self.cons.borrow_mut().append_log(BlockParsingLog::InvalidID {
+                    pos: raw_id_node.get_position(&self.cons)?,
+                    id: raw_id,
                 }.get_log());
 
                 return Err(());
@@ -791,8 +804,10 @@ impl BlockParser {
             let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec![".Rule.Choice", ".Rule.Expr"]) {
                 Some(v) => v,
                 None => {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::ChoiceOrExpressionChildNotMatched {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
                         parent_uuid: each_seq_elem_node.uuid.clone(),
+                        unexpected: "unknown".to_string(),
+                        expected: "choice or expression node".to_string(),
                     }.get_log());
 
                     return Err(());
@@ -817,9 +832,10 @@ impl BlockParser {
                             RuleElement::Expression(new_expr)
                         },
                         _ => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownNodeName {
+                            self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
                                 uuid: choice_or_expr_node.uuid.clone(),
-                                name: name.to_string(),
+                                unexpected: format!("'{}'", name),
+                                expected: "choice or expression node".to_string(),
                             }.get_log());
 
                             return Err(());
@@ -829,11 +845,12 @@ impl BlockParser {
                     children.push(new_elem);
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownNodeName {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
                         uuid: choice_or_expr_node.uuid.clone(),
-                        name: "[no name]".to_string(),
+                        unexpected: "no name".to_string(),
+                        expected: "choice or expression node".to_string(),
                     }.get_log());
-    
+
                     return Err(());
                 },
             };
@@ -899,8 +916,10 @@ impl BlockParser {
                             ".Rule.Generics" => RuleExpressionKind::Generics(args),
                             ".Rule.Func" => RuleExpressionKind::Func(args),
                             _ => {
-                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                                    msg: "invalid operation".to_string(),
+                                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
+                                    parent_uuid: expr_child_node.uuid.clone(),
+                                    unexpected: format!("'{}'", name),
+                                    expected: "generics or template node".to_string(),
                                 }.get_log());
 
                                 return Err(());
@@ -947,8 +966,10 @@ impl BlockParser {
                     ".Rule.Str" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
                     ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
                     _ => {
-                        self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                            msg: format!("unknown expression name '{}'", name),
+                        self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
+                            parent_uuid: expr_child_node.uuid.clone(),
+                            unexpected: format!("'{}'", name),
+                            expected: "rule expression node".to_string(),
                         }.get_log());
 
                         return Err(());
@@ -956,8 +977,10 @@ impl BlockParser {
                 }
             },
             _ => {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                    msg: "invalid operation".to_string(),
+                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
+                    parent_uuid: expr_child_node.uuid.clone(),
+                    unexpected: "no name".to_string(),
+                    expected: "rule expression node".to_string(),
                 }.get_log());
 
                 return Err(());
@@ -979,12 +1002,12 @@ impl BlockParser {
     }
 
     fn to_rule_id(cons: &Rc<RefCell<Console>>, pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String) -> ConsoleResult<String> {
-        let (new_id, _id_file_alias_name, id_block_name, id_rule_name) = match id_tokens.len() {
+        let (new_id, id_block_name, id_rule_name) = match id_tokens.len() {
             1 => {
                 let id_rule_name = id_tokens.get(0).unwrap();
                 let new_id = format!("{}.{}.{}", file_alias_name, block_name, id_rule_name);
 
-                (new_id, file_alias_name.as_str(), block_name, id_rule_name.clone())
+                (new_id, block_name, id_rule_name.clone())
             },
             2 => {
                 let block_name = id_tokens.get(0).unwrap().to_string();
@@ -995,7 +1018,7 @@ impl BlockParser {
                     // note: ブロック名がエイリアスである場合
                     let new_id = format!("{}.{}", block_name, rule_name);
 
-                    (new_id, "", block_name, rule_name.clone())
+                    (new_id, block_name, rule_name.clone())
                 } else {
                     // note: ブロック名がエイリアスでない場合
                     cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNotFound {
@@ -1007,16 +1030,16 @@ impl BlockParser {
                 }
             },
             3 => {
-                let file_alias_name = id_tokens.get(0).unwrap();
                 let block_name = id_tokens.get(1).unwrap();
                 let rule_name = id_tokens.get(2).unwrap();
                 let new_id = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
 
-                (new_id, file_alias_name.as_str(), block_name, rule_name.to_string())
+                (new_id, block_name, rule_name.to_string())
             },
             _ => {
-                cons.borrow_mut().append_log(BlockParsingLog::InternalError {
-                    msg: format!("invalid id expression"),
+                cons.borrow_mut().append_log(BlockParsingLog::InvalidID {
+                    pos: pos.clone(),
+                    id: id_tokens.join("."),
                 }.get_log());
 
                 return Err(());

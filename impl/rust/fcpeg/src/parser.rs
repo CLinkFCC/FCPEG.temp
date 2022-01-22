@@ -5,6 +5,8 @@ use std::cell::RefCell;
 use crate::rule::*;
 use crate::tree::*;
 
+use colored::*;
+
 use regex::*;
 
 use rustnutlib::*;
@@ -13,32 +15,28 @@ use rustnutlib::console::*;
 use uuid::Uuid;
 
 pub enum SyntaxParsingLog {
-    ChoiceOrExpressionChildNotMatched { parent_uuid: Uuid },
-    InternalError { msg: String },
     InvalidCharClassFormat { value: String },
     InvalidGenericsArgumentLength { arg_ids: Vec<String> },
     InvalidFunctionArgumentLength { arg_ids: Vec<String> },
+    InvalidLoopRange { msg: String },
     NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
     TooLongRepetition { loop_limit: usize },
     UnknownArgumentID { arg_id: String },
     UnknownLookaheadKind { uuid: Uuid, kind: String },
-    UnknownNodeName { uuid: Uuid, name: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
 }
 
 impl ConsoleLogger for SyntaxParsingLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            SyntaxParsingLog::InternalError { msg } => log!(Error, format!("internal error:\t{}", msg)),
-            SyntaxParsingLog::ChoiceOrExpressionChildNotMatched { parent_uuid } => log!(Error, format!("choice or expression child not matched"), format!("parent:\t{}", parent_uuid)),
             SyntaxParsingLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),
             SyntaxParsingLog::InvalidGenericsArgumentLength { arg_ids } => log!(Error, format!("invalid generics argument length ({:?})", arg_ids)),
             SyntaxParsingLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, format!("invalid function argument length ({:?})", arg_ids)),
+            SyntaxParsingLog::InvalidLoopRange { msg } => log!(Error, format!("invalid loop range"), format!("{}", msg.bright_black())),
             SyntaxParsingLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
             SyntaxParsingLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
             SyntaxParsingLog::UnknownArgumentID { arg_id } => log!(Error, format!("unknown argument id '{}'", arg_id)),
             SyntaxParsingLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid:\t{}", uuid)),
-            SyntaxParsingLog::UnknownNodeName { uuid, name } => log!(Error, format!("unknown node name '{}'", name), format!("uuid:\t{}", uuid)),
             SyntaxParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
         };
     }
@@ -291,8 +289,8 @@ impl SyntaxParser {
         };
 
         if max_count != -1 && min_count as isize > max_count {
-            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                msg: format!("invalid loop count {{{},{}}}", min_count, max_count),
+            self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidLoopRange {
+                msg: format!("invalid loop range {{{},{}}} was detected", min_count, max_count),
             }.get_log());
 
             return Err(());
@@ -534,8 +532,8 @@ impl SyntaxParser {
         let (min_count, max_count) = expr.loop_range.to_tuple();
 
         if max_count != -1 && min_count as isize > max_count {
-            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                msg: format!("invalid loop count {{{},{}}}", min_count, max_count),
+            self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidLoopRange {
+                msg: format!("invalid loop range {{{},{}}} was detected", min_count, max_count),
             }.get_log());
 
             return Err(());
@@ -703,8 +701,8 @@ impl SyntaxParser {
                     let new_arg_id = match new_arg_ids.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                                msg: "invalid operation".to_string(),
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                                arg_id: format!("[{}]", i),
                             }.get_log());
 
                             return Err(());
@@ -714,8 +712,8 @@ impl SyntaxParser {
                     let new_arg_group = match args.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                                msg: "invalid operation".to_string(),
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                                arg_id: format!("[{}]", i),
                             }.get_log());
 
                             return Err(());
@@ -792,8 +790,8 @@ impl SyntaxParser {
                     let new_arg_id = match new_arg_ids.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                                msg: "invalid operation".to_string(),
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                                arg_id: format!("[{}]", i),
                             }.get_log());
 
                             return Err(());
@@ -803,8 +801,8 @@ impl SyntaxParser {
                     let new_arg_group = match args.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::InternalError {
-                                msg: "invalid operation".to_string(),
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                                arg_id: format!("[{}]", i),
                             }.get_log());
 
                             return Err(());
