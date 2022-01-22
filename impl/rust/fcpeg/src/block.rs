@@ -126,6 +126,7 @@ pub enum BlockParseLog {
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
     UnknownBlockID { pos: CharacterPosition, block_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
+    UnnecessaryBlockAliasName { pos: CharacterPosition, alias_name: String, },
     UnnecessaryLoopRangeItem { pos: CharacterPosition, msg: String },
     UnnecessaryUseCommand { pos: CharacterPosition, block_id: String },
 }
@@ -148,8 +149,9 @@ impl ConsoleLogger for BlockParseLog {
             BlockParseLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
             BlockParseLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at: {}", pos)),
             BlockParseLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
+            BlockParseLog::UnnecessaryBlockAliasName { pos, alias_name } => log!(Warning, format!("unnecessary block alias name"), format!("at:\t{}", pos), format!("alias name:\t{}", alias_name)),
             BlockParseLog::UnnecessaryLoopRangeItem { pos, msg } => log!(Warning, format!("unnecessary loop range item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
-            BlockParseLog::UnnecessaryUseCommand { pos, block_id } => log!(Warning, format!("unnecessary use command"), format!("at:\t{}", pos), format!("block id: {}", block_id)),
+            BlockParseLog::UnnecessaryUseCommand { pos, block_id } => log!(Warning, format!("unnecessary use command"), format!("at:\t{}", pos), format!("block id:\t{}", block_id)),
         }
     }
 }
@@ -521,7 +523,18 @@ impl BlockParser {
         };
 
         let block_alias_name = match cmd_node.find_first_child_node(vec![".Block.UseCmdBlockAlias"]) {
-            Some(v) => v.get_node_child_at(&self.cons, 0)?.join_child_leaf_values(),
+            Some(block_alias_node) => {
+                let block_alias_name = block_alias_node.get_node_child_at(&self.cons, 0)?.join_child_leaf_values();
+
+                if block_name == block_alias_name {
+                    self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryBlockAliasName {
+                        pos: block_alias_node.get_position(&self.cons)?,
+                        alias_name: block_name.clone(),
+                    }.get_log());
+                }
+
+                block_alias_name
+            },
             None => block_name.clone(),
         };
 
