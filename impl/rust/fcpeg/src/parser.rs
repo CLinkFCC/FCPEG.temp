@@ -278,7 +278,7 @@ impl SyntaxParser {
 
                 if tmp_max_count != -1 {
                     let max_num = match group.loop_count.max {
-                        Infinitable::Normal(v) => v as i32,
+                        Infinitable::Finite(v) => v as i32,
                         Infinitable::Infinite => -1,
                     };
 

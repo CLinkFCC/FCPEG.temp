@@ -127,7 +127,7 @@ impl Display for Rule {
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum Infinitable<T: Clone + Display + PartialEq + PartialOrd> {
-    Normal(T),
+    Finite(T),
     Infinite,
 }
 
@@ -140,7 +140,7 @@ impl<T: Clone + Display + PartialEq + PartialOrd> Infinitable<T> {
 impl<T: Clone + Display + PartialEq + PartialOrd> Display for Infinitable<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let s = match self {
-            Infinitable::Normal(v) => v.to_string(),
+            Infinitable::Finite(v) => v.to_string(),
             Infinitable::Infinite => "Infinite".to_string(),
         };
 
@@ -164,19 +164,19 @@ impl RuleElementLoopCount {
 
     pub fn from_symbol(value: &str) -> RuleElementLoopCount {
         return match value {
-            "?" => RuleElementLoopCount::new(0, Infinitable::Normal(1)),
+            "?" => RuleElementLoopCount::new(0, Infinitable::Finite(1)),
             "*" => RuleElementLoopCount::new(0, Infinitable::Infinite),
             "+" => RuleElementLoopCount::new(1, Infinitable::Infinite),
-            _ => RuleElementLoopCount::new(1, Infinitable::Normal(1)),
+            _ => RuleElementLoopCount::new(1, Infinitable::Finite(1)),
         }
     }
 
     pub fn get_single_loop() -> RuleElementLoopCount {
-        return RuleElementLoopCount::new(1, Infinitable::Normal(1));
+        return RuleElementLoopCount::new(1, Infinitable::Finite(1));
     }
 
     pub fn is_single_loop(&self) -> bool {
-        return self.min == 1 && self.max == Infinitable::Normal(1);
+        return self.min == 1 && self.max == Infinitable::Finite(1);
     }
 
     pub fn to_string(&self, is_loop_count: bool, prefix: &str, separator: &str, suffix: &str) -> String {
@@ -194,13 +194,13 @@ impl RuleElementLoopCount {
         }
 
         let min_count = if self.min == 0 { String::new() } else { self.min.to_string() };
-        let max_count = match self.max { Infinitable::Normal(max_num) => max_num.to_string(), Infinitable::Infinite => String::new(), };
+        let max_count = match self.max { Infinitable::Finite(max_num) => max_num.to_string(), Infinitable::Infinite => String::new(), };
         return format!("{}{}{}{}{}", prefix, min_count, separator, max_count, suffix);
     }
 
     pub fn to_tuple(&self) -> (usize, i32) {
         let max_num = match self.max {
-            Infinitable::Normal(num) => num as i32,
+            Infinitable::Finite(num) => num as i32,
             Infinitable::Infinite => -1,
         };
 

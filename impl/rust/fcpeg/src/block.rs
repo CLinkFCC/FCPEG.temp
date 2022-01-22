@@ -568,7 +568,7 @@ impl BlockParser {
                                             let max_str = max_num_node.join_child_leaf_values();
 
                                             match max_str.parse::<usize>() {
-                                                Ok(v) => (Infinitable::Normal(v), true),
+                                                Ok(v) => (Infinitable::Finite(v), true),
                                                 Err(_) => {
                                                     self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
                                                         pos: CharacterPosition::get_empty(),
@@ -594,17 +594,17 @@ impl BlockParser {
                                         return Err(());
                                     }
 
-                                    (Infinitable::Normal(min_num), false)
+                                    (Infinitable::Finite(min_num), false)
                                 },
                             };
 
                             let raw_loop_count_txt = match &max_num {
-                                Infinitable::Normal(v) => format!("{{{},{}}}", min_num, v),
+                                Infinitable::Finite(v) => format!("{{{},{}}}", min_num, v),
                                 Infinitable::Infinite => format!("{{{},}}", min_num),
                             };
 
                             match &max_num {
-                                Infinitable::Normal(max_v) => {
+                                Infinitable::Finite(max_v) => {
                                     if min_num > *max_v {
                                         // note: 最小回数が最大回数より大きかった場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
