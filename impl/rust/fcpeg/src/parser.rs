@@ -272,8 +272,6 @@ impl SyntaxParser {
         let (min_count, max_count) = match parent_elem_order {
             RuleElementOrder::Random(tmp_occurrence_count) => {
                 let (mut tmp_min_count, mut tmp_max_count) = tmp_occurrence_count.to_tuple();
-
-                // todo: 0 だった場合大丈夫かを確認
                 tmp_min_count += group.loop_range.min - 1;
 
                 if tmp_max_count != -1 {
@@ -894,7 +892,6 @@ impl SyntaxParser {
         return self.src_content.chars().skip(start_i).take(len).collect::<String>();
     }
 
-    // todo: 文字列と進めるインデックスのペアとしてキャッシュを取る (メモ化で解決できる)
     fn add_source_index_by_string(&mut self, expr_str: &String) {
         let mut new_line_indexes = Vec::<usize>::new();
         let mut char_i = 0usize;
