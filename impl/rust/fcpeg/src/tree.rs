@@ -454,15 +454,16 @@ impl SyntaxLeaf {
             .replace("\n", "\\n")
             .replace("\t", "\\t");
 
-        let ast_reflection_text = match &self.ast_reflection_style {
+        let ast_reflection_str = match &self.ast_reflection_style {
             ASTReflectionStyle::Reflection(elem_name) => format!("({})", elem_name.clone()),
             ASTReflectionStyle::NoReflection => "[hidden]".to_string(),
             ASTReflectionStyle::Expansion => "[expandable]".to_string(),
         };
 
-        let pos_text = format!("{}/{}/{}", self.pos.index, self.pos.line, self.pos.column);
+        let pos_str = format!("{}/{}/{}", self.pos.index, self.pos.line, self.pos.column);
+        let uuid_str = self.uuid.to_string()[..8].to_string();
 
-        writeln!(writer, "|{}- \"{}\" {} {}", "   |".repeat(nest), value, pos_text, ast_reflection_text).unwrap();
+        writeln!(writer, "|{}- \"{}\" {} {} *{}", "   |".repeat(nest), value, pos_str, ast_reflection_str, uuid_str).unwrap();
     }
 }
 
