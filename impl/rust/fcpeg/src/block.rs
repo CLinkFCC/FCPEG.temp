@@ -114,7 +114,7 @@ pub type BlockMap = HashMap<String, Box<Block>>;
 
 pub enum BlockParsingLog {
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
-    BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
+    BlockAliasNotFoundOrUsed { pos: CharacterPosition, block_alias_name: String },
     // ChildElementNotMatched { parent_uuid: Uuid, expected: String, },
     DuplicateBlockName { pos: CharacterPosition, block_name: String },
     DuplicateArgumentID { pos: CharacterPosition, arg_id: String },
@@ -139,7 +139,7 @@ impl ConsoleLogger for BlockParsingLog {
     fn get_log(&self) -> ConsoleLog {
         match self {
             BlockParsingLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
-            BlockParsingLog::BlockAliasNotFound { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
+            BlockParsingLog::BlockAliasNotFoundOrUsed { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found or used", block_alias_name), format!("at:\t{}", pos)),
             // BlockParsingLog::ChildElementNotMatched { parent_uuid, expected } => log!(Error, format!("child element not matched"), format!("parent:\t{}", parent_uuid), format!("expected:\t{}", expected)),
             BlockParsingLog::DuplicateBlockName { pos, block_name } => log!(Error, format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateArgumentID { pos, arg_id } => log!(Error, format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
@@ -231,6 +231,7 @@ impl BlockParser {
 
         let mut has_id_error = false;
 
+        println!("{:?}", used_block_ids.keys());
         for (each_block_id, each_pos) in *used_block_ids {
             if !block_id_map.contains(&each_block_id) {
                 cons.borrow_mut().append_log(BlockParsingLog::UnknownBlockID {
@@ -419,7 +420,12 @@ impl BlockParser {
                                 }
                             }
 
+                            // note: 先に use されたほうが優先; 警告が出れば弾く
                             if !disable_map_insert {
+                                if !self.used_block_ids.contains_key(&block_id) {
+                                    self.used_block_ids.insert(block_id.clone(), pos.clone());
+                                }
+
                                 self.block_alias_map.insert(block_alias_name.clone(), block_id);
                             }
                         },
@@ -1044,7 +1050,7 @@ impl BlockParser {
                     (new_id, block_name, rule_name.clone())
                 } else {
                     // note: ブロック名がエイリアスでない場合
-                    cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNotFound {
+                    cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNotFoundOrUsed {
                         pos: pos.clone(),
                         block_alias_name: block_name.to_string(),
                     }.get_log());
