@@ -6,7 +6,7 @@
     + use Block,
     + use Symbol,
 
-    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.LineEnd+#)* Symbol.LineEnd*# Symbol.Space*# Symbol.EOF#,
+    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* Symbol.LineEnd*# Symbol.Space*# Symbol.EOF#,
 }
 
 [Symbol]{
@@ -27,7 +27,7 @@
     + use Rule,
     + use Symbol,
 
-    Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.LineEnd+# (Cmd Symbol.LineEnd+#)* "}"#,
+    Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
     Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
     CommentCmd <- "%"# (!"," . : ",,")*## ","#,
     DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
