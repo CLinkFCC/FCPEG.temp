@@ -174,6 +174,7 @@ pub struct BlockParser {
     used_block_ids: Box<HashMap<String, CharacterPosition>>,
     used_rule_ids: Box<HashMap<String, CharacterPosition>>,
     block_name: String,
+    // note: <ブロックエイリアス名, ブロック ID>
     block_alias_map: HashMap<String, String>,
     block_id_map: Vec::<String>,
     file_path: String,
@@ -189,7 +190,6 @@ impl BlockParser {
         let mut parser = SyntaxParser::new(cons.clone(), rule_map, enable_memoization)?;
         let mut block_maps = Vec::<BlockMap>::new();
 
-        // note: HashMap<エイリアス名, ブロックマップ>
         let mut used_block_ids = Box::new(HashMap::<String, CharacterPosition>::new());
         let mut used_rule_ids = Box::new(HashMap::<String, CharacterPosition>::new());
         let mut block_id_map = Vec::<String>::new();
@@ -333,6 +333,7 @@ impl BlockParser {
 
             self.block_id_map.push(format!("{}.{}", self.file_alias_name, self.block_name));
             block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds)));
+            // note: ファイルを抜けるためクリア
             self.block_alias_map.clear();
         }
 
@@ -387,17 +388,39 @@ impl BlockParser {
                     match &use_cmd {
                         BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
                             let block_id = format!("{}.{}", file_alias_name, block_name);
-                            self.block_alias_map.insert(block_alias_name.clone(), block_id.clone());
+                            let used_from = format!("{}.{}", self.file_alias_name, self.block_name);
 
-                            if block_id == format!("{}.{}", self.file_alias_name, self.block_name) {
+                            // note: ブロック ID が自身のブロックと同じであれば警告
+                            if block_id == used_from {
                                 self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
                                     pos: pos.clone(),
                                     msg: format!("block '{}' is the self block", block_id),
                                 }.get_log());
                             }
 
-                            if !self.used_block_ids.contains_key(&block_id) {
-                                self.used_block_ids.insert(block_id, pos.clone());
+                            let mut disable_map_insert = false;
+
+                            // note: ブロック ID / ブロックエイリアスがすでに use されていれば警告
+                            for (each_alias_name, each_id) in &self.block_alias_map {
+                                if *each_id == block_id {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
+                                        pos: pos.clone(),
+                                        msg: format!("block '{}' is already used", block_id),
+                                    }.get_log());
+
+                                    disable_map_insert = true;
+                                } else if each_alias_name == block_alias_name {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
+                                        pos: pos.clone(),
+                                        msg: format!("block alias '{}' is already used", block_alias_name),
+                                    }.get_log());
+
+                                    disable_map_insert = true;
+                                }
+                            }
+
+                            if !disable_map_insert {
+                                self.block_alias_map.insert(block_alias_name.clone(), block_id);
                             }
                         },
                         _ => (),
