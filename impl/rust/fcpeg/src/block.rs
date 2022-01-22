@@ -64,7 +64,7 @@ macro_rules! choice {
             for opt in $options {
                 match opt {
                     "&" | "!" => group.lookahead_kind = RuleElementLookaheadKind::new(opt),
-                    "?" | "*" | "+" => group.loop_count = RuleElementLoopCount::from_symbol(opt),
+                    "?" | "*" | "+" => group.loop_range = RuleElementLoopRange::from_symbol(opt),
                     "#" => group.ast_reflection_style = ASTReflectionStyle::NoReflection,
                     "##" => group.ast_reflection_style = ASTReflectionStyle::Expansion,
                     ":" => group.kind = RuleGroupKind::Choice,
@@ -94,7 +94,7 @@ macro_rules! expr {
             $(
                 match $option {
                     "&" | "!" => expr.lookahead_kind = RuleElementLookaheadKind::new($option),
-                    "?" | "*" | "+" => expr.loop_count = RuleElementLoopCount::from_symbol($option),
+                    "?" | "*" | "+" => expr.loop_range = RuleElementLoopRange::from_symbol($option),
                     "#" => expr.ast_reflection_style = ASTReflectionStyle::NoReflection,
                     "##" => expr.ast_reflection_style = ASTReflectionStyle::Expansion,
                     _ if $option.len() >= 2 && $option.starts_with("#") =>
@@ -535,7 +535,7 @@ impl BlockParser {
             };
 
             // note: Loop ノード
-            let loop_count = match each_seq_elem_node.find_first_child_node(vec![".Rule.Loop"]) {
+            let loop_range = match each_seq_elem_node.find_first_child_node(vec![".Rule.Loop"]) {
                 Some(v) => {
                     match v.get_child_at(&self.cons, 0)? {
                         SyntaxNodeElement::Node(range_node) => {
@@ -598,7 +598,7 @@ impl BlockParser {
                                 },
                             };
 
-                            let raw_loop_count_txt = match &max_num {
+                            let raw_loop_range_txt = match &max_num {
                                 Infinitable::Finite(v) => format!("{{{},{}}}", min_num, v),
                                 Infinitable::Infinite => format!("{{{},}}", min_num),
                             };
@@ -649,13 +649,13 @@ impl BlockParser {
                                         // note: 最小回数と最大回数が同じだった場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
                                             pos: CharacterPosition::get_empty(),
-                                            msg: format!("modify '{}' to '{{{}}}'", raw_loop_count_txt, min_num),
+                                            msg: format!("modify '{}' to '{{{}}}'", raw_loop_range_txt, min_num),
                                         }.get_log());
                                     } else if is_min_num_specified && min_num == 0 {
                                         // note: 最小回数に 0 が指定された場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
                                             pos: CharacterPosition::get_empty(),
-                                            msg: format!("modify '{}' to '{{,{}}}'", raw_loop_count_txt, max_v),
+                                            msg: format!("modify '{}' to '{{,{}}}'", raw_loop_range_txt, max_v),
                                         }.get_log());
                                     }
                                 },
@@ -663,17 +663,17 @@ impl BlockParser {
                                     // note: 最小回数に 0 が指定された場合
                                     self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
                                         pos: CharacterPosition::get_empty(),
-                                        msg: format!("modify '{}' to '{{,}}'", raw_loop_count_txt),
+                                        msg: format!("modify '{}' to '{{,}}'", raw_loop_range_txt),
                                     }.get_log());
                                 },
                                 _ => (),
                             }
 
-                            RuleElementLoopCount::new(min_num, max_num)
+                            RuleElementLoopRange::new(min_num, max_num)
                         },
                         SyntaxNodeElement::Leaf(leaf) => {
                             match leaf.value.as_str() {
-                                "?" | "*" | "+" => RuleElementLoopCount::from_symbol(&leaf.value),
+                                "?" | "*" | "+" => RuleElementLoopRange::from_symbol(&leaf.value),
                                 _ => {
                                     self.cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
                                         cause: format!("unknown lookahead kind"),
@@ -685,7 +685,7 @@ impl BlockParser {
                         }
                     }
                 },
-                None => RuleElementLoopCount::get_single_loop(),
+                None => RuleElementLoopRange::get_single_loop(),
             };
 
             // note: ASTReflectionStyle ノード
@@ -727,14 +727,14 @@ impl BlockParser {
                         ".Rule.Choice" => {
                             let mut new_choice = Box::new(self.to_rule_choice_elem(choice_or_expr_node.get_node_child_at(&self.cons, 0)?, generics_args)?);
                             new_choice.lookahead_kind = lookahead_kind;
-                            new_choice.loop_count = loop_count;
+                            new_choice.loop_range = loop_range;
                             new_choice.ast_reflection_style = ast_reflection_style;
                             RuleElement::Group(new_choice)
                         },
                         ".Rule.Expr" => {
                             let mut new_expr = Box::new(self.to_rule_expr_elem(choice_or_expr_node, generics_args)?);
                             new_expr.lookahead_kind = lookahead_kind;
-                            new_expr.loop_count = loop_count;
+                            new_expr.loop_range = loop_range;
                             new_expr.ast_reflection_style = ast_reflection_style;
                             RuleElement::Expression(new_expr)
                         },

@@ -20,7 +20,7 @@ pub enum SyntaxParseLog {
     InvalidFunctionArgumentLength { arg_ids: Vec<String> },
     InvalidSyntaxTreeStructure { cause: String },
     NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
-    TooLongRepetition { max_loop_count: usize },
+    TooLongRepetition { loop_limit: usize },
     UnknownArgumentID { arg_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
 }
@@ -35,7 +35,7 @@ impl ConsoleLogger for SyntaxParseLog {
             SyntaxParseLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, &format!("invalid function argument length ({:?})", arg_ids)),
             SyntaxParseLog::InvalidSyntaxTreeStructure { cause } => log!(Error, &format!("invalid syntax tree structure ({})", cause)),
             SyntaxParseLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, &format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
-            SyntaxParseLog::TooLongRepetition { max_loop_count } => log!(Error, &format!("too long repetition over {}", max_loop_count)),
+            SyntaxParseLog::TooLongRepetition { loop_limit } => log!(Error, &format!("too long repetition over {}", loop_limit)),
             SyntaxParseLog::UnknownArgumentID { arg_id } => log!(Error, &format!("unknown argument id '{}'", arg_id)),
             SyntaxParseLog::UnknownRuleID { pos, rule_id } => log!(Error, &format!("unknown rule id '{}'", rule_id), &format!("at: {}", pos)),
         };
@@ -97,7 +97,7 @@ pub struct SyntaxParser {
     src_latest_line_i: usize,
     src_path: String,
     src_content: String,
-    max_loop_count: usize,
+    loop_limit: usize,
     arg_maps: Box<Vec<ArgumentMap>>,
     rule_stack: Box<Vec<(CharacterPosition, String)>>,
     regex_map: Box<HashMap<String, Regex>>,
@@ -115,7 +115,7 @@ impl SyntaxParser {
             src_latest_line_i: 0,
             src_path: String::new(),
             src_content: String::new(),
-            max_loop_count: 65536,
+            loop_limit: 65536,
             arg_maps: Box::new(Vec::new()),
             rule_stack: Box::new(Vec::new()),
             regex_map: Box::new(HashMap::new()),
@@ -274,10 +274,10 @@ impl SyntaxParser {
                 let (mut tmp_min_count, mut tmp_max_count) = tmp_occurrence_count.to_tuple();
 
                 // todo: 0 だった場合大丈夫かを確認
-                tmp_min_count += group.loop_count.min - 1;
+                tmp_min_count += group.loop_range.min - 1;
 
                 if tmp_max_count != -1 {
-                    let max_num = match group.loop_count.max {
+                    let max_num = match group.loop_range.max {
                         Infinitable::Finite(v) => v as i32,
                         Infinitable::Infinite => -1,
                     };
@@ -287,7 +287,7 @@ impl SyntaxParser {
 
                 (tmp_min_count, tmp_max_count)
             },
-            RuleElementOrder::Sequential => group.loop_count.to_tuple(),
+            RuleElementOrder::Sequential => group.loop_range.to_tuple(),
         };
 
         if max_count != -1 && min_count as i32 > max_count {
@@ -302,9 +302,9 @@ impl SyntaxParser {
         let mut loop_count = 0i32;
 
         while self.src_i < self.src_content.chars().count() {
-            if loop_count > self.max_loop_count as i32 {
+            if loop_count > self.loop_limit as i32 {
                 self.cons.borrow_mut().append_log(SyntaxParseLog::TooLongRepetition {
-                    max_loop_count: self.max_loop_count as usize,
+                    loop_limit: self.loop_limit as usize,
                 }.get_log());
 
                 return Err(());
@@ -531,7 +531,7 @@ impl SyntaxParser {
     }
 
     fn parse_loop_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
-        let (min_count, max_count) = expr.loop_count.to_tuple();
+        let (min_count, max_count) = expr.loop_range.to_tuple();
 
         if max_count != -1 && min_count as i32 > max_count {
             self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
@@ -545,9 +545,9 @@ impl SyntaxParser {
         let mut loop_count = 0usize;
 
         while self.src_i < self.src_content.chars().count() {
-            if loop_count > self.max_loop_count {
+            if loop_count > self.loop_limit {
                 self.cons.borrow_mut().append_log(SyntaxParseLog::TooLongRepetition {
-                    max_loop_count: self.max_loop_count as usize
+                    loop_limit: self.loop_limit as usize
                 }.get_log());
 
                 return Err(());

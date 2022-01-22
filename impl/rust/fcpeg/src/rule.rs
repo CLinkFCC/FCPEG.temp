@@ -149,30 +149,30 @@ impl<T: Clone + Display + PartialEq + PartialOrd> Display for Infinitable<T> {
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
-pub struct RuleElementLoopCount {
+pub struct RuleElementLoopRange {
     pub min: usize,
     pub max: Infinitable<usize>,
 }
 
-impl RuleElementLoopCount {
-    pub fn new(min: usize, max: Infinitable<usize>) -> RuleElementLoopCount {
-        return RuleElementLoopCount {
+impl RuleElementLoopRange {
+    pub fn new(min: usize, max: Infinitable<usize>) -> RuleElementLoopRange {
+        return RuleElementLoopRange {
             min: min,
             max: max,
         };
     }
 
-    pub fn from_symbol(value: &str) -> RuleElementLoopCount {
+    pub fn from_symbol(value: &str) -> RuleElementLoopRange {
         return match value {
-            "?" => RuleElementLoopCount::new(0, Infinitable::Finite(1)),
-            "*" => RuleElementLoopCount::new(0, Infinitable::Infinite),
-            "+" => RuleElementLoopCount::new(1, Infinitable::Infinite),
-            _ => RuleElementLoopCount::new(1, Infinitable::Finite(1)),
+            "?" => RuleElementLoopRange::new(0, Infinitable::Finite(1)),
+            "*" => RuleElementLoopRange::new(0, Infinitable::Infinite),
+            "+" => RuleElementLoopRange::new(1, Infinitable::Infinite),
+            _ => RuleElementLoopRange::new(1, Infinitable::Finite(1)),
         }
     }
 
-    pub fn get_single_loop() -> RuleElementLoopCount {
-        return RuleElementLoopCount::new(1, Infinitable::Finite(1));
+    pub fn get_single_loop() -> RuleElementLoopRange {
+        return RuleElementLoopRange::new(1, Infinitable::Finite(1));
     }
 
     pub fn is_single_loop(&self) -> bool {
@@ -210,7 +210,7 @@ impl RuleElementLoopCount {
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum RuleElementOrder {
-    Random(RuleElementLoopCount),
+    Random(RuleElementLoopRange),
     Sequential,
 }
 
@@ -223,7 +223,7 @@ impl RuleElementOrder {
 impl Display for RuleElementOrder {
     fn fmt(&self, f: &mut Formatter) -> Result {
         return match self {
-            RuleElementOrder::Random(loop_count) => write!(f, "Random({})", loop_count.to_string(true, "{", ",", "}")),
+            RuleElementOrder::Random(loop_range) => write!(f, "Random({})", loop_range.to_string(true, "{", ",", "}")),
             RuleElementOrder::Sequential => write!(f, "Sequential"),
         }
     }
@@ -268,7 +268,7 @@ pub struct RuleGroup {
     pub sub_elems: Vec<RuleElement>,
     pub ast_reflection_style: ASTReflectionStyle,
     pub lookahead_kind: RuleElementLookaheadKind,
-    pub loop_count: RuleElementLoopCount,
+    pub loop_range: RuleElementLoopRange,
     pub elem_order: RuleElementOrder,
 }
 
@@ -279,7 +279,7 @@ impl RuleGroup {
             kind: kind,
             sub_elems: Vec::new(),
             lookahead_kind: RuleElementLookaheadKind::None,
-            loop_count: RuleElementLoopCount::get_single_loop(),
+            loop_range: RuleElementLoopRange::get_single_loop(),
             ast_reflection_style: ASTReflectionStyle::Reflection(String::new()),
             elem_order: RuleElementOrder::Sequential,
         };
@@ -322,8 +322,8 @@ impl Display for RuleGroup {
             },
             RuleGroupKind::Sequence => " ",
         };
-        let loop_text = self.loop_count.to_string(true, "{", ",", "}");
-        let order_text = match &self.elem_order { RuleElementOrder::Random(loop_count) => loop_count.to_string(false, "^[", "-", "]"), RuleElementOrder::Sequential => String::new(), };
+        let loop_text = self.loop_range.to_string(true, "{", ",", "}");
+        let order_text = match &self.elem_order { RuleElementOrder::Random(loop_range) => loop_range.to_string(false, "^[", "-", "]"), RuleElementOrder::Sequential => String::new(), };
 
         return write!(f, "{}", format!("{}({}){}{}{}", self.lookahead_kind, seq_text.join(separator), loop_text, order_text, self.ast_reflection_style));
     }
@@ -363,7 +363,7 @@ pub struct RuleExpression {
     pub value: String,
     pub ast_reflection_style: ASTReflectionStyle,
     pub lookahead_kind: RuleElementLookaheadKind,
-    pub loop_count: RuleElementLoopCount,
+    pub loop_range: RuleElementLoopRange,
 }
 
 impl RuleExpression {
@@ -374,14 +374,14 @@ impl RuleExpression {
             value: value,
             ast_reflection_style: ASTReflectionStyle::NoReflection,
             lookahead_kind: RuleElementLookaheadKind::None,
-            loop_count: RuleElementLoopCount::get_single_loop(),
+            loop_range: RuleElementLoopRange::get_single_loop(),
         }
     }
 }
 
 impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        let loop_text = self.loop_count.to_string(true, "{", ",", "}");
+        let loop_text = self.loop_range.to_string(true, "{", ",", "}");
         let value_text = match self.kind.clone() {
             RuleExpressionKind::ArgId => format!("${}", self.value),
             RuleExpressionKind::CharClass => self.value.clone(),
