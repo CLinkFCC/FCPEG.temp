@@ -54,7 +54,7 @@
 
     Lookahead <- "!" : "&",
     Loop <- "?" : "*" : "+" : LoopRange,
-    LoopRange <- "{"# Symbol.Div*# (Num : "")## Symbol.CommaDiv# (Num : "")## Symbol.Div*# "}"#,
+    LoopRange <- "{"# Symbol.Div*# Num?#MinNum (Symbol.CommaDiv# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "}"#,
     RandomOrder <- "^"# RandomOrderRange?,
     RandomOrderRange <- "["# Symbol.Div*# Num? Symbol.CommaDiv# Num? Symbol.Div*# "]"#,
     ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,

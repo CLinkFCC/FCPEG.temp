@@ -68,6 +68,8 @@ macro_rules! choice {
                     "#" => group.ast_reflection_style = ASTReflectionStyle::NoReflection,
                     "##" => group.ast_reflection_style = ASTReflectionStyle::Expansion,
                     ":" => group.kind = RuleGroupKind::Choice,
+                    _ if opt.len() >= 2 && opt.starts_with("#") =>
+                        group.ast_reflection_style = ASTReflectionStyle::Reflection(opt[1..].to_string()),
                     _ => panic!(),
                 }
             }
@@ -95,6 +97,8 @@ macro_rules! expr {
                     "?" | "*" | "+" => expr.loop_count = RuleElementLoopCount::from_symbol($option),
                     "#" => expr.ast_reflection_style = ASTReflectionStyle::NoReflection,
                     "##" => expr.ast_reflection_style = ASTReflectionStyle::Expansion,
+                    _ if $option.len() >= 2 && $option.starts_with("#") =>
+                        expr.ast_reflection_style = ASTReflectionStyle::Reflection($option[1..].to_string()),
                     _ => panic!(),
                 }
             )*
@@ -534,43 +538,64 @@ impl BlockParser {
             let loop_count = match each_seq_elem_node.find_first_child_node(vec![".Rule.Loop"]) {
                 Some(v) => {
                     match v.get_child_at(&self.cons, 0)? {
-                        SyntaxNodeElement::Node(node) => {
-                            let (min_num, is_zero_specified) = match node.get_child_at(&self.cons, 0)? {
-                                SyntaxNodeElement::Node(min_node) => {
-                                    let min_str = min_node.join_child_leaf_values();
+                        SyntaxNodeElement::Node(range_node) => {
+                            range_node.print(false);
+
+                            let (min_num, is_min_num_specified) = match range_node.find_child_nodes(vec!["MinNum"]).get(0) {
+                                Some(min_num_node) => {
+                                    let min_str = min_num_node.join_child_leaf_values();
 
                                     match min_str.parse::<usize>() {
                                         Ok(v) => (v, true),
                                         Err(_) => {
                                             self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
                                                 pos: CharacterPosition::get_empty(),
-                                                msg: format!("'{}' is not a number", min_str),
+                                                msg: format!("'{}' is too long or not a number", min_str),
                                             }.get_log());
 
                                             return Err(());
                                         },
                                     }
                                 },
-                                SyntaxNodeElement::Leaf(_) => (0usize, false),
+                                None => (0usize, false),
                             };
 
-                            let max_num = match node.get_child_at(&self.cons, 1)? {
-                                SyntaxNodeElement::Node(max_node) => {
-                                    let max_str = max_node.join_child_leaf_values();
+                            let (max_num, is_max_num_specified) = match range_node.find_child_nodes(vec!["MaxNumGroup"]).get(0) {
+                                Some(max_node_group) => {
+                                    match max_node_group.find_child_nodes(vec!["MaxNum"]).get(0) {
+                                        Some(max_num_node) => {
+                                            // note: {n,m} の場合 (#MaxNumGroup 内に #MaxNum が存在する)
+                                            let max_str = max_num_node.join_child_leaf_values();
 
-                                    match max_str.parse::<usize>() {
-                                        Ok(v) => Infinitable::Normal(v),
-                                        Err(_) => {
-                                            self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
-                                                pos: CharacterPosition::get_empty(),
-                                                msg: format!("'{}' is not a number", max_str),
-                                            }.get_log());
+                                            match max_str.parse::<usize>() {
+                                                Ok(v) => (Infinitable::Normal(v), true),
+                                                Err(_) => {
+                                                    self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
+                                                        pos: CharacterPosition::get_empty(),
+                                                        msg: format!("'{}' is too long or not a number", max_str),
+                                                    }.get_log());
 
-                                            return Err(());
+                                                    return Err(());
+                                                },
+                                            }
                                         },
+                                        None => (Infinitable::Infinite, false),
                                     }
                                 },
-                                SyntaxNodeElement::Leaf(_) => Infinitable::Infinite,
+                                // note: {n} の場合 (#MaxNumGroup が存在しない)
+                                None => {
+                                    if !is_min_num_specified {
+                                        // note: 最小, 最大回数どちらも指定されていない場合
+                                        self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
+                                            pos: CharacterPosition::get_empty(),
+                                            msg: format!("no number specified"),
+                                        }.get_log());
+
+                                        return Err(());
+                                    }
+
+                                    (Infinitable::Normal(min_num), false)
+                                },
                             };
 
                             let raw_loop_count_txt = match &max_num {
@@ -579,46 +604,69 @@ impl BlockParser {
                             };
 
                             match &max_num {
-                                Infinitable::Normal(v) => {
-                                    if min_num > *v {
+                                Infinitable::Normal(max_v) => {
+                                    if min_num > *max_v {
                                         // note: 最小回数が最大回数より大きかった場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
                                             pos: CharacterPosition::get_empty(),
-                                            msg: format!("min value '{}' is bigger than max value '{}'", min_num, v),
+                                            msg: format!("min value '{}' is bigger than max value '{}'", min_num, max_v),
                                         }.get_log());
 
                                         return Err(());
                                     }
 
-                                    if *v == 0 {
-                                        // note: 最大回数に 0 が指定された場合
-                                        self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
+                                    if is_min_num_specified && !is_max_num_specified && min_num == 0 && *max_v == 0 {
+                                        // note: {0} の場合
+                                        self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
                                             pos: CharacterPosition::get_empty(),
-                                            msg: format!("invalid max number '{}'", min_num),
+                                            msg: format!("loop range '{{0}}' is invalid"),
                                         }.get_log());
-                                    } else if min_num == *v {
+
+                                        return Err(());
+                                    } else if min_num == 1 && *max_v == 1 {
+                                        if is_min_num_specified && !is_max_num_specified {
+                                            // note: {1} の場合
+                                            self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
+                                                pos: CharacterPosition::get_empty(),
+                                                msg: format!("loop range '{{1}}' is unnecessary"),
+                                            }.get_log());
+                                        } else {
+                                            // note: {1,1} の場合
+                                            self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
+                                                pos: CharacterPosition::get_empty(),
+                                                msg: format!("loop range '{{1,1}}' is unnecessary"),
+                                            }.get_log());
+                                        }
+                                    } else if *max_v == 0 {
+                                        // note: 最大回数に 0 が指定された場合
+                                        self.cons.borrow_mut().append_log(BlockParseLog::InvalidLoopCountItem {
+                                            pos: CharacterPosition::get_empty(),
+                                            msg: format!("max number '{}' is invalid", min_num),
+                                        }.get_log());
+
+                                        return Err(());
+                                    } else if is_max_num_specified && min_num == *max_v {
                                         // note: 最小回数と最大回数が同じだった場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
                                             pos: CharacterPosition::get_empty(),
                                             msg: format!("modify '{}' to '{{{}}}'", raw_loop_count_txt, min_num),
                                         }.get_log());
-                                    } else if is_zero_specified {
+                                    } else if is_min_num_specified && min_num == 0 {
                                         // note: 最小回数に 0 が指定された場合
                                         self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
                                             pos: CharacterPosition::get_empty(),
-                                            msg: format!("modify '{}' to '{{,{}}}'", raw_loop_count_txt, v),
+                                            msg: format!("modify '{}' to '{{,{}}}'", raw_loop_count_txt, max_v),
                                         }.get_log());
                                     }
                                 },
-                                _ => {
-                                    if is_zero_specified {
-                                        // note: 最小回数に 0 が指定された場合
-                                        self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
-                                            pos: CharacterPosition::get_empty(),
-                                            msg: format!("modify '{}' to '{{,}}'", raw_loop_count_txt),
-                                        }.get_log());
-                                    }
+                                Infinitable::Infinite if is_min_num_specified && min_num == 0 => {
+                                    // note: 最小回数に 0 が指定された場合
+                                    self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryLoopCountItem {
+                                        pos: CharacterPosition::get_empty(),
+                                        msg: format!("modify '{}' to '{{,}}'", raw_loop_count_txt),
+                                    }.get_log());
                                 },
+                                _ => (),
                             }
 
                             RuleElementLoopCount::new(min_num, max_num)
@@ -1499,35 +1547,18 @@ impl FCPEGBlock {
             },
         };
 
-        // code: LoopRange <- "{"# Symbol.Div*# (Num : "")## Symbol.CommaDiv# (Num : "")## Symbol.Div*# "}"#,
+        // code: LoopRange <- "{"# Symbol.Div*# Num?#MinNum (Symbol.CommaDiv# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "}"#,
         let loop_range_rule = rule!{
             ".Rule.LoopRange",
             choice!{
                 vec![],
                 expr!(String, "{", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Rule.Num", "?", "#MinNum"),
                 choice!{
-                    vec![":"],
-                    choice!{
-                        vec![],
-                        expr!(Id, ".Rule.Num", "##"),
-                    },
-                    choice!{
-                        vec!["##"],
-                        expr!(String, ""),
-                    },
-                },
-                expr!(Id, ".Symbol.CommaDiv", "#"),
-                choice!{
-                    vec![":"],
-                    choice!{
-                        vec![],
-                        expr!(Id, ".Rule.Num", "##"),
-                    },
-                    choice!{
-                        vec!["##"],
-                        expr!(String, ""),
-                    },
+                    vec!["?", "#MaxNumGroup"],
+                    expr!(Id, ".Symbol.CommaDiv", "#"),
+                    expr!(Id, ".Rule.Num", "?", "#MaxNum"),
                 },
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "}", "#"),
