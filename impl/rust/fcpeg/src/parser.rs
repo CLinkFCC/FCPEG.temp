@@ -13,7 +13,6 @@ use rustnutlib::console::*;
 use uuid::Uuid;
 
 pub enum SyntaxParseLog {
-    Unknown {},
     ChoiceOrExpressionChildNotMatched { parent_uuid: Uuid },
     InternalError { msg: String },
     InvalidCharClassFormat { value: String },
@@ -30,7 +29,6 @@ pub enum SyntaxParseLog {
 impl ConsoleLogger for SyntaxParseLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            SyntaxParseLog::Unknown {} => log!(Error, "unknown error"),
             SyntaxParseLog::InternalError { msg } => log!(Error, format!("internal error: {}", msg)),
             SyntaxParseLog::ChoiceOrExpressionChildNotMatched { parent_uuid } => log!(Error, format!("choice or expression child not matched"), format!("parent: {}", parent_uuid)),
             SyntaxParseLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),

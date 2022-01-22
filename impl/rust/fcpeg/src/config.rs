@@ -12,9 +12,7 @@ type PropertyMap = HashMap<String, (Vec<String>, PropertySubMap)>;
 type PropertySubMap = HashMap::<String, Vec<String>>;
 
 pub enum ConfigurationLog {
-    Unknown {},
     DuplicatePropertyName { prop_name: String },
-    FileError { err: FileError },
     InvalidPropertyValue { prop_name: String, prop_value: String },
     InvalidPropertyValueLength { prop_name: String },
     InvalidSyntax { line: usize, msg: String },
@@ -25,9 +23,7 @@ pub enum ConfigurationLog {
 impl ConsoleLogger for ConfigurationLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            ConfigurationLog::Unknown {} => log!(Error, "unknown"),
             ConfigurationLog::DuplicatePropertyName { prop_name } => log!(Error, "duplicate property name", format!("property name:\t{}", prop_name)),
-            ConfigurationLog::FileError { err } => err.get_log(),
             ConfigurationLog::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
             ConfigurationLog::InvalidPropertyValueLength { prop_name } => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
             ConfigurationLog::InvalidSyntax { line, msg } => log!(Error, "invalid syntax", format!("{}", msg), format!("line:\t{}", line)),
