@@ -199,8 +199,6 @@ impl BlockParser {
             };
 
             let tree = Box::new(block_parser.to_syntax_tree(&mut parser)?);
-            // todo: rem
-            tree.print(false);
             block_maps.push(block_parser.to_block_map(tree)?);
 
             if block_parser.file_alias_name == "" {
@@ -376,8 +374,8 @@ impl BlockParser {
                     let use_cmd = self.to_use_cmd(cmd_node)?;
 
                     match &use_cmd {
-                        BlockCommand::Use { pos, file_alias_name: _, block_name, block_alias_name } => {
-                            let block_id = format!("{}.{}", self.file_alias_name, block_name);
+                        BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
+                            let block_id = format!("{}.{}", file_alias_name, block_name);
                             self.block_alias_map.insert(block_alias_name.clone(), block_id.clone());
 
                             if !self.used_block_ids.contains_key(&block_id) {
@@ -501,26 +499,26 @@ impl BlockParser {
         let raw_id = self.to_chain_id(cmd_node.get_node_child_at(&self.cons, 0)?)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
-        let (file_alias_name, block_alias_id) = match cmd_node.find_first_child_node(vec![".Block.UseCmdBlockAlias"]) {
-            Some(v) => (divided_raw_id.get(0).unwrap().to_string(), v.get_node_child_at(&self.cons, 0)?.join_child_leaf_values()),
-            None => {
-                match divided_raw_id.len() {
-                    1 => (self.file_alias_name.clone(), divided_raw_id.get(0).unwrap().to_string()),
-                    2 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
-                    _ => {
-                        self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
-                            msg: "invalid chain ID length on use command".to_string(),
-                        }.get_log());
+        let (file_alias_name, block_name) = match divided_raw_id.len() {
+            1 => (self.file_alias_name.clone(), divided_raw_id.get(0).unwrap().to_string()),
+            2 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
+            _ => {
+                self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
+                    msg: "invalid chain ID length on use command".to_string(),
+                }.get_log());
 
-                        return Err(());
-                    },
-                }
-            }
+                return Err(());
+            },
+        };
+
+        let block_alias_name = match cmd_node.find_first_child_node(vec![".Block.UseCmdBlockAlias"]) {
+            Some(v) => v.get_node_child_at(&self.cons, 0)?.join_child_leaf_values(),
+            None => block_name.clone(),
         };
 
         return match divided_raw_id.len() {
-            1 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: divided_raw_id.get(0).unwrap().to_string(), block_alias_name: block_alias_id }),
-            2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: divided_raw_id.get(1).unwrap().to_string(), block_alias_name: block_alias_id }),
+            1 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
+            2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
             _ => {
                 self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                     msg: "invalid chain ID length on use command".to_string(),
