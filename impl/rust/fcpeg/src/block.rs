@@ -121,14 +121,14 @@ pub enum BlockParseLog {
     InvalidID { pos: CharacterPosition, id: String },
     InvalidLoopRangeItem { pos: CharacterPosition, msg: String },
     NamingRuleViolation { pos: CharacterPosition, id: String },
-    NoStartCommandInMainBlock {},
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
     UnknownBlockID { pos: CharacterPosition, block_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
     UnnecessaryBlockAliasName { pos: CharacterPosition, alias_name: String, },
     UnnecessaryLoopRangeItem { pos: CharacterPosition, msg: String },
-    UnnecessaryUseCommand { pos: CharacterPosition, block_id: String },
+    UnnecessaryStartCommand { pos: CharacterPosition, msg: String },
+    UnnecessaryUseCommand { pos: CharacterPosition, msg: String },
 }
 
 impl ConsoleLogger for BlockParseLog {
@@ -144,20 +144,22 @@ impl ConsoleLogger for BlockParseLog {
             BlockParseLog::InvalidID { pos, id } => log!(Error, format!("invalid id '{}'", id), format!("at:\t{}", pos)),
             BlockParseLog::InvalidLoopRangeItem { pos, msg } => log!(Error, format!("invalid loop range item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParseLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
-            BlockParseLog::NoStartCommandInMainBlock {} => log!(Error, "no start command in main block"),
             BlockParseLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParseLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
             BlockParseLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at: {}", pos)),
             BlockParseLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
             BlockParseLog::UnnecessaryBlockAliasName { pos, alias_name } => log!(Warning, format!("unnecessary block alias name"), format!("at:\t{}", pos), format!("alias name:\t{}", alias_name)),
             BlockParseLog::UnnecessaryLoopRangeItem { pos, msg } => log!(Warning, format!("unnecessary loop range item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
-            BlockParseLog::UnnecessaryUseCommand { pos, block_id } => log!(Warning, format!("unnecessary use command"), format!("at:\t{}", pos), format!("block id:\t{}", block_id)),
+            BlockParseLog::UnnecessaryStartCommand { pos, msg } => log!(Warning, format!("unnecessary start command"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
+            BlockParseLog::UnnecessaryUseCommand { pos, msg } => log!(Warning, format!("unnecessary use command"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
         }
     }
 }
 
 // note: プリミティブ関数の名前一覧
 const PRIM_FUNC_NAMES: &[&'static str] = &["JOIN"];
+// note: デフォルトの開始規則 ID
+const DEFAULT_START_RULE_ID: &'static str = ".Main.Main";
 
 pub struct BlockParser {
     cons: Rc<RefCell<Console>>,
@@ -214,13 +216,12 @@ impl BlockParser {
             block_id_map = block_parser.block_id_map;
         }
 
-        let rule_map = match start_rule_id {
-            Some(id) => Box::new(RuleMap::new(block_maps, id)?),
-            None => {
-                cons.borrow_mut().append_log(BlockParseLog::NoStartCommandInMainBlock {}.get_log());
-                return Err(());
-            },
+        let start_rule_id_str = match start_rule_id {
+            Some(v) => v,
+            None => DEFAULT_START_RULE_ID.to_string(),
         };
+
+        let rule_map = Box::new(RuleMap::new(block_maps, start_rule_id_str)?);
 
         let mut has_id_error = false;
 
@@ -385,7 +386,7 @@ impl BlockParser {
                             if block_id == format!("{}.{}", self.file_alias_name, self.block_name) {
                                 self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryUseCommand {
                                     pos: pos.clone(),
-                                    block_id: block_id.clone(),
+                                    msg: format!("block '{}' is the self block", block_id),
                                 }.get_log());
                             }
 
@@ -490,9 +491,9 @@ impl BlockParser {
         let raw_id = self.to_chain_id(raw_id_node)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
-        let cmd = match divided_raw_id.len() {
-            2 => BlockCommand::Start { pos: cmd_node.get_position(&self.cons)?, file_alias_name: String::new(), block_name: divided_raw_id.get(0).unwrap().to_string(), rule_name: divided_raw_id.get(1).unwrap().to_string() },
-            3 => BlockCommand::Start { pos: cmd_node.get_position(&self.cons)?, file_alias_name: divided_raw_id.get(0).unwrap().to_string(), block_name: divided_raw_id.get(1).unwrap().to_string(), rule_name: divided_raw_id.get(2).unwrap().to_string() },
+        let (file_alias_name, block_name, rule_name) = match divided_raw_id.len() {
+            2 => (String::new(), divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
+            3 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), divided_raw_id.get(2).unwrap().to_string()),
             _ => {
                 self.cons.borrow_mut().append_log(BlockParseLog::InvalidID {
                     pos: raw_id_node.get_node_child_at(&self.cons, 0)?.get_position(&self.cons)?,
@@ -501,6 +502,21 @@ impl BlockParser {
 
                 return Err(());
             },
+        };
+
+        // note: ブロック ID がデフォルトと同じであれば警告
+        if DEFAULT_START_RULE_ID == format!("{}.{}.{}", file_alias_name, block_name, rule_name) {
+            self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryStartCommand {
+                pos: cmd_node.get_position(&self.cons)?,
+                msg: format!("rule '{}' is the same as the default", DEFAULT_START_RULE_ID),
+            }.get_log());
+        }
+
+        let cmd = BlockCommand::Start {
+            pos: cmd_node.get_position(&self.cons)?,
+            file_alias_name: file_alias_name,
+            block_name: block_name,
+            rule_name: rule_name,
         };
 
         return Ok(cmd);
@@ -526,6 +542,7 @@ impl BlockParser {
             Some(block_alias_node) => {
                 let block_alias_name = block_alias_node.get_node_child_at(&self.cons, 0)?.join_child_leaf_values();
 
+                // note: ブロック名とエイリアス名が同じであれば警告
                 if block_name == block_alias_name {
                     self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryBlockAliasName {
                         pos: block_alias_node.get_position(&self.cons)?,
