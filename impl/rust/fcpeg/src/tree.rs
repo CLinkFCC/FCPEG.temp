@@ -7,7 +7,30 @@ use std::rc::Rc;
 use crate::parser::*;
 use crate::rule::*;
 
+use rustnutlib::*;
 use rustnutlib::console::*;
+
+use uuid::Uuid;
+
+pub enum TreeLog {
+    Unknown {},
+    CharacterPositionNotFound { uuid: Uuid },
+    ElementNotNode { uuid: Uuid },
+    ElementNotLeaf { uuid: Uuid },
+    NodeChildNotFound { parent_uuid: Uuid, index: usize },
+}
+
+impl ConsoleLogger for TreeLog {
+    fn get_log(&self) -> ConsoleLog {
+        return match self {
+            TreeLog::Unknown {} => log!(Error, "unknown error"),
+            TreeLog::CharacterPositionNotFound { uuid } => log!(Error, "character position not found", format!("uuid: {}", uuid)),
+            TreeLog::ElementNotNode { uuid } => log!(Error, "element not node", format!("uuid: {}", uuid)),
+            TreeLog::ElementNotLeaf { uuid } => log!(Error, "element not leaf", format!("uuid: {}", uuid)),
+            TreeLog::NodeChildNotFound { parent_uuid, index } => log!(Error, "node child not found", format!("parent: {}", parent_uuid), format!("index: {}", index)),
+        };
+    }
+}
 
 #[derive(Clone, PartialEq)]
 pub struct CharacterPosition {
@@ -104,19 +127,19 @@ pub enum SyntaxNodeElement {
 
 impl SyntaxNodeElement {
     pub fn from_node_args(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNodeElement {
-        return SyntaxNodeElement::Node(Box::new(SyntaxNode::new(sub_elems, ast_reflection_style)));
+        return SyntaxNodeElement::Node(Box::new(SyntaxNode::new(sub_elems, ast_reflection_style, Uuid::new_v4())));
     }
 
     pub fn from_leaf_args(pos: CharacterPosition, value: String, ast_reflection: ASTReflectionStyle) -> SyntaxNodeElement {
-        return SyntaxNodeElement::Leaf(Box::new(SyntaxLeaf::new(pos, value, ast_reflection)));
+        return SyntaxNodeElement::Leaf(Box::new(SyntaxLeaf::new(pos, value, ast_reflection, Uuid::new_v4())));
     }
 
     pub fn get_node(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxNode> {
         return match self {
             SyntaxNodeElement::Node(node) => Ok(node),
-            _ => {
-                cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                    cause: "element not node list".to_string(),
+            SyntaxNodeElement::Leaf(leaf) => {
+                cons.borrow_mut().append_log(TreeLog::ElementNotNode {
+                    uuid: leaf.uuid.clone(),
                 }.get_log());
 
                 return Err(());
@@ -126,14 +149,14 @@ impl SyntaxNodeElement {
 
     pub fn get_leaf(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxLeaf> {
         return match self {
-            SyntaxNodeElement::Leaf(leaf) => Ok(leaf),
-            _ => {
-                cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                    cause: "element not leaf".to_string(),
+            SyntaxNodeElement::Node(node) => {
+                cons.borrow_mut().append_log(TreeLog::ElementNotLeaf {
+                    uuid: node.uuid.clone(),
                 }.get_log());
 
                 return Err(());
             },
+            SyntaxNodeElement::Leaf(leaf) => Ok(leaf),
         };
     }
 
@@ -191,7 +214,7 @@ impl SyntaxTree {
 
     pub fn from_node_args(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxTree {
         return SyntaxTree {
-            child: SyntaxNodeElement::Node(Box::new(SyntaxNode::new(sub_elems, ast_reflection_style))),
+            child: SyntaxNodeElement::Node(Box::new(SyntaxNode::new(sub_elems, ast_reflection_style, Uuid::new_v4()))),
         };
     }
 
@@ -208,13 +231,15 @@ impl SyntaxTree {
 pub struct SyntaxNode {
     pub sub_elems: Vec<SyntaxNodeElement>,
     pub ast_reflection_style: ASTReflectionStyle,
+    pub uuid: Uuid,
 }
 
 impl SyntaxNode {
-    pub fn new(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNode {
+    pub fn new(sub_elems: Vec<SyntaxNodeElement>, ast_reflection_style: ASTReflectionStyle, uuid: Uuid) -> SyntaxNode {
         return SyntaxNode {
             sub_elems: sub_elems,
             ast_reflection_style: ast_reflection_style,
+            uuid: uuid,
         };
     }
 
@@ -283,8 +308,8 @@ impl SyntaxNode {
             }
         };
 
-        cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
-            msg: "character position not found".to_string()
+        cons.borrow_mut().append_log(TreeLog::CharacterPositionNotFound {
+            uuid: self.uuid.clone(),
         }.get_log());
 
         return Err(());
@@ -304,8 +329,9 @@ impl SyntaxNode {
                     return match self.sub_elems.get(elem_i) {
                         Some(v) => Ok(&v),
                         None => {
-                            cons.borrow_mut().append_log(SyntaxParseLog::InvalidSyntaxTreeStructure {
-                                cause: "invalid operation".to_string(),
+                            cons.borrow_mut().append_log(TreeLog::NodeChildNotFound {
+                                parent_uuid: self.uuid.clone(),
+                                index: index,
                             }.get_log());
 
                             return Err(());
@@ -380,7 +406,9 @@ impl SyntaxNode {
             ASTReflectionStyle::Expansion => "[expandable]".to_string(),
         };
 
-        writeln!(writer, "|{} {}", "   |".repeat(nest), display_name).unwrap();
+        let uuid_str = self.uuid.to_string()[..8].to_string();
+
+        writeln!(writer, "|{} {} *{}", "   |".repeat(nest), display_name, uuid_str).unwrap();
 
         for each_elem in &self.sub_elems {
             each_elem.print_with_details(nest + 1, writer, ignore_hidden_elems);
@@ -393,14 +421,16 @@ pub struct SyntaxLeaf {
     pub pos: CharacterPosition,
     pub value: String,
     pub ast_reflection_style: ASTReflectionStyle,
+    pub uuid: Uuid,
 }
 
 impl SyntaxLeaf {
-    pub fn new(pos: CharacterPosition, value: String, ast_reflection_style: ASTReflectionStyle) -> SyntaxLeaf {
+    pub fn new(pos: CharacterPosition, value: String, ast_reflection_style: ASTReflectionStyle, uuid: Uuid) -> SyntaxLeaf {
         return SyntaxLeaf {
             pos: pos,
             value: value,
             ast_reflection_style: ast_reflection_style,
+            uuid: uuid,
         };
     }
 
