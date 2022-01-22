@@ -438,13 +438,7 @@ impl Block {
     }
 
     pub fn print(&self) {
-        println!("[{}]{{", self.name);
-
-        for each_cmd in &self.cmds {
-            println!("    {}", each_cmd);
-        }
-
-        println!("}}");
+        println!("[{}]{{{}}}", self.name, self.cmds.iter().map(|v| format!("    {}", v)).collect::<Vec<String>>().join(""));
     }
 }
 

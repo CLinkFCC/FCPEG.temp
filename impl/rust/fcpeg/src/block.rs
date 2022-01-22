@@ -231,11 +231,6 @@ impl BlockParser {
 
     fn to_syntax_tree(&mut self, parser: &mut SyntaxParser) -> ConsoleResult<SyntaxTree> {
         let tree = parser.parse(self.file_path.clone(), &self.file_content)?;
-
-        if cfg!(debug) {
-            tree.print(true);
-        }
-
         return Ok(tree);
     }
 
@@ -310,14 +305,6 @@ impl BlockParser {
         }
 
         block_map.insert(String::new(), Box::new(Block::new("Main".to_string(), Vec::new())));
-
-        if cfg!(debug) {
-            for (_, each_block) in &block_map {
-                each_block.print();
-                println!();
-            }
-        }
-
         return Ok(block_map);
     }
 

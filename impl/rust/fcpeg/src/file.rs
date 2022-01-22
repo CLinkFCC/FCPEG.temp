@@ -51,10 +51,6 @@ impl FCPEGFile {
         let config_file_path = FileMan::rename_ext(&file_path, "cfg");
         let config = Configuration::load(cons.clone(), &config_file_path)?;
 
-        if cfg!(debug) {
-            config.print();
-        }
-
         let mut files = HashMap::<String, FCPEGFile>::new();
 
         // note: 無限再帰防止; 現在ロード中のエイリアスをロード対象から除外する

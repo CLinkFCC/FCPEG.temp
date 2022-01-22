@@ -26,11 +26,6 @@ impl FCPEGParser {
         let mut fcpeg_file_map = FCPEGFileMap::load(cons.clone(), fcpeg_file_path, lib_fcpeg_file_map)?;
         let rule_map = BlockParser::get_rule_map(cons.clone(), &mut fcpeg_file_map, true)?;
 
-        if cfg!(debug) {
-            println!("--- rule map ---");
-            println!("{}", rule_map);
-        }
-
         let syntax_parser = SyntaxParser::new(cons.clone(), rule_map, enable_memoization)?;
 
         let parser = FCPEGParser {
