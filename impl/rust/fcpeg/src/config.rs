@@ -35,27 +35,29 @@ impl ConsoleLogger for ConfigurationLog {
 
 #[derive(Clone, PartialEq)]
 pub enum RegexMode {
-    Default,
-    Onise,
+    Onigase,
     Posix,
 }
 
 impl RegexMode {
-    fn get_regex_mode(regex_mode_value: &str) -> std::option::Option<RegexMode> {
+    pub fn from(regex_mode_value: &str) -> std::option::Option<RegexMode> {
         return match regex_mode_value.to_lowercase().as_str() {
-            "default" => Some(RegexMode::Default),
-            "onise" => Some(RegexMode::Onise),
+            "default" => Some(RegexMode::get_default_mode()),
+            "onise" => Some(RegexMode::Onigase),
             "posix" => Some(RegexMode::Posix),
             _ => None,
         }
+    }
+
+    pub fn get_default_mode() -> RegexMode {
+        return RegexMode::Posix;
     }
 }
 
 impl Display for RegexMode {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         return match self {
-            RegexMode::Default => write!(f, "Default"),
-            RegexMode::Onise => write!(f, "Onise"),
+            RegexMode::Onigase => write!(f, "Onigase"),
             RegexMode::Posix => write!(f, "POSIX"),
         };
     }
@@ -79,7 +81,7 @@ impl Configuration {
 
         let mut file_alias_map = HashMap::<String, String>::new();
         let mut reverse_ast_reflection = false;
-        let mut regex_mode = RegexMode::Default;
+        let mut regex_mode = RegexMode::get_default_mode();
 
         let prop_map = Configuration::get_prop_map(cons.clone(), &lines)?;
 
@@ -99,7 +101,7 @@ impl Configuration {
                         },
                     };
 
-                    regex_mode = match RegexMode::get_regex_mode(regex_mode_str) {
+                    regex_mode = match RegexMode::from(regex_mode_str) {
                         Some(v) => v,
                         None => {
                             cons.borrow_mut().append_log(ConfigurationLog::UnknownRegexMode {
