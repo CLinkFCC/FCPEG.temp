@@ -127,6 +127,7 @@ pub enum BlockParseLog {
     UnknownBlockID { pos: CharacterPosition, block_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
     UnnecessaryLoopRangeItem { pos: CharacterPosition, msg: String },
+    UnnecessaryUseCommand { pos: CharacterPosition, block_id: String },
 }
 
 impl ConsoleLogger for BlockParseLog {
@@ -148,6 +149,7 @@ impl ConsoleLogger for BlockParseLog {
             BlockParseLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at: {}", pos)),
             BlockParseLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at: {}", pos)),
             BlockParseLog::UnnecessaryLoopRangeItem { pos, msg } => log!(Warning, format!("unnecessary loop range item"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
+            BlockParseLog::UnnecessaryUseCommand { pos, block_id } => log!(Warning, format!("unnecessary use command"), format!("at:\t{}", pos), format!("block id: {}", block_id)),
         }
     }
 }
@@ -378,6 +380,13 @@ impl BlockParser {
                             let block_id = format!("{}.{}", file_alias_name, block_name);
                             self.block_alias_map.insert(block_alias_name.clone(), block_id.clone());
 
+                            if block_id == format!("{}.{}", self.file_alias_name, self.block_name) {
+                                self.cons.borrow_mut().append_log(BlockParseLog::UnnecessaryUseCommand {
+                                    pos: pos.clone(),
+                                    block_id: block_id.clone(),
+                                }.get_log());
+                            }
+
                             if !self.used_block_ids.contains_key(&block_id) {
                                 self.used_block_ids.insert(block_id, pos.clone());
                             }
@@ -517,8 +526,7 @@ impl BlockParser {
         };
 
         return match divided_raw_id.len() {
-            1 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
-            2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
+            1 | 2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
             _ => {
                 self.cons.borrow_mut().append_log(SyntaxParseLog::InternalError {
                     msg: "invalid chain ID length on use command".to_string(),
