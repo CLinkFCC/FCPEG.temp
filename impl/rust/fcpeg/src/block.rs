@@ -376,8 +376,8 @@ impl BlockParser {
                     let use_cmd = self.to_use_cmd(cmd_node)?;
 
                     match &use_cmd {
-                        BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
-                            let block_id = format!("{}.{}", file_alias_name, block_name);
+                        BlockCommand::Use { pos, file_alias_name: _, block_name, block_alias_name } => {
+                            let block_id = format!("{}.{}", self.file_alias_name, block_name);
                             self.block_alias_map.insert(block_alias_name.clone(), block_id.clone());
 
                             if !self.used_block_ids.contains_key(&block_id) {
