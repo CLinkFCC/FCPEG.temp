@@ -1067,6 +1067,7 @@ impl BlockParser {
                 }
             },
             3 => {
+                let file_alias_name = id_tokens.get(0).unwrap();
                 let block_name = id_tokens.get(1).unwrap();
                 let rule_name = id_tokens.get(2).unwrap();
                 let new_id = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
