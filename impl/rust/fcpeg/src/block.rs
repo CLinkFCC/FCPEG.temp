@@ -1185,7 +1185,7 @@ impl FCPEGBlock {
     }
 
     fn get_syntax_block() -> Block {
-        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* Symbol.LineEnd*# Symbol.Space*# Symbol.EOF#,
+        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* "\z"#,
         let fcpeg_rule = rule!{
             ".Syntax.FCPEG",
             choice!{
@@ -1194,14 +1194,9 @@ impl FCPEGBlock {
                 expr!(Id, ".Symbol.LineEnd", "*", "#"),
                 choice!{
                     vec!["*"],
-                    choice!{
-                        vec![],
-                        expr!(Id, ".Block.Block"),
-                        expr!(Id, ".Symbol.Div", "*", "#"),
-                    },
+                    expr!(Id, ".Block.Block"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
                 },
-                expr!(Id, ".Symbol.LineEnd", "*", "#"),
-                expr!(Id, ".Symbol.Space", "*", "#"),
                 expr!(String, "\0", "#"),
             },
         };

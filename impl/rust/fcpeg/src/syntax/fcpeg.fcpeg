@@ -6,7 +6,7 @@
     + use Block,
     + use Symbol,
 
-    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* Symbol.LineEnd*# Symbol.Space*# Symbol.EOF#,
+    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* "\z"#,
 }
 
 [Symbol]{
