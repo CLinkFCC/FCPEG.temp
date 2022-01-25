@@ -1,0 +1,26 @@
+[Main]{
+    + use Prop,
+    + use Symbol,
+
+    Main <- Symbol.Space*# Symbol.LineEnd*# (Prop.Item Symbol.Div*#)*## "\z"#,
+}
+
+[Symbol]{
+    Space <- " ",
+    LineEnd <- Space* "\n" Space*,
+    Div <- Space : "\n",
+}
+
+[Prop]{
+    + use Symbol,
+
+    Item <- ChildItem : ParentItem,
+    ParentItem <- Key,
+    ChildItem <- Key Value ","#,
+    Key <- ("||"*)#Pipes Symbol.Space*# Id Symbol.Space*# ":"# Symbol.Space*#,
+    Value <- (EscSeq : !"\n" !"," !"\\" .)*##,
+
+    Id <- [a-zA-Z_] [a-zA-Z0-9_]*,
+    % エスケープ文字をワイルドカードにする,
+    EscSeq <- "\\"# ("\\" : "n" : "t" : ",")##,
+}

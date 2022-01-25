@@ -150,7 +150,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
         println!("--- Syntax Tree ---");
         println!();
         println!("{}", input_file_path);
-        tree.print(false);
+        tree.print(true);
         println!();
     }
 

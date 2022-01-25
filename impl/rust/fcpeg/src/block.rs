@@ -14,22 +14,25 @@ use rustnutlib::console::*;
 
 use uuid::Uuid;
 
+#[macro_export]
 macro_rules! block_map {
-    ($($block_name:expr => $func_name:ident), *,) => {
+    ($($block_name:expr => $block:expr), *,) => {
         {
             let mut block_map = BlockMap::new();
-            $(block_map.insert($block_name.to_string(), Box::new(FCPEGBlock::$func_name()));)*
+            $(block_map.insert($block_name.to_string(), Box::new($block));)*
             block_map
         }
     };
 }
 
+#[macro_export]
 macro_rules! block {
     ($block_name:expr, $cmds:expr) => {
         Block::new($block_name.to_string(), $cmds)
     };
 }
 
+#[macro_export]
 macro_rules! rule {
     ($rule_name:expr, $($choice:expr), *,) => {
         {
@@ -50,12 +53,14 @@ macro_rules! rule {
     };
 }
 
+#[macro_export]
 macro_rules! start_cmd {
     ($file_alias_name:expr, $block_name:expr, $rule_name:expr) => {
         BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: $file_alias_name.to_string(), block_name: $block_name.to_string(), rule_name: $rule_name.to_string() }
     };
 }
 
+#[macro_export]
 macro_rules! choice {
     ($options:expr, $($sub_elem:expr), *,) => {
         {
@@ -81,7 +86,12 @@ macro_rules! choice {
     };
 }
 
+#[macro_export]
 macro_rules! expr {
+    ($expr:expr) => {
+        RuleElement::Expression(Box::new($expr))
+    };
+
     ($kind:ident, $value:expr $(, $option:expr) *) => {
         {
             let mut expr = RuleExpression::new(CharacterPosition::get_empty(), RuleExpressionKind::$kind, $value.to_string());
@@ -165,7 +175,7 @@ impl ConsoleLogger for BlockParsingLog {
 // note: プリミティブ関数の名前一覧
 const PRIM_FUNC_NAMES: &[&'static str] = &["JOIN"];
 // note: デフォルトの開始規則 ID
-const DEFAULT_START_RULE_ID: &'static str = ".Main.Main";
+pub const DEFAULT_START_RULE_ID: &'static str = ".Main.Main";
 
 pub struct BlockParser {
     cons: Rc<RefCell<Console>>,
@@ -231,7 +241,6 @@ impl BlockParser {
 
         let mut has_id_error = false;
 
-        println!("{:?}", used_block_ids.keys());
         for (each_block_id, each_pos) in *used_block_ids {
             if !block_id_map.contains(&each_block_id) {
                 cons.borrow_mut().append_log(BlockParsingLog::UnknownBlockID {
@@ -1161,12 +1170,12 @@ struct FCPEGBlock {}
 impl FCPEGBlock {
     pub fn get_block_map() -> BlockMap {
         return block_map!{
-            "Main" => get_main_block,
-            "Syntax" => get_syntax_block,
-            "Symbol" => get_symbol_block,
-            "Misc" => get_misc_block,
-            "Block" => get_block_block,
-            "Rule" => get_rule_block,
+            "Main" => FCPEGBlock::get_main_block(),
+            "Syntax" => FCPEGBlock::get_syntax_block(),
+            "Symbol" => FCPEGBlock::get_symbol_block(),
+            "Misc" => FCPEGBlock::get_misc_block(),
+            "Block" => FCPEGBlock::get_block_block(),
+            "Rule" => FCPEGBlock::get_rule_block(),
         };
     }
 
