@@ -1,6 +1,7 @@
 use std::collections::*;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::*;
 use crate::parser::*;
@@ -193,11 +194,9 @@ pub struct BlockParser {
 
 impl BlockParser {
     // note: FileMap から最終的な RuleMap を取得する
-    pub fn get_rule_map(cons: Rc<RefCell<Console>>, fcpeg_file_map: &mut FCPEGFileMap, enable_memoization: bool) -> ConsoleResult<Box<RuleMap>> {
+    pub fn get_rule_map(cons: Rc<RefCell<Console>>, fcpeg_file_map: &mut FCPEGFileMap, enable_memoization: bool) -> ConsoleResult<Arc<Box<RuleMap>>> {
         let block_map = FCPEGBlock::get_block_map();
-        let rule_map = Box::new(RuleMap::new(vec![block_map], ".Syntax.FCPEG".to_string())?);
-
-        let mut parser = SyntaxParser::new(cons.clone(), rule_map, enable_memoization)?;
+        let rule_map = Arc::new(Box::new(RuleMap::new(vec![block_map], ".Syntax.FCPEG".to_string())?));
         let mut block_maps = Vec::<BlockMap>::new();
 
         let mut used_block_ids = Box::new(HashMap::<String, CharacterPosition>::new());
@@ -220,7 +219,7 @@ impl BlockParser {
                 file_content: fcpeg_file.file_content.clone(),
             };
 
-            let tree = Box::new(block_parser.to_syntax_tree(&mut parser)?);
+            let tree = Box::new(block_parser.to_syntax_tree(rule_map.clone(), enable_memoization)?);
             block_maps.push(block_parser.to_block_map(tree)?);
 
             if block_parser.file_alias_name == "" {
@@ -237,7 +236,7 @@ impl BlockParser {
             None => DEFAULT_START_RULE_ID.to_string(),
         };
 
-        let rule_map = Box::new(RuleMap::new(block_maps, start_rule_id_str)?);
+        let rule_map = Arc::new(Box::new(RuleMap::new(block_maps, start_rule_id_str)?));
 
         let mut has_id_error = false;
 
@@ -270,8 +269,8 @@ impl BlockParser {
         };
     }
 
-    fn to_syntax_tree(&mut self, parser: &mut SyntaxParser) -> ConsoleResult<SyntaxTree> {
-        let tree = parser.parse(self.file_path.clone(), &self.file_content)?;
+    fn to_syntax_tree(&mut self, rule_map: Arc<Box<RuleMap>>, enable_memoization: bool) -> ConsoleResult<SyntaxTree> {
+        let tree = SyntaxParser::parse(self.cons.clone(), rule_map, self.file_path.clone(), self.file_content.clone(), enable_memoization)?;
         return Ok(tree);
     }
 

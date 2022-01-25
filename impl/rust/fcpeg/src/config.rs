@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::*;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::*;
 use crate::block::*;
@@ -168,7 +169,7 @@ impl Configuration {
         let mut reverse_ast_reflection_style = false;
         let mut regex_mode = RegexMode::get_default_mode();
 
-        let prop_map = ConfigurationParser::parse(cons.clone(), file_path.clone(), &file_content)?;
+        let prop_map = ConfigurationParser::parse(cons.clone(), file_path.clone(), file_content)?;
 
         for (top_item_name, top_item) in &*prop_map {
             let top_item_kind = match ConfigurationItemKind::from(top_item_name) {
@@ -280,11 +281,10 @@ struct ConfigurationParser {
 }
 
 impl ConfigurationParser {
-    fn parse(cons: Rc<RefCell<Console>>, src_path: String, src_content: &Box<String>) -> ConsoleResult<Box<PropertyMap>> {
+    fn parse(cons: Rc<RefCell<Console>>, src_path: String, src_content: Box<String>) -> ConsoleResult<Box<PropertyMap>> {
         let block_map = ConfigurationBlock::get_block_map();
-        let rule_map = Box::new(RuleMap::new(vec![block_map], DEFAULT_START_RULE_ID.to_string())?);
-        let mut parser = SyntaxParser::new(cons.clone(), rule_map, true)?;
-        let tree = parser.parse(src_path, src_content)?;
+        let rule_map = Arc::new(Box::new(RuleMap::new(vec![block_map], DEFAULT_START_RULE_ID.to_string())?));
+        let tree = SyntaxParser::parse(cons.clone(), rule_map, src_path, src_content, true)?;
         tree.print(true);
 
         let mut config_parser = ConfigurationParser {

@@ -1,6 +1,7 @@
+use std::cell::RefCell;
 use std::collections::*;
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::rule::*;
 use crate::tree::*;
@@ -91,12 +92,12 @@ impl MemoizationMap {
 
 pub struct SyntaxParser {
     cons: Rc<RefCell<Console>>,
-    rule_map: Box<RuleMap>,
+    rule_map: Arc<Box<RuleMap>>,
     src_i: usize,
     src_line: usize,
     src_latest_line_i: usize,
     src_path: String,
-    src_content: String,
+    src_content: Box<String>,
     loop_limit: usize,
     arg_maps: Box<Vec<ArgumentMap>>,
     rule_stack: Box<Vec<(CharacterPosition, String)>>,
@@ -106,59 +107,50 @@ pub struct SyntaxParser {
 }
 
 impl SyntaxParser {
-    pub fn new(cons: Rc<RefCell<Console>>, rule_map: Box<RuleMap>, enable_memoization: bool) -> ConsoleResult<SyntaxParser> {
-        return Ok(SyntaxParser {
+    pub fn parse(cons: Rc<RefCell<Console>>, rule_map: Arc<Box<RuleMap>>, src_path: String, src_content: Box<String>, enable_memoization: bool) -> ConsoleResult<SyntaxTree> {
+        let mut parser = SyntaxParser {
             cons: cons,
             rule_map: rule_map,
             src_i: 0,
             src_line: 0,
             src_latest_line_i: 0,
-            src_path: String::new(),
-            src_content: String::new(),
+            src_path: src_path,
+            src_content: src_content,
             loop_limit: 65536,
             arg_maps: Box::new(Vec::new()),
             rule_stack: Box::new(Vec::new()),
             regex_map: Box::new(HashMap::new()),
             memoized_map: Box::new(MemoizationMap::new()),
             enable_memoization: enable_memoization,
-        });
-    }
-
-    pub fn parse(&mut self, src_path: String, src_content: &Box<String>) -> ConsoleResult<SyntaxTree> {
-        let mut tmp_src_content = *src_content.clone();
+        };
 
         // note: 余分な改行コード 0x0d を排除する
         loop {
-            match tmp_src_content.find(0x0d as char) {
+            match parser.src_content.find(0x0d as char) {
                 Some(v) => {
-                    let _ = tmp_src_content.remove(v);
+                    let _ = parser.src_content.remove(v);
                 },
                 None => break,
             }
         }
 
         // EOF 用のヌル文字
-        tmp_src_content += "\0";
+        *parser.src_content += "\0";
 
-        // フィールドを初期化
-        self.src_i = 0;
-        self.src_path = src_path;
-        self.src_content = tmp_src_content;
+        let start_rule_id = parser.rule_map.start_rule_id.clone();
 
-        let start_rule_id = self.rule_map.start_rule_id.clone();
-
-        if self.src_content.chars().count() == 0 {
+        if parser.src_content.chars().count() == 0 {
             return Ok(SyntaxTree::from_node_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
         }
 
-        let start_rule_pos = self.rule_map.start_rule_pos.clone();
-        let mut root_node = match self.parse_rule(&start_rule_id, &start_rule_pos)? {
+        let start_rule_pos = parser.rule_map.start_rule_pos.clone();
+        let mut root_node = match parser.parse_rule(&start_rule_id, &start_rule_pos)? {
             Some(v) => v,
             None => {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
+                parser.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
                     rule_id: start_rule_id.clone(),
-                    pos: self.get_char_position(),
-                    rule_stack: *self.rule_stack.clone(),
+                    pos: parser.get_char_position(),
+                    rule_stack: *parser.rule_stack.clone(),
                 }.get_log());
 
                 return Err(());
@@ -169,11 +161,11 @@ impl SyntaxParser {
         root_node.set_ast_reflection_style(ASTReflectionStyle::Reflection(start_rule_id.clone()));
 
         // note: 入力位置が length を超えると失敗
-        if self.src_i < self.src_content.chars().count() {
-            self.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
+        if parser.src_i < parser.src_content.chars().count() {
+            parser.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
                 rule_id: start_rule_id.clone(),
-                pos: self.get_char_position(),
-                rule_stack: *self.rule_stack.clone(),
+                pos: parser.get_char_position(),
+                rule_stack: *parser.rule_stack.clone(),
             }.get_log());
 
             return Err(());
