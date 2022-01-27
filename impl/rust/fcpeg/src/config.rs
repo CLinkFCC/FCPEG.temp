@@ -14,6 +14,7 @@ use rustnutlib::console::*;
 use rustnutlib::file::*;
 
 pub enum ConfigurationLog {
+    DuplicateFileAliasName { alias_name: String },
     DuplicatePropertyName { prop_name: String },
     InvalidHierarchy { hierarchy_count: usize },
     InvalidPropertyValue { prop_name: String, prop_value: String },
@@ -28,6 +29,7 @@ pub enum ConfigurationLog {
 impl ConsoleLogger for ConfigurationLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
+            ConfigurationLog::DuplicateFileAliasName { alias_name } => log!(Error, "duplicate alias name", format!("alias name:\t{}", alias_name)),
             ConfigurationLog::DuplicatePropertyName { prop_name } => log!(Error, "duplicate property name", format!("property name:\t{}", prop_name)),
             ConfigurationLog::InvalidHierarchy { hierarchy_count } => log!(Error, "invalid hierarchy", format!("hierarchy count:\t{}", hierarchy_count)),
             ConfigurationLog::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
@@ -271,6 +273,8 @@ impl Configuration {
         for (alias_name, alias_path) in self.file_alias_map.iter() {
             println!("\t{}: {}", alias_name, alias_path);
         }
+
+        println!();
     }
 }
 
