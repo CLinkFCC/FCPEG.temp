@@ -11,17 +11,17 @@ use rustnutlib::file::*;
 pub struct FCPEGFileMap {
     pub file_map: HashMap<String, FCPEGFile>,
     // spec: メインファイルを参照するエイリアス名; ID 変換時にエイリアスを空文字に置換する
-    pub cross_refered_alias_names: Arc<Vec<String>>,
+    pub replaced_alias_names: Arc<HashMap<String, String>>,
 }
 
 impl FCPEGFileMap {
     // todo: config 読んでサブファイル対応
     pub fn load(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> ConsoleResult<FCPEGFileMap> {
         // note: ルートファイルのエイリアス名は空文字; 除外エイリアスなし
-        let (file_map, cross_refered_alias_names) = FCPEGFileLoader::load(cons, fcpeg_file_path, lib_fcpeg_file_map)?;
+        let (file_map, replaced_alias_names) = FCPEGFileLoader::load(cons, fcpeg_file_path, lib_fcpeg_file_map)?;
 
         let file_map_wrapper = FCPEGFileMap {
-            cross_refered_alias_names: Arc::new(cross_refered_alias_names),
+            replaced_alias_names: Arc::new(replaced_alias_names),
             file_map: file_map,
         };
 
@@ -44,19 +44,19 @@ pub struct FCPEGFile {
 struct FCPEGFileLoader {
     cons: Rc<RefCell<Console>>,
     file_map_result: HashMap<String, FCPEGFile>,
-    loaded_fcpeg_file_paths: Vec<String>,
-    loaded_file_aliases: Vec<String>,
-    cross_refered_alias_names: Vec<String>,
+    // note: <alias_name, fcpeg_file_path>
+    loaded_fcpeg_files: HashMap<String, String>,
+    // note: <replace_from, replace_to>
+    replaced_alias_names: HashMap<String, String>,
 }
 
 impl FCPEGFileLoader {
-    pub fn load(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> ConsoleResult<(HashMap<String, FCPEGFile>, Vec<String>)> {
+    pub fn load(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> ConsoleResult<(HashMap<String, FCPEGFile>, HashMap<String, String>)> {
         let mut loader = FCPEGFileLoader {
             cons: cons,
             file_map_result: HashMap::new(),
-            loaded_fcpeg_file_paths: Vec::new(),
-            loaded_file_aliases: Vec::new(),
-            cross_refered_alias_names: Vec::new(),
+            loaded_fcpeg_files: HashMap::new(),
+            replaced_alias_names: HashMap::new(),
         };
 
         // note: メインファイルのエイリアス名は空文字
@@ -66,7 +66,7 @@ impl FCPEGFileLoader {
             loader.load_file(each_alias_name, each_fcpeg_file_path)?;
         }
 
-        return Ok((loader.file_map_result, loader.cross_refered_alias_names));
+        return Ok((loader.file_map_result, loader.replaced_alias_names));
     }
 
     // ret: サブファイルのマップ
@@ -90,13 +90,13 @@ impl FCPEGFileLoader {
             config: config,
         };
 
-        self.loaded_file_aliases.push(alias_name.clone());
         self.file_map_result.insert(alias_name.clone(), new_file);
         // note: 無限再帰防止; 現在ロード中のエイリアスをロード対象から除外する
-        self.loaded_fcpeg_file_paths.push(fcpeg_file_path.clone());
+        self.loaded_fcpeg_files.insert(alias_name.clone(), fcpeg_file_path.clone());
 
         'map_loop: for (sub_alias_name, sub_file_path) in sub_file_alias_map {
-            if self.loaded_file_aliases.contains(&sub_alias_name) {
+            // note: エイリアス名の重複チェック
+            if self.loaded_fcpeg_files.contains_key(&sub_alias_name) || self.replaced_alias_names.contains_key(&sub_alias_name) {
                 self.cons.borrow_mut().append_log(ConfigurationLog::DuplicateFileAliasName {
                     alias_name: sub_alias_name.clone(),
                 }.get_log());
@@ -105,11 +105,12 @@ impl FCPEGFileLoader {
             }
 
             // note: ロード済みであれば無視
-            for each_path in &*self.loaded_fcpeg_file_paths {
-                match FileMan::is_same(each_path, &sub_file_path) {
+            for (loaded_alias_name, loaded_file_path) in &self.loaded_fcpeg_files {
+                match FileMan::is_same(loaded_file_path, &sub_file_path) {
                     Ok(is_same_path) => {
                         if is_same_path {
-                            self.cross_refered_alias_names.push(sub_alias_name.clone());
+                            println!("replace {} to {}", sub_alias_name, loaded_alias_name);
+                            self.replaced_alias_names.insert(sub_alias_name.clone(), loaded_alias_name.clone());
                             continue 'map_loop;
                         }
                     },
