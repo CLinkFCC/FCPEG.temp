@@ -134,6 +134,7 @@ pub enum BlockParsingLog {
     InvalidID { pos: CharacterPosition, id: String },
     InvalidLoopRange { pos: CharacterPosition, msg: String },
     NamingRuleViolation { pos: CharacterPosition, id: String },
+    RandomOrderInExpression { pos: CharacterPosition },
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnexpectedChildName { parent_uuid: Uuid, unexpected: String, expected: String },
     UnexpectedNodeName { uuid: Uuid, unexpected: String, expected: String },
@@ -159,6 +160,7 @@ impl ConsoleLogger for BlockParsingLog {
             BlockParsingLog::InvalidID { pos, id } => log!(Error, format!("invalid id '{}'", id), format!("at:\t{}", pos)),
             BlockParsingLog::InvalidLoopRange { pos, msg } => log!(Error, format!("invalid loop range"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParsingLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
+            BlockParsingLog::RandomOrderInExpression { pos } => log!(Error, "random order in expression", format!("at:\t{}", pos), format!("{}", "cannot specify random order symbol to expression".bright_black())),
             BlockParsingLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParsingLog::UnexpectedChildName { parent_uuid, unexpected, expected } => log!(Error, format!("unknown node name {}, expected {}", unexpected, expected), format!("parent uuid:\t{}", parent_uuid)),
             BlockParsingLog::UnexpectedNodeName { uuid, unexpected, expected } => log!(Error, format!("unknown node name {}, expected {}", unexpected, expected), format!("uuid:\t{}", uuid)),
@@ -736,7 +738,7 @@ impl BlockParser {
                                     }
                                 },
                                 Infinitable::Infinite if raw_range.is_min_num_specified && raw_range.min_num == 0 => {
-                                    // note: 最小回数に 0 が指定された場合
+                                    // note: {0,} の場合
                                     self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
                                         pos: raw_range.range_node_pos.clone(),
                                         msg: format!("modify '{}' to '{{,}}'", raw_loop_range_txt),
@@ -779,6 +781,105 @@ impl BlockParser {
                 None => RuleElementLoopRange::get_single_loop(),
             };
 
+            // note: RandomOrder ノード
+            let (elem_order, random_order_node_pos) = match each_seq_elem_node.find_first_child_node(vec![".Rule.RandomOrder"]) {
+                Some(random_order_node) => {
+                    let random_order_node_pos = random_order_node.get_position(&self.cons)?;
+
+                    let (min_num, max_num) = match random_order_node.find_first_child_node(vec![".Rule.RandomOrderRange"]) {
+                        Some(range_node) => {
+                            let raw_range = self.to_raw_range(range_node)?;
+
+                            let raw_loop_range_txt = {
+                                let min_num_txt = if raw_range.is_min_num_specified {
+                                    raw_range.min_num.to_string()
+                                } else {
+                                    String::new()
+                                };
+
+                                match &raw_range.max_num {
+                                    Infinitable::Finite(v) => format!("[{},{}]", min_num_txt, v),
+                                    Infinitable::Infinite => format!("[{},]", min_num_txt),
+                                }
+                            };
+
+                            match &raw_range.max_num {
+                                Infinitable::Finite(max_v) => {
+                                    if raw_range.min_num > *max_v {
+                                        // note: 最小回数が最大回数より大きかった場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("min value '{}' is bigger than max value '{}'", raw_range.min_num, max_v),
+                                        }.get_log());
+
+                                        return Err(());
+                                    }
+
+                                    if raw_range.is_min_num_specified && !raw_range.is_max_num_specified && raw_range.min_num == 0 && *max_v == 0 {
+                                        // note: [0] の場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("loop range '[0]' is invalid"),
+                                        }.get_log());
+
+                                        return Err(());
+                                    } else if raw_range.min_num == 1 && *max_v == 1 {
+                                        if raw_range.is_min_num_specified && !raw_range.is_max_num_specified {
+                                            // note: [1] の場合
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                                pos: raw_range.range_node_pos.clone(),
+                                                msg: format!("loop range '[1]' is unnecessary"),
+                                            }.get_log());
+                                        } else {
+                                            // note: [1,1] の場合
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                                pos: raw_range.range_node_pos.clone(),
+                                                msg: format!("loop range [1-1]' is unnecessary"),
+                                            }.get_log());
+                                        }
+                                    } else if *max_v == 0 {
+                                        // note: 最大回数に 0 が指定された場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                            pos: raw_range.max_num_pos.unwrap(),
+                                            msg: format!("max number '{}' is invalid", raw_range.min_num),
+                                        }.get_log());
+
+                                        return Err(());
+                                    } else if raw_range.is_max_num_specified && raw_range.min_num == *max_v {
+                                        // note: 最小回数と最大回数が同じだった場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("modify '{}' to '[{}]'", raw_loop_range_txt, raw_range.min_num),
+                                        }.get_log());
+                                    } else if raw_range.is_min_num_specified && raw_range.min_num == 0 {
+                                        // note: 最小回数に 0 が指定された場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("modify '{}' to '[-{}]'", raw_loop_range_txt, max_v),
+                                        }.get_log());
+                                    }
+                                },
+                                Infinitable::Infinite if raw_range.is_min_num_specified && raw_range.min_num == 0 => {
+                                    // note: [0-] の場合
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                        pos: raw_range.range_node_pos.clone(),
+                                        msg: format!("modify '{}' to '[,]'", raw_loop_range_txt),
+                                    }.get_log());
+                                },
+                                _ => (),
+                            }
+
+                            (raw_range.min_num, raw_range.max_num)
+                        },
+                        None => (1, Infinitable::Finite(1)),
+                    };
+
+                    let loop_range = RuleElementLoopRange::new(min_num, max_num);
+                    (RuleElementOrder::Random(loop_range), random_order_node_pos)
+                },
+                None => (RuleElementOrder::Sequential, CharacterPosition::get_empty()),
+            };
+
             // note: ASTReflectionStyle ノード
             // todo: 構成ファイルによって切り替える
             let ast_reflection_style = match each_seq_elem_node.find_first_child_node(vec![".Rule.ASTReflectionStyle"]) {
@@ -819,16 +920,25 @@ impl BlockParser {
                     let new_elem = match name.as_str() {
                         ".Rule.Choice" => {
                             let mut new_choice = Box::new(self.to_rule_choice_elem(choice_or_expr_node.get_node_child_at(&self.cons, 0)?, generics_args)?);
+                            new_choice.ast_reflection_style = ast_reflection_style;
                             new_choice.lookahead_kind = lookahead_kind;
                             new_choice.loop_range = loop_range;
-                            new_choice.ast_reflection_style = ast_reflection_style;
+                            new_choice.elem_order = elem_order;
                             RuleElement::Group(new_choice)
                         },
                         ".Rule.Expr" => {
+                            if elem_order.is_random() {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::RandomOrderInExpression {
+                                    pos: random_order_node_pos,
+                                }.get_log());
+
+                                return Err(());
+                            }
+
                             let mut new_expr = Box::new(self.to_rule_expr_elem(choice_or_expr_node, generics_args)?);
+                            new_expr.ast_reflection_style = ast_reflection_style;
                             new_expr.lookahead_kind = lookahead_kind;
                             new_expr.loop_range = loop_range;
-                            new_expr.ast_reflection_style = ast_reflection_style;
                             RuleElement::Expression(new_expr)
                         },
                         _ => {
