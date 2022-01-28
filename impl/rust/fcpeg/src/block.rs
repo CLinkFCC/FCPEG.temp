@@ -1767,16 +1767,21 @@ impl FCPEGBlock {
             },
         };
 
-        // code: RandomOrderRange <- "["# Symbol.Div*# Num? Symbol.CommaDiv# Num? Symbol.Div*# "]"#,
+        // code: RandomOrderRange <- "["# Symbol.Div*# Num?#MinNum (Symbol.Div*# "-"# Symbol.Div*# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "]"#,
         let random_order_range_rule = rule!{
             ".Rule.RandomOrderRange",
             choice!{
                 vec![],
                 expr!(String, "[", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                expr!(Id, ".Rule.Num", "?"),
-                expr!(Id, ".Symbol.CommaDiv", "#"),
-                expr!(Id, ".Rule.Num", "?"),
+                expr!(Id, ".Rule.Num", "?", "#MinNum"),
+                choice!{
+                    vec!["?", "#MaxNumGroup"],
+                    expr!(Id, ".Symbol.Div", "*", "#"),
+                    expr!(String, "-", "#"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
+                    expr!(Id, ".Rule.Num", "?", "#MaxNum"),
+                },
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "]", "#"),
             },

@@ -56,7 +56,7 @@
     Loop <- "?" : "*" : "+" : LoopRange,
     LoopRange <- "{"# Symbol.Div*# Num?#MinNum (Symbol.CommaDiv# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "}"#,
     RandomOrder <- "^"# RandomOrderRange?,
-    RandomOrderRange <- "["# Symbol.Div*# Num? Symbol.CommaDiv# Num? Symbol.Div*# "]"#,
+    RandomOrderRange <- "["# Symbol.Div*# Num?#MinNum (Symbol.Div*# "-"# Symbol.Div*# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "]"#,
     ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,
 
     Num <- [0-9]+,
