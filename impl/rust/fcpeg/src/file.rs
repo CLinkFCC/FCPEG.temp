@@ -11,17 +11,17 @@ use rustnutlib::file::*;
 pub struct FCPEGFileMap {
     pub file_map: HashMap<String, FCPEGFile>,
     // spec: メインファイルを参照するエイリアス名; ID 変換時にエイリアスを空文字に置換する
-    pub replaced_alias_names: Arc<HashMap<String, String>>,
+    pub replaced_file_alias_names: Arc<HashMap<String, String>>,
 }
 
 impl FCPEGFileMap {
     // todo: config 読んでサブファイル対応
     pub fn load(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>) -> ConsoleResult<FCPEGFileMap> {
         // note: ルートファイルのエイリアス名は空文字; 除外エイリアスなし
-        let (file_map, replaced_alias_names) = FCPEGFileLoader::load(cons, fcpeg_file_path, lib_fcpeg_file_map)?;
+        let (file_map, replaced_file_alias_names) = FCPEGFileLoader::load(cons, fcpeg_file_path, lib_fcpeg_file_map)?;
 
         let file_map_wrapper = FCPEGFileMap {
-            replaced_alias_names: Arc::new(replaced_alias_names),
+            replaced_file_alias_names: Arc::new(replaced_file_alias_names),
             file_map: file_map,
         };
 
@@ -46,8 +46,9 @@ struct FCPEGFileLoader {
     file_map_result: HashMap<String, FCPEGFile>,
     // note: <alias_name, fcpeg_file_path>
     loaded_fcpeg_files: HashMap<String, String>,
+    // spec: すでにロードされているファイルではエイリアス名をロード済みのものに置換する
     // note: <replace_from, replace_to>
-    replaced_alias_names: HashMap<String, String>,
+    replaced_file_alias_names: HashMap<String, String>,
 }
 
 impl FCPEGFileLoader {
@@ -56,7 +57,7 @@ impl FCPEGFileLoader {
             cons: cons,
             file_map_result: HashMap::new(),
             loaded_fcpeg_files: HashMap::new(),
-            replaced_alias_names: HashMap::new(),
+            replaced_file_alias_names: HashMap::new(),
         };
 
         // note: メインファイルのエイリアス名は空文字
@@ -66,7 +67,7 @@ impl FCPEGFileLoader {
             loader.load_file(each_alias_name, each_fcpeg_file_path)?;
         }
 
-        return Ok((loader.file_map_result, loader.replaced_alias_names));
+        return Ok((loader.file_map_result, loader.replaced_file_alias_names));
     }
 
     // ret: サブファイルのマップ
@@ -96,7 +97,7 @@ impl FCPEGFileLoader {
 
         'map_loop: for (sub_alias_name, sub_file_path) in sub_file_alias_map {
             // note: エイリアス名の重複チェック
-            if self.loaded_fcpeg_files.contains_key(&sub_alias_name) || self.replaced_alias_names.contains_key(&sub_alias_name) {
+            if self.loaded_fcpeg_files.contains_key(&sub_alias_name) || self.replaced_file_alias_names.contains_key(&sub_alias_name) {
                 self.cons.borrow_mut().append_log(ConfigurationLog::DuplicateFileAliasName {
                     alias_name: sub_alias_name.clone(),
                 }.get_log());
@@ -109,8 +110,7 @@ impl FCPEGFileLoader {
                 match FileMan::is_same(loaded_file_path, &sub_file_path) {
                     Ok(is_same_path) => {
                         if is_same_path {
-                            println!("replace {} to {}", sub_alias_name, loaded_alias_name);
-                            self.replaced_alias_names.insert(sub_alias_name.clone(), loaded_alias_name.clone());
+                            self.replaced_file_alias_names.insert(sub_alias_name.clone(), loaded_alias_name.clone());
                             continue 'map_loop;
                         }
                     },

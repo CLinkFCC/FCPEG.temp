@@ -182,7 +182,7 @@ pub struct BlockParser {
     cons: Rc<RefCell<Console>>,
     start_rule_id: Option<String>,
     file_alias_name: String,
-    replaced_alias_names: Arc<HashMap<String, String>>,
+    replaced_file_alias_names: Arc<HashMap<String, String>>,
     used_block_ids: Box<HashMap<String, CharacterPosition>>,
     used_rule_ids: Box<HashMap<String, CharacterPosition>>,
     block_name: String,
@@ -211,7 +211,7 @@ impl BlockParser {
                 cons: cons.clone(),
                 start_rule_id: None,
                 file_alias_name: file_alias_name.clone(),
-                replaced_alias_names: fcpeg_file_map.replaced_alias_names.clone(),
+                replaced_file_alias_names: fcpeg_file_map.replaced_file_alias_names.clone(),
                 used_block_ids: used_block_ids,
                 used_rule_ids: used_rule_ids,
                 block_name: String::new(),
@@ -342,7 +342,7 @@ impl BlockParser {
                 Err(()) => self.cons.borrow_mut().pop_log(),
             }
 
-            self.block_id_map.push(BlockParser::to_block_id_from_elements(&self.replaced_alias_names, &self.file_alias_name, &self.block_name));
+            self.block_id_map.push(BlockParser::to_block_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name));
             block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds)));
             // note: ファイルを抜けるためクリア
             self.block_alias_map.clear();
@@ -379,7 +379,7 @@ impl BlockParser {
                                     return Err(());
                                 }
 
-                                let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_alias_names, &file_alias_name, &block_name, &rule_name);
+                                let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &file_alias_name, &block_name, &rule_name);
 
                                 if !self.used_rule_ids.contains_key(&rule_id) {
                                     self.used_rule_ids.insert(rule_id.clone(), pos.clone());
@@ -398,8 +398,8 @@ impl BlockParser {
 
                     match &use_cmd {
                         BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
-                            let block_id = BlockParser::to_block_id_from_elements(&self.replaced_alias_names, file_alias_name, block_name);
-                            let used_from = BlockParser::to_block_id_from_elements(&self.replaced_alias_names, &self.file_alias_name, &self.block_name);
+                            let block_id = BlockParser::to_block_id_from_elements(&self.replaced_file_alias_names, file_alias_name, block_name);
+                            let used_from = BlockParser::to_block_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name);
 
                             // note: ブロック ID が自身のブロックと同じであれば警告
                             if block_id == used_from {
@@ -505,7 +505,7 @@ impl BlockParser {
             },
         };
 
-        let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_alias_names, &self.file_alias_name, &self.block_name, &rule_name);
+        let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name, &rule_name);
         let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, func_args, new_choice);
         return Ok(BlockCommand::Define { pos: rule_pos, rule: rule });
     }
@@ -555,7 +555,7 @@ impl BlockParser {
         };
 
         // note: ブロック ID がデフォルトと同じであれば警告
-        if DEFAULT_START_RULE_ID == BlockParser::to_rule_id_from_elements(&self.replaced_alias_names, &file_alias_name, &block_name, &rule_name) {
+        if DEFAULT_START_RULE_ID == BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &file_alias_name, &block_name, &rule_name) {
             self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryStartCommand {
                 pos: cmd_node.get_position(&self.cons)?,
                 msg: format!("rule '{}' is the same as the default", DEFAULT_START_RULE_ID),
@@ -971,7 +971,7 @@ impl BlockParser {
                         let id = if name == ".Rule.Func" && PRIM_FUNC_NAMES.contains(&joined_raw_id.as_str()) {
                             joined_raw_id.clone()
                         } else {
-                            match BlockParser::to_rule_id(&self.cons, &pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_alias_names) {
+                            match BlockParser::to_rule_id(&self.cons, &pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_file_alias_names) {
                                 Ok(id) => {
                                     if !self.used_rule_ids.contains_key(&id) {
                                         self.used_rule_ids.insert(id.clone(), pos.clone());
@@ -990,7 +990,7 @@ impl BlockParser {
                         let parent_node = chain_id_node.get_node_child_at(&self.cons, 0)?;
                         let pos = parent_node.get_position(&self.cons)?;
 
-                        let id = match BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_alias_names) {
+                        let id = match BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_file_alias_names) {
                             Ok(id) => {
                                 if !self.used_rule_ids.contains_key(&id) {
                                     self.used_rule_ids.insert(id.clone(), pos.clone());
@@ -1041,11 +1041,11 @@ impl BlockParser {
         return Ok(str_vec);
     }
 
-    fn to_rule_id(cons: &Rc<RefCell<Console>>, pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String, replaced_alias_names: &Arc<HashMap<String, String>>) -> ConsoleResult<String> {
+    fn to_rule_id(cons: &Rc<RefCell<Console>>, pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String, replaced_file_alias_names: &Arc<HashMap<String, String>>) -> ConsoleResult<String> {
         let (new_id, id_block_name, id_rule_name) = match id_tokens.len() {
             1 => {
                 let id_rule_name = id_tokens.get(0).unwrap();
-                let new_id = BlockParser::to_rule_id_from_elements(replaced_alias_names, file_alias_name, block_name, id_rule_name);
+                let new_id = BlockParser::to_rule_id_from_elements(replaced_file_alias_names, file_alias_name, block_name, id_rule_name);
 
                 (new_id, block_name, id_rule_name.clone())
             },
@@ -1056,7 +1056,7 @@ impl BlockParser {
                 if block_alias_map.contains_key(&block_name.to_string()) {
                     // note: ブロック名がエイリアスである場合
                     let block_name = block_alias_map.get(&block_name.to_string()).unwrap();
-                    let new_id = BlockParser::to_block_id_from_elements(&replaced_alias_names, &block_name, &rule_name);
+                    let new_id = BlockParser::to_block_id_from_elements(&replaced_file_alias_names, &block_name, &rule_name);
 
                     (new_id, block_name, rule_name.clone())
                 } else {
@@ -1073,7 +1073,7 @@ impl BlockParser {
                 let file_alias_name = id_tokens.get(0).unwrap();
                 let block_name = id_tokens.get(1).unwrap();
                 let rule_name = id_tokens.get(2).unwrap();
-                let new_id = BlockParser::to_rule_id_from_elements(replaced_alias_names, file_alias_name, block_name, rule_name);
+                let new_id = BlockParser::to_rule_id_from_elements(replaced_file_alias_names, file_alias_name, block_name, rule_name);
 
                 (new_id, block_name, rule_name.to_string())
             },
@@ -1167,8 +1167,8 @@ impl BlockParser {
         };
     }
 
-    fn to_block_id_from_elements(replaced_alias_names: &Arc<HashMap<String, String>>, file_alias_name: &String, block_name: &String) -> String {
-        let replaced_file_alias_name = match replaced_alias_names.get(file_alias_name) {
+    fn to_block_id_from_elements(replaced_file_alias_names: &Arc<HashMap<String, String>>, file_alias_name: &String, block_name: &String) -> String {
+        let replaced_file_alias_name = match replaced_file_alias_names.get(file_alias_name) {
             Some(v) => v,
             None => file_alias_name,
         };
@@ -1176,12 +1176,12 @@ impl BlockParser {
         return format!("{}.{}", replaced_file_alias_name, block_name);
     }
 
-    fn to_rule_id_from_elements(replaced_alias_names: &Arc<HashMap<String, String>>, file_alias_name: &String, block_name: &String, rule_name: &String) -> String {
-        let replaced_file_alias_name = match replaced_alias_names.get(file_alias_name) {
+    fn to_rule_id_from_elements(replaced_file_alias_names: &Arc<HashMap<String, String>>, file_alias_name: &String, block_name: &String, rule_name: &String) -> String {
+        let replaced_file_alias_name = match replaced_file_alias_names.get(file_alias_name) {
             Some(v) => v,
             None => file_alias_name,
         };
-        println!("{:?} {} to {}", replaced_alias_names, file_alias_name, replaced_file_alias_name);
+        println!("{:?} {} to {}", replaced_file_alias_names, file_alias_name, replaced_file_alias_name);
 
         return format!("{}.{}.{}", replaced_file_alias_name, block_name, rule_name);
     }
