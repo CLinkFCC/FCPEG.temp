@@ -173,6 +173,16 @@ impl ConsoleLogger for BlockParsingLog {
     }
 }
 
+pub struct RawRange {
+    pub min_num: usize,
+    pub max_num: Infinitable<usize>,
+    pub is_min_num_specified: bool,
+    pub is_max_num_specified: bool,
+    pub range_node_pos: CharacterPosition,
+    pub min_num_pos: Option<CharacterPosition>,
+    pub max_num_pos: Option<CharacterPosition>,
+}
+
 // note: プリミティブ関数の名前一覧
 const PRIM_FUNC_NAMES: &[&'static str] = &["JOIN"];
 // note: デフォルトの開始規則 ID
@@ -651,146 +661,96 @@ impl BlockParser {
 
             // note: Loop ノード
             let loop_range = match each_seq_elem_node.find_first_child_node(vec![".Rule.Loop"]) {
-                Some(v) => {
-                    match v.get_child_at(&self.cons, 0)? {
+                Some(loop_node) => {
+                    match loop_node.get_child_at(&self.cons, 0)? {
                         SyntaxNodeElement::Node(range_node) => {
-                            let range_node_pos = range_node.get_position(&self.cons)?;
+                            let raw_range = self.to_raw_range(range_node)?;
 
-                            let (min_num, is_min_num_specified) = match range_node.find_child_nodes(vec!["MinNum"]).get(0) {
-                                Some(min_num_node) => {
-                                    let min_str = min_num_node.join_child_leaf_values();
+                            let raw_loop_range_txt = {
+                                let min_num_txt = if raw_range.is_min_num_specified {
+                                    raw_range.min_num.to_string()
+                                } else {
+                                    String::new()
+                                };
 
-                                    match min_str.parse::<usize>() {
-                                        Ok(v) => (v, true),
-                                        Err(_) => {
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                                pos: min_num_node.get_position(&self.cons)?,
-                                                msg: format!("'{}' is too long or not a number", min_str),
-                                            }.get_log());
-
-                                            return Err(());
-                                        },
-                                    }
-                                },
-                                None => (0usize, false),
+                                match &raw_range.max_num {
+                                    Infinitable::Finite(v) => format!("{{{},{}}}", min_num_txt, v),
+                                    Infinitable::Infinite => format!("{{{},}}", min_num_txt),
+                                }
                             };
 
-                            let (max_num, max_num_pos, is_max_num_specified) = match range_node.find_child_nodes(vec!["MaxNumGroup"]).get(0) {
-                                Some(max_node_group) => {
-                                    match max_node_group.find_child_nodes(vec!["MaxNum"]).get(0) {
-                                        Some(max_num_node) => {
-                                            // note: {n,m} の場合 (#MaxNumGroup 内に #MaxNum が存在する)
-                                            let max_num_pos = max_num_node.get_position(&self.cons)?;
-                                            let max_str = max_num_node.join_child_leaf_values();
-
-                                            match max_str.parse::<usize>() {
-                                                Ok(v) => (Infinitable::Finite(v), Some(max_num_pos), true),
-                                                Err(_) => {
-                                                    self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                                        pos: max_num_pos,
-                                                        msg: format!("'{}' is too long or not a number", max_str),
-                                                    }.get_log());
-
-                                                    return Err(());
-                                                },
-                                            }
-                                        },
-                                        None => (Infinitable::Infinite, None, false),
-                                    }
-                                },
-                                // note: {n} の場合 (#MaxNumGroup が存在しない)
-                                None => {
-                                    if !is_min_num_specified {
-                                        // note: 最小, 最大回数どちらも指定されていない場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                            pos: range_node_pos,
-                                            msg: format!("no number specified"),
-                                        }.get_log());
-
-                                        return Err(());
-                                    }
-
-                                    (Infinitable::Finite(min_num), None, false)
-                                },
-                            };
-
-                            let raw_loop_range_txt = match &max_num {
-                                Infinitable::Finite(v) => format!("{{{},{}}}", min_num, v),
-                                Infinitable::Infinite => format!("{{{},}}", min_num),
-                            };
-
-                            match &max_num {
+                            match &raw_range.max_num {
                                 Infinitable::Finite(max_v) => {
-                                    if min_num > *max_v {
+                                    if raw_range.min_num > *max_v {
                                         // note: 最小回数が最大回数より大きかった場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                            pos: range_node_pos.clone(),
-                                            msg: format!("min value '{}' is bigger than max value '{}'", min_num, max_v),
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("min value '{}' is bigger than max value '{}'", raw_range.min_num, max_v),
                                         }.get_log());
 
                                         return Err(());
                                     }
 
-                                    if is_min_num_specified && !is_max_num_specified && min_num == 0 && *max_v == 0 {
+                                    if raw_range.is_min_num_specified && !raw_range.is_max_num_specified && raw_range.min_num == 0 && *max_v == 0 {
                                         // note: {0} の場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                            pos: range_node_pos.clone(),
+                                            pos: raw_range.range_node_pos.clone(),
                                             msg: format!("loop range '{{0}}' is invalid"),
                                         }.get_log());
 
                                         return Err(());
-                                    } else if min_num == 1 && *max_v == 1 {
-                                        if is_min_num_specified && !is_max_num_specified {
+                                    } else if raw_range.min_num == 1 && *max_v == 1 {
+                                        if raw_range.is_min_num_specified && !raw_range.is_max_num_specified {
                                             // note: {1} の場合
                                             self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                                pos: range_node_pos.clone(),
+                                                pos: raw_range.range_node_pos.clone(),
                                                 msg: format!("loop range '{{1}}' is unnecessary"),
                                             }.get_log());
                                         } else {
                                             // note: {1,1} の場合
                                             self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                                pos: range_node_pos.clone(),
+                                                pos: raw_range.range_node_pos.clone(),
                                                 msg: format!("loop range '{{1,1}}' is unnecessary"),
                                             }.get_log());
                                         }
                                     } else if *max_v == 0 {
                                         // note: 最大回数に 0 が指定された場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                            pos: max_num_pos.unwrap(),
-                                            msg: format!("max number '{}' is invalid", min_num),
+                                            pos: raw_range.max_num_pos.unwrap(),
+                                            msg: format!("max number '{}' is invalid", raw_range.min_num),
                                         }.get_log());
 
                                         return Err(());
-                                    } else if is_max_num_specified && min_num == *max_v {
+                                    } else if raw_range.is_max_num_specified && raw_range.min_num == *max_v {
                                         // note: 最小回数と最大回数が同じだった場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                            pos: range_node_pos.clone(),
-                                            msg: format!("modify '{}' to '{{{}}}'", raw_loop_range_txt, min_num),
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("modify '{}' to '{{{}}}'", raw_loop_range_txt, raw_range.min_num),
                                         }.get_log());
-                                    } else if is_min_num_specified && min_num == 0 {
+                                    } else if raw_range.is_min_num_specified && raw_range.min_num == 0 {
                                         // note: 最小回数に 0 が指定された場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                            pos: range_node_pos.clone(),
+                                            pos: raw_range.range_node_pos.clone(),
                                             msg: format!("modify '{}' to '{{,{}}}'", raw_loop_range_txt, max_v),
                                         }.get_log());
                                     }
                                 },
-                                Infinitable::Infinite if is_min_num_specified && min_num == 0 => {
+                                Infinitable::Infinite if raw_range.is_min_num_specified && raw_range.min_num == 0 => {
                                     // note: 最小回数に 0 が指定された場合
                                     self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                        pos: range_node_pos.clone(),
+                                        pos: raw_range.range_node_pos.clone(),
                                         msg: format!("modify '{}' to '{{,}}'", raw_loop_range_txt),
                                     }.get_log());
                                 },
                                 _ => (),
                             }
 
-                            let loop_range = RuleElementLoopRange::new(min_num, max_num);
+                            let loop_range = RuleElementLoopRange::new(raw_range.min_num, raw_range.max_num);
 
                             match loop_range.to_symbol_string() {
                                 Some(symbol_str) => {
                                     self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                        pos: range_node_pos.clone(),
+                                        pos: raw_range.range_node_pos.clone(),
                                         msg: format!("prefer {} to {}", raw_loop_range_txt, symbol_str),
                                     }.get_log());
                                 },
@@ -899,6 +859,81 @@ impl BlockParser {
         let mut seq = Box::new(RuleGroup::new(RuleGroupKind::Sequence));
         seq.sub_elems = children;
         return Ok(RuleElement::Group(seq));
+    }
+
+    fn to_raw_range(&mut self, range_node: &SyntaxNode) -> ConsoleResult<RawRange> {
+        let range_node_pos = range_node.get_position(&self.cons)?;
+
+        let (min_num, min_num_pos, is_min_num_specified) = match range_node.find_child_nodes(vec!["MinNum"]).get(0) {
+            Some(min_num_node) => {
+                let min_num_pos = min_num_node.get_position(&self.cons)?;
+                let min_str = min_num_node.join_child_leaf_values();
+
+                match min_str.parse::<usize>() {
+                    Ok(v) => (v, Some(min_num_pos), true),
+                    Err(_) => {
+                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                            pos: min_num_node.get_position(&self.cons)?,
+                            msg: format!("'{}' is too long or not a number", min_str),
+                        }.get_log());
+
+                        return Err(());
+                    },
+                }
+            },
+            None => (0usize, None, false),
+        };
+
+        let (max_num, max_num_pos, is_max_num_specified) = match range_node.find_child_nodes(vec!["MaxNumGroup"]).get(0) {
+            Some(max_node_group) => {
+                match max_node_group.find_child_nodes(vec!["MaxNum"]).get(0) {
+                    Some(max_num_node) => {
+                        // note: {n,m} の場合 (#MaxNumGroup 内に #MaxNum が存在する)
+                        let max_num_pos = max_num_node.get_position(&self.cons)?;
+                        let max_str = max_num_node.join_child_leaf_values();
+
+                        match max_str.parse::<usize>() {
+                            Ok(v) => (Infinitable::Finite(v), Some(max_num_pos), true),
+                            Err(_) => {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                    pos: max_num_pos,
+                                    msg: format!("'{}' is too long or not a number", max_str),
+                                }.get_log());
+
+                                return Err(());
+                            },
+                        }
+                    },
+                    None => (Infinitable::Infinite, None, false),
+                }
+            },
+            // note: {n} の場合 (#MaxNumGroup が存在しない)
+            None => {
+                if !is_min_num_specified {
+                    // note: 最小, 最大回数どちらも指定されていない場合
+                    self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                        pos: range_node_pos,
+                        msg: format!("no number specified"),
+                    }.get_log());
+
+                    return Err(());
+                }
+
+                (Infinitable::Finite(min_num), None, false)
+            },
+        };
+
+        let raw_range = RawRange {
+            min_num: min_num,
+            max_num: max_num,
+            is_min_num_specified: is_min_num_specified,
+            is_max_num_specified: is_max_num_specified,
+            range_node_pos: range_node_pos,
+            min_num_pos: min_num_pos,
+            max_num_pos: max_num_pos,
+        };
+
+        return Ok(raw_range);
     }
 
     // note: Rule.PureChoice ノードの解析
@@ -1181,7 +1216,6 @@ impl BlockParser {
             Some(v) => v,
             None => file_alias_name,
         };
-        println!("{:?} {} to {}", replaced_file_alias_names, file_alias_name, replaced_file_alias_name);
 
         return format!("{}.{}.{}", replaced_file_alias_name, block_name, rule_name);
     }
