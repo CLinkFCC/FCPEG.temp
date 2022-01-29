@@ -20,6 +20,7 @@ pub enum SyntaxParsingLog {
     InvalidGenericsArgumentLength { arg_ids: Vec<String> },
     InvalidFunctionArgumentLength { arg_ids: Vec<String> },
     InvalidLoopRange { msg: String },
+    InvalidRuleElementStructure { uuid: Uuid, msg: String },
     NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
     TooLongRepetition { loop_limit: usize },
     UnknownArgumentID { arg_id: String },
@@ -34,6 +35,7 @@ impl ConsoleLogger for SyntaxParsingLog {
             SyntaxParsingLog::InvalidGenericsArgumentLength { arg_ids } => log!(Error, format!("invalid generics argument length ({:?})", arg_ids)),
             SyntaxParsingLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, format!("invalid function argument length ({:?})", arg_ids)),
             SyntaxParsingLog::InvalidLoopRange { msg } => log!(Error, format!("invalid loop range"), format!("{}", msg.bright_black())),
+            SyntaxParsingLog::InvalidRuleElementStructure { uuid, msg } => log!(Error, format!("invalid rule element structure"), format!("uuid:\t{}", uuid), format!("{}", msg.bright_black())),
             SyntaxParsingLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
             SyntaxParsingLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
             SyntaxParsingLog::UnknownArgumentID { arg_id } => log!(Error, format!("unknown argument id '{}'", arg_id)),
@@ -220,7 +222,6 @@ impl SyntaxParser {
     }
 
     fn parse_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
-        println!("* {} *", group);
         if self.enable_memoization {
             match self.memoized_map.find(&group.uuid, self.src_i) {
                 Some((src_len, result)) => {
@@ -325,36 +326,45 @@ impl SyntaxParser {
 
         return match parent_elem_order {
             RuleElementOrder::Random(random_order_loop_range) => {
-                let (random_order_min_count, random_order_max_count) = random_order_loop_range.to_tuple();
-
                 let tar_elems = match group.sub_elems.get(0) {
                     Some(tar_parent_elem) => {
                         match tar_parent_elem {
                             RuleElement::Group(tar_parent_group) => &tar_parent_group.sub_elems,
-                            _ => panic!(),
+                            _ => {
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidRuleElementStructure {
+                                    uuid: group.uuid.clone(),
+                                    msg: "child element of random order group must be a group".to_string(),
+                                }.get_log());
+
+                                return Err(());
+                            },
                         }
                     },
-                    None => panic!(),
+                    None => {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidRuleElementStructure {
+                            uuid: group.uuid.clone(),
+                            msg: "random order group must have a child group".to_string(),
+                        }.get_log());
+
+                        return Err(());
+                    },
                 };
 
                 let random_order_start_src_i = self.src_i;
                 let mut is_each_subgroup_matched = vec![false; tar_elems.len()];
                 let mut subgroup_i = 0usize;
 
-                println!("random order {}", group);
-
-                for i in 0..tar_elems.len() {
+                for _ in 0..tar_elems.len() {
                     let elem_start_src_i = self.src_i;
-                    println!("test {}", i);
                     for subelem in tar_elems {
-                        println!("\tsub {}", subelem);
-                        println!("\t{:?}", is_each_subgroup_matched);
                         match subelem {
                             RuleElement::Group(subgroup) => {
-                                match self.parse_group(&RuleElementOrder::Sequential, subgroup)? {
+                                let mut conved_subgroup = subgroup.clone();
+                                conved_subgroup.loop_range = random_order_loop_range.clone();
+
+                                match self.parse_group(&RuleElementOrder::Sequential, &conved_subgroup)? {
                                     Some(node_elems) => {
                                         if is_each_subgroup_matched[subgroup_i] {
-                                            println!("\t\tcontinue");
                                             subgroup_i += 1;
                                             continue;
                                         }
@@ -370,7 +380,6 @@ impl SyntaxParser {
                                             }
                                         }
 
-                                        println!("\t\tsuccess");
                                         is_each_subgroup_matched[subgroup_i] = true;
                                         break;
                                     },

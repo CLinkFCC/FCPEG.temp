@@ -220,7 +220,7 @@ impl RuleElementLoopRange {
             Infinitable::Infinite => String::new(),
         };
 
-        return format!("{}{}{}{}{}", opening, min_count, separator, max_count, closing);
+        return format!("{}{}{}{}{}{}", prefix, opening, min_count, separator, max_count, closing);
     }
 
     pub fn to_tuple(&self) -> (usize, isize) {
@@ -248,7 +248,7 @@ impl RuleElementOrder {
 impl Display for RuleElementOrder {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let s = match self {
-            RuleElementOrder::Random(loop_range) => format!("{}", loop_range.to_string(true, "^", "{", ",", "}")),
+            RuleElementOrder::Random(loop_range) => format!("{}", loop_range.to_string(false, "^", "[", "-", "]")),
             RuleElementOrder::Sequential => format!(""),
         };
 
