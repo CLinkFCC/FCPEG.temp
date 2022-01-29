@@ -1090,8 +1090,8 @@ impl BlockParser {
                     ".Rule.CharClass" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
                     ".Rule.Generics" | ".Rule.Func" => {
                         let mut args = Vec::<Box<RuleGroup>>::new();
-                        for instant_pure_choice_node in expr_child_node.find_child_nodes(vec![".Rule.InstantPureChoice"]) {
-                            args.push(Box::new(self.to_rule_choice_elem(instant_pure_choice_node, generics_args)?));
+                        for seq_node in expr_child_node.find_child_nodes(vec![".Rule.Seq"]) {
+                            args.push(Box::new(self.to_rule_choice_elem(seq_node, generics_args)?));
                         }
 
                         let parent_node = expr_child_node.get_node_child_at(&self.cons, 0)?.get_node_child_at(&self.cons, 0)?;
@@ -1659,24 +1659,6 @@ impl FCPEGBlock {
     }
 
     fn get_rule_block() -> Block {
-        // code: InstantPureChoice <- Seq ":" Symbol.Space# Seq)*##,
-        let instant_pure_choice_rule = rule!{
-            ".Rule.InstantPureChoice",
-            choice!{
-                vec![],
-                expr!(Id, ".Rule.Seq"),
-                choice!{
-                    vec!["*", "##"],
-                    choice!{
-                        vec!["##"],
-                        expr!(String, ":"),
-                        expr!(Id, ".Symbol.Space", "#"),
-                        expr!(Id, ".Rule.Seq"),
-                    },
-                },
-            },
-        };
-
         // code: PureChoice <- Seq ((Symbol.Div+# ":" Symbol.Div+# : ",")## Seq)*##,
         let pure_choice_rule = rule!{
             ".Rule.PureChoice",
@@ -1945,7 +1927,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Generics <- Misc.ChainID "<"# Symbol.Div*# InstantPureChoice (Symbol.Div*# ","# Symbol.Div*# InstantPureChoice)*## Symbol.Div*# ">"#,
+        // code: Generics <- Misc.ChainID "<"# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ">"#,
         let generics_rule = rule!{
             ".Rule.Generics",
             choice!{
@@ -1953,7 +1935,7 @@ impl FCPEGBlock {
                 expr!(Id, ".Misc.ChainID"),
                 expr!(String, "<", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                expr!(Id, ".Rule.InstantPureChoice"),
+                expr!(Id, ".Rule.Seq"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
@@ -1961,7 +1943,7 @@ impl FCPEGBlock {
                         expr!(Id, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
                         expr!(Id, ".Symbol.Div", "*", "#"),
-                        expr!(Id, ".Rule.InstantPureChoice"),
+                        expr!(Id, ".Rule.Seq"),
                     },
                 },
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1969,7 +1951,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Func <- Misc.ChainID "("# Symbol.Div*# InstantPureChoice (Symbol.Div*# ","# Symbol.Div*# InstantPureChoice)*## Symbol.Div*# ")"#,
+        // code: Func <- Misc.ChainID "("# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ")"#,
         let func_rule = rule!{
             ".Rule.Func",
             choice!{
@@ -1977,7 +1959,7 @@ impl FCPEGBlock {
                 expr!(Id, ".Misc.ChainID"),
                 expr!(String, "(", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                expr!(Id, ".Rule.InstantPureChoice"),
+                expr!(Id, ".Rule.Seq"),
                 choice!{
                     vec!["*", "##"],
                     choice!{
@@ -1985,7 +1967,7 @@ impl FCPEGBlock {
                         expr!(Id, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
                         expr!(Id, ".Symbol.Div", "*", "#"),
-                        expr!(Id, ".Rule.InstantPureChoice"),
+                        expr!(Id, ".Rule.Seq"),
                     },
                 },
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -2113,6 +2095,6 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Rule", vec![instant_pure_choice_rule, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
+        return block!(".Rule", vec![pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }
