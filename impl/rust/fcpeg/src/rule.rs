@@ -197,9 +197,9 @@ impl RuleElementLoopRange {
         }
     }
 
-    pub fn to_string(&self, is_loop_count: bool, prefix: &str, separator: &str, suffix: &str) -> String {
+    pub fn to_string(&self, is_loop_count: bool, prefix: &str, opening: &str, separator: &str, closing: &str) -> String {
         if self.is_single_loop() {
-            return String::new();
+            return prefix.to_string();
         }
 
         if is_loop_count {
@@ -209,9 +209,18 @@ impl RuleElementLoopRange {
             }
         }
 
-        let min_count = if self.min == 0 { String::new() } else { self.min.to_string() };
-        let max_count = match self.max { Infinitable::Finite(max_num) => max_num.to_string(), Infinitable::Infinite => String::new(), };
-        return format!("{}{}{}{}{}", prefix, min_count, separator, max_count, suffix);
+        let min_count = if self.min == 0 {
+            String::new()
+        } else {
+            self.min.to_string()
+        };
+
+        let max_count = match self.max {
+            Infinitable::Finite(max_num) => max_num.to_string(),
+            Infinitable::Infinite => String::new(),
+        };
+
+        return format!("{}{}{}{}{}", opening, min_count, separator, max_count, closing);
     }
 
     pub fn to_tuple(&self) -> (usize, isize) {
@@ -238,10 +247,12 @@ impl RuleElementOrder {
 
 impl Display for RuleElementOrder {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        return match self {
-            RuleElementOrder::Random(loop_range) => write!(f, "Random({})", loop_range.to_string(true, "{", ",", "}")),
-            RuleElementOrder::Sequential => write!(f, "Sequential"),
-        }
+        let s = match self {
+            RuleElementOrder::Random(loop_range) => format!("{}", loop_range.to_string(true, "^", "{", ",", "}")),
+            RuleElementOrder::Sequential => format!(""),
+        };
+
+        return write!(f, "{}", s);
     }
 }
 
@@ -300,18 +311,6 @@ impl RuleGroup {
             elem_order: RuleElementOrder::Sequential,
         };
     }
-
-    pub fn extract(&self) -> RuleGroup {
-        return match self.sub_elems.get(0) {
-            Some(child_elem) if self.sub_elems.len() == 1 => {
-                match child_elem {
-                    RuleElement::Group(group) => group.clone().extract(),
-                    _ => self.clone(),
-                }
-            },
-            _ => self.clone(),
-        };
-    }
 }
 
 impl Display for RuleGroup {
@@ -338,10 +337,10 @@ impl Display for RuleGroup {
             },
             RuleGroupKind::Sequence => " ",
         };
-        let loop_text = self.loop_range.to_string(true, "{", ",", "}");
-        let order_text = match &self.elem_order { RuleElementOrder::Random(loop_range) => loop_range.to_string(false, "^[", "-", "]"), RuleElementOrder::Sequential => String::new(), };
 
-        return write!(f, "{}", format!("{}({}){}{}{}", self.lookahead_kind, seq_text.join(separator), loop_text, order_text, self.ast_reflection_style));
+        let loop_text = self.loop_range.to_string(true, "", "{", ",", "}");
+
+        return write!(f, "{}", format!("{}({}){}{}{}", self.lookahead_kind, seq_text.join(separator), loop_text, self.elem_order, self.ast_reflection_style));
     }
 }
 
@@ -397,7 +396,7 @@ impl RuleExpression {
 
 impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        let loop_text = self.loop_range.to_string(true, "{", ",", "}");
+        let loop_text = self.loop_range.to_string(true, "", "{", ",", "}");
         let value_text = match self.kind.clone() {
             RuleExpressionKind::ArgId => format!("${}", self.value),
             RuleExpressionKind::CharClass => self.value.clone(),
@@ -412,7 +411,7 @@ impl Display for RuleExpression {
             RuleExpressionKind::Id => self.value.clone(),
             RuleExpressionKind::String => format!("\"{}\"", self.value),
             RuleExpressionKind::Wildcard => ".".to_string(),
-        };
+        }.replace("\0", "\\0").replace("\n", "\\n");
 
         return write!(f, "{}{}{}{}", self.lookahead_kind, value_text, loop_text, self.ast_reflection_style);
     }

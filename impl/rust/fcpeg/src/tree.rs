@@ -113,7 +113,7 @@ impl Display for ASTReflectionStyle {
         let s = match self {
             ASTReflectionStyle::Reflection(elem_name) => format!("#{}", elem_name.clone()),
             ASTReflectionStyle::NoReflection => String::new(),
-            ASTReflectionStyle::Expansion => "|".to_string(),
+            ASTReflectionStyle::Expansion => "##".to_string(),
         };
 
         return write!(f, "{}", s);
