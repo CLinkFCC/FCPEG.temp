@@ -3,6 +3,7 @@ use std::collections::*;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::block::*;
 use crate::rule::*;
 use crate::tree::*;
 
@@ -17,13 +18,15 @@ use uuid::Uuid;
 
 pub enum SyntaxParsingLog {
     InvalidCharClassFormat { value: String },
-    InvalidGenericsArgumentLength { arg_ids: Vec<String> },
-    InvalidFunctionArgumentLength { arg_ids: Vec<String> },
+    InvalidGenericsArgumentLength { pos: CharacterPosition, expected_arg_len: usize },
+    InvalidTemplateArgumentLength { pos: CharacterPosition, expected_arg_len: usize },
     InvalidLoopRange { msg: String },
     InvalidRuleElementStructure { uuid: Uuid, msg: String },
     NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
     TooLongRepetition { loop_limit: usize },
-    UnknownArgumentID { arg_id: String },
+    UncoveredPrimitiveRule { pos: CharacterPosition, rule_name: String },
+    UnknownGenericsArgumentID { arg_id: String },
+    UnknownTemplateArgumentID { arg_id: String },
     UnknownLookaheadKind { uuid: Uuid, kind: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
 }
@@ -32,40 +35,33 @@ impl ConsoleLogger for SyntaxParsingLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
             SyntaxParsingLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),
-            SyntaxParsingLog::InvalidGenericsArgumentLength { arg_ids } => log!(Error, format!("invalid generics argument length ({:?})", arg_ids)),
-            SyntaxParsingLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, format!("invalid function argument length ({:?})", arg_ids)),
+            SyntaxParsingLog::InvalidGenericsArgumentLength { pos, expected_arg_len } => log!(Error, format!("invalid generics argument length; expected {} argument(s)", expected_arg_len), format!("pos:\t{}", pos)),
+            SyntaxParsingLog::InvalidTemplateArgumentLength { pos, expected_arg_len } => log!(Error, format!("invalid template argument length; expected {} argument(s)", expected_arg_len), format!("pos:\t{}", pos)),
             SyntaxParsingLog::InvalidLoopRange { msg } => log!(Error, format!("invalid loop range"), format!("{}", msg.bright_black())),
             SyntaxParsingLog::InvalidRuleElementStructure { uuid, msg } => log!(Error, format!("invalid rule element structure"), format!("uuid:\t{}", uuid), format!("{}", msg.bright_black())),
             SyntaxParsingLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
             SyntaxParsingLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
-            SyntaxParsingLog::UnknownArgumentID { arg_id } => log!(Error, format!("unknown argument id '{}'", arg_id)),
+            SyntaxParsingLog::UncoveredPrimitiveRule { pos, rule_name } => log!(Error, format!("uncovered primitive rule '{}'", rule_name), format!("pos:\t{}", pos)),
+            SyntaxParsingLog::UnknownGenericsArgumentID { arg_id } => log!(Error, format!("unknown generics argument id '{}'", arg_id)),
+            SyntaxParsingLog::UnknownTemplateArgumentID { arg_id } => log!(Error, format!("unknown template argument id '{}'", arg_id)),
             SyntaxParsingLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid:\t{}", uuid)),
             SyntaxParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
         };
     }
 }
 
-pub type ArgumentMap = HashMap<String, Argument>;
-
-// todo: 取り外す
-#[allow(unused)]
-pub struct Argument {
-    kind: ArgumentKind,
-    rule_group: Box<RuleGroup>,
+pub struct ArgumentMap {
+    generics_group: HashMap<String, Box<RuleGroup>>,
+    template_group: HashMap<String, Box<RuleGroup>>,
 }
 
-impl Argument {
-    pub fn new(kind: ArgumentKind, rule_group: Box<RuleGroup>) -> Argument {
-        return Argument {
-            kind: kind,
-            rule_group: rule_group,
+impl ArgumentMap {
+    pub fn new() -> ArgumentMap {
+        return ArgumentMap {
+            generics_group: HashMap::new(),
+            template_group: HashMap::new(),
         };
     }
-}
-
-pub enum ArgumentKind {
-    Function,
-    Generics,
 }
 
 pub struct MemoizationMap {
@@ -595,24 +591,23 @@ impl SyntaxParser {
         }
 
         match &expr.kind {
-            // todo: argid に引数 kind を追加
             RuleExpressionKind::ArgId => {
-                let mut group = Option::<Box<RuleGroup>>::None;
+                let mut generics_group = Option::<Box<RuleGroup>>::None;
 
                 for each_arg_map in &*self.arg_maps {
-                    match each_arg_map.get(&expr.value) {
+                    match each_arg_map.generics_group.get(&expr.value) {
                         Some(v) => {
-                            group = Some(v.rule_group.clone());
+                            generics_group = Some(v.clone());
                             break;
                         },
                         None => (),
                     };
                 }
 
-                let result = match &group {
+                let result = match &generics_group {
                     Some(v) => self.parse_group(&RuleElementOrder::Sequential, &v),
                     None => {
-                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
                             arg_id: expr.value.clone(),
                         }.get_log());
 
@@ -679,69 +674,24 @@ impl SyntaxParser {
                     return Ok(None);
                 }
             },
-            RuleExpressionKind::Generics(args) => {
+            RuleExpressionKind::Id => self.parse_id_expr(expr),
+            RuleExpressionKind::IdWithArgs { generics_args, template_args } => {
                 let rule_id = &expr.value;
-
                 let mut new_arg_map = ArgumentMap::new();
-                let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
-                    Some(rule) => &rule.generics_arg_ids,
-                    None => {
-                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
-                            pos: expr.pos.clone(),
-                            rule_id: rule_id.clone(),
-                        }.get_log());
 
-                        return Err(());
-                    },
-                };
-
-                if args.len() != new_arg_ids.len() {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
-                        arg_ids: new_arg_ids.clone(),
-                    }.get_log());
-
-                    return Err(());
-                }
-
-                for i in 0..args.len() {
-                    let new_arg_id = match new_arg_ids.get(i) {
-                        Some(v) => v,
-                        None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
-                                arg_id: format!("[{}]", i),
-                            }.get_log());
-
-                            return Err(());
-                        },
-                    };
-
-                    let new_arg_group = match args.get(i) {
-                        Some(v) => v,
-                        None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
-                                arg_id: format!("[{}]", i),
-                            }.get_log());
-
-                            return Err(());
-                        }
-                    };
-
-                    new_arg_map.insert(new_arg_id.clone(), Argument::new(ArgumentKind::Generics, new_arg_group.clone()));
-                }
-
-                self.arg_maps.push(new_arg_map);
-                let result = self.parse_id_expr(expr);
-                self.arg_maps.pop();
-                return result;
-            },
-            RuleExpressionKind::Func(args) => {
-                let rule_id = &expr.value;
-
-                // note: プリミティブ関数
                 match rule_id.as_str() {
                     "JOIN" => {
-                        match args.get(0) {
-                            Some(tar_arg) if args.len() == 1 => {
+                        match generics_args.get(0) {
+                            Some(tar_arg) if generics_args.len() == 1 => {
+                                if template_args.len() != 0 {
+                                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidTemplateArgumentLength {
+                                        pos: expr.pos.clone(),
+                                        expected_arg_len: 0,
+                                    }.get_log());
+
+                                    return Err(());
+                                }
+
                                 return match self.parse_group(&RuleElementOrder::Sequential, tar_arg)? {
                                     Some(result_elems) => {
                                         let mut joined_str = String::new();
@@ -761,42 +711,62 @@ impl SyntaxParser {
                                 };
                             },
                             _ => {
-                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidFunctionArgumentLength {
-                                    arg_ids: vec!["Item".to_string()],
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
+                                    pos: expr.pos.clone(),
+                                    expected_arg_len: 1,
                                 }.get_log());
 
                                 return Err(());
                             },
                         }
                     },
-                    _ => (),
+                    _ => {
+                        if PRIMITIVE_RULE_NAMES.contains(&rule_id.as_str()) {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UncoveredPrimitiveRule {
+                                pos: expr.pos.clone(),
+                                rule_name: rule_id.clone(),
+                            }.get_log());
+
+                            return Err(());
+                        }
+                    },
                 }
 
-                let mut new_arg_map = ArgumentMap::new();
-                let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
-                    Some(rule) => &rule.func_arg_ids,
+                let (generics_arg_ids, template_arg_ids) = match self.rule_map.rule_map.get(rule_id) {
+                    Some(rule) => (&rule.generics_arg_ids, &rule.template_arg_ids),
                     None => {
                         self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
-                            pos: expr.pos.clone(), rule_id: rule_id.clone(),
+                            pos: expr.pos.clone(),
+                            rule_id: rule_id.clone(),
                         }.get_log());
 
                         return Err(());
                     },
                 };
 
-                if args.len() != new_arg_ids.len() {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidFunctionArgumentLength {
-                        arg_ids: new_arg_ids.clone(),
+                if generics_args.len() != generics_arg_ids.len() {
+                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
+                        pos: expr.pos.clone(),
+                        expected_arg_len: generics_arg_ids.len(),
                     }.get_log());
 
                     return Err(());
                 }
 
-                for i in 0..args.len() {
-                    let new_arg_id = match new_arg_ids.get(i) {
+                if template_args.len() != template_arg_ids.len() {
+                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidTemplateArgumentLength {
+                        pos: expr.pos.clone(),
+                        expected_arg_len: template_arg_ids.len(),
+                    }.get_log());
+
+                    return Err(());
+                }
+
+                for i in 0..generics_arg_ids.len() {
+                    let new_arg_id = match generics_arg_ids.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
                                 arg_id: format!("[{}]", i),
                             }.get_log());
 
@@ -804,10 +774,25 @@ impl SyntaxParser {
                         },
                     };
 
-                    let new_arg_group = match args.get(i) {
+                    let new_arg_group = match generics_args.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
+                                arg_id: format!("[{}]", i),
+                            }.get_log());
+
+                            return Err(());
+                        }
+                    };
+
+                    new_arg_map.generics_group.insert(new_arg_id.clone(), new_arg_group.clone());
+                }
+
+                for i in 0..template_arg_ids.len() {
+                    let new_arg_id = match template_arg_ids.get(i) {
+                        Some(v) => v,
+                        None => {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownTemplateArgumentID {
                                 arg_id: format!("[{}]", i),
                             }.get_log());
 
@@ -815,16 +800,24 @@ impl SyntaxParser {
                         },
                     };
 
-                    new_arg_map.insert(new_arg_id.clone(), Argument::new(ArgumentKind::Function, new_arg_group.clone()));
+                    let new_arg_group = match template_args.get(i) {
+                        Some(v) => v,
+                        None => {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownTemplateArgumentID {
+                                arg_id: format!("[{}]", i),
+                            }.get_log());
+
+                            return Err(());
+                        }
+                    };
+
+                    new_arg_map.template_group.insert(new_arg_id.clone(), new_arg_group.clone());
                 }
 
                 self.arg_maps.push(new_arg_map);
                 let result = self.parse_id_expr(expr);
                 self.arg_maps.pop();
                 return result;
-            },
-            RuleExpressionKind::Id => {
-                return self.parse_id_expr(expr);
             },
             RuleExpressionKind::String => {
                 if self.src_content.chars().count() < self.src_i + expr.value.chars().count() {

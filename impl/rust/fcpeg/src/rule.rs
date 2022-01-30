@@ -105,18 +105,18 @@ pub struct Rule {
     pub id: String,
     pub name: String,
     pub generics_arg_ids: Vec<String>,
-    pub func_arg_ids: Vec<String>,
+    pub template_arg_ids: Vec<String>,
     pub group: Box<RuleGroup>,
 }
 
 impl Rule {
-    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, func_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
+    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, template_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
         return Rule {
             pos: pos,
             id: id,
             name: name,
             generics_arg_ids: generics_arg_ids,
-            func_arg_ids: func_arg_ids,
+            template_arg_ids: template_arg_ids,
             group: group,
         };
     }
@@ -348,9 +348,8 @@ impl Display for RuleGroup {
 pub enum RuleExpressionKind {
     ArgId,
     CharClass,
-    Func(Vec<Box<RuleGroup>>),
-    Generics(Vec<Box<RuleGroup>>),
     Id,
+    IdWithArgs { generics_args: Vec<Box<RuleGroup>>, template_args: Vec<Box<RuleGroup>> },
     String,
     Wildcard,
 }
@@ -360,9 +359,8 @@ impl Display for RuleExpressionKind {
         let s = match self {
             RuleExpressionKind::ArgId => "ArgID",
             RuleExpressionKind::CharClass => "CharClass",
-            RuleExpressionKind::Func(_) => "Func",
-            RuleExpressionKind::Generics(_) => "Generics",
             RuleExpressionKind::Id => "ID",
+            RuleExpressionKind::IdWithArgs { generics_args: _, template_args: _ } => "ID",
             RuleExpressionKind::String => "String",
             RuleExpressionKind::Wildcard => "Wildcard",
         };
@@ -400,15 +398,28 @@ impl Display for RuleExpression {
         let value_text = match self.kind.clone() {
             RuleExpressionKind::ArgId => format!("${}", self.value),
             RuleExpressionKind::CharClass => self.value.clone(),
-            RuleExpressionKind::Func(args) => {
-                let arg_text = args.iter().map(|each_arg| each_arg.to_string()).collect::<Vec<String>>();
-                format!("{}({})", self.value, arg_text.join(", "))
-            },
-            RuleExpressionKind::Generics(args) => {
-                let arg_text = args.iter().map(|each_arg| each_arg.to_string()).collect::<Vec<String>>();
-                format!("{}<{}>", self.value, arg_text.join(", "))
-            },
             RuleExpressionKind::Id => self.value.clone(),
+            RuleExpressionKind::IdWithArgs { generics_args, template_args } => {
+                let generics_text = {
+                    if generics_args.len() != 0 {
+                        let generics_arg_text = generics_args.iter().map(|v| v.to_string()).collect::<Vec<String>>();
+                        format!("{}<{}>", self.value, generics_arg_text.join(", "))
+                    } else {
+                        String::new()
+                    }
+                };
+
+                let template_text = {
+                    if template_args.len() != 0 {
+                        let template_arg_text = template_args.iter().map(|v| v.to_string()).collect::<Vec<String>>();
+                        format!("{}({})", self.value, template_arg_text.join(", "))
+                    } else {
+                        String::new()
+                    }
+                };
+
+                format!("{}{}{}", self.value, generics_text, template_text)
+            },
             RuleExpressionKind::String => format!("\"{}\"", self.value),
             RuleExpressionKind::Wildcard => ".".to_string(),
         }.replace("\0", "\\0").replace("\n", "\\n");

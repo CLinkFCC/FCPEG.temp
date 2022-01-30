@@ -99,6 +99,7 @@ macro_rules! expr {
 
             let leaf_name = match RuleExpressionKind::$kind {
                 RuleExpressionKind::Id => $value.to_string(),
+                RuleExpressionKind::IdWithArgs { generics_args:_, template_args: _ } => $value.to_string(),
                 _ => String::new(),
             };
 
@@ -185,8 +186,8 @@ pub struct RawRange {
     pub max_num_pos: Option<CharacterPosition>,
 }
 
-// note: プリミティブ関数の名前一覧
-const PRIM_FUNC_NAMES: &[&'static str] = &["JOIN"];
+// note: プリミティブ規則名の一覧
+pub const PRIMITIVE_RULE_NAMES: &[&'static str] = &["JOIN"];
 // note: デフォルトの開始規則 ID
 pub const DEFAULT_START_RULE_ID: &'static str = ".Main.Main";
 
@@ -266,7 +267,7 @@ impl BlockParser {
         }
 
         for (each_rule_id, each_pos) in *used_rule_ids {
-            if !rule_map.rule_map.contains_key(&each_rule_id) {
+            if !rule_map.rule_map.contains_key(&each_rule_id) && !PRIMITIVE_RULE_NAMES.contains(&each_rule_id.as_str()) {
                 cons.borrow_mut().append_log(BlockParsingLog::UnknownRuleID {
                     pos: each_pos,
                     rule_id: each_rule_id,
@@ -494,12 +495,12 @@ impl BlockParser {
             }.get_log());
         }
 
-        let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenericsIDs"]) {
+        let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenerics"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
             None => Vec::new(),
         };
 
-        let func_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdFuncIDs"]) {
+        let template_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdTemplate"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
             None => Vec::new(),
         };
@@ -518,7 +519,7 @@ impl BlockParser {
         };
 
         let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name, &rule_name);
-        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, func_args, new_choice);
+        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, template_args, new_choice);
         return Ok(BlockCommand::Define { pos: rule_pos, rule: rule });
     }
 
@@ -1088,65 +1089,55 @@ impl BlockParser {
                 match name.as_str() {
                     ".Rule.ArgID" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::ArgId, expr_child_node.join_child_leaf_values()),
                     ".Rule.CharClass" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
-                    ".Rule.Generics" | ".Rule.Func" => {
-                        let mut args = Vec::<Box<RuleGroup>>::new();
-                        for seq_node in expr_child_node.find_child_nodes(vec![".Rule.Seq"]) {
-                            args.push(Box::new(self.to_rule_choice_elem(seq_node, generics_args)?));
-                        }
-
-                        let parent_node = expr_child_node.get_node_child_at(&self.cons, 0)?.get_node_child_at(&self.cons, 0)?;
-                        let pos = parent_node.get_position(&self.cons)?;
-
-                        let generics = match name.as_str() {
-                            ".Rule.Generics" => RuleExpressionKind::Generics(args),
-                            ".Rule.Func" => RuleExpressionKind::Func(args),
-                            _ => {
-                                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
-                                    parent_uuid: expr_child_node.uuid.clone(),
-                                    unexpected: format!("'{}'", name),
-                                    expected: "generics or template node".to_string(),
-                                }.get_log());
-
-                                return Err(());
-                            },
-                        };
-
-                        let raw_id = BlockParser::to_string_vec(&self.cons, expr_child_node.get_node_child_at(&self.cons, 0)?)?;
-                        let joined_raw_id = raw_id.join(".");
-                        let id = if name == ".Rule.Func" && PRIM_FUNC_NAMES.contains(&joined_raw_id.as_str()) {
-                            joined_raw_id.clone()
-                        } else {
-                            match BlockParser::to_rule_id(&self.cons, &pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_file_alias_names) {
-                                Ok(id) => {
-                                    if !self.used_rule_ids.contains_key(&id) {
-                                        self.used_rule_ids.insert(id.clone(), pos.clone());
-                                    }
-
-                                    id
-                                },
-                                Err(()) => return Err(()),
-                            }
-                        };
-
-                        (pos, generics, id)
-                    },
                     ".Rule.ID" => {
                         let chain_id_node = expr_child_node.get_node_child_at(&self.cons, 0)?;
                         let parent_node = chain_id_node.get_node_child_at(&self.cons, 0)?;
                         let pos = parent_node.get_position(&self.cons)?;
 
-                        let id = match BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_file_alias_names) {
-                            Ok(id) => {
-                                if !self.used_rule_ids.contains_key(&id) {
-                                    self.used_rule_ids.insert(id.clone(), pos.clone());
+                        let new_generics_args = match expr_child_node.find_first_child_node(vec![".Rule.Generics"]) {
+                            Some(generics_node) => {
+                                let mut args = Vec::<Box<RuleGroup>>::new();
+
+                                for seq_node in generics_node.find_child_nodes(vec![".Rule.Seq"]) {
+                                    match self.to_seq_elem(seq_node, generics_args)? {
+                                        RuleElement::Group(new_arg) => args.push(new_arg),
+                                        _ => (),
+                                    };
                                 }
 
-                                id
+                                args
                             },
-                            Err(()) => return Err(()),
+                            None => Vec::new(),
                         };
 
-                        (pos, RuleExpressionKind::Id, id)
+                        let new_template_args = match expr_child_node.find_first_child_node(vec![".Rule.Template"]) {
+                            Some(template_node) => {
+                                let mut args = Vec::<Box<RuleGroup>>::new();
+
+                                for seq_node in template_node.find_child_nodes(vec![".Rule.Seq"]) {
+                                    match self.to_seq_elem(seq_node, generics_args)? {
+                                        RuleElement::Group(new_arg) => args.push(new_arg),
+                                        _ => (),
+                                    };
+                                }
+
+                                args
+                            },
+                            None => Vec::new(),
+                        };
+
+                        let id = BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_file_alias_names)?;
+
+                        if !self.used_rule_ids.contains_key(&id) {
+                            self.used_rule_ids.insert(id.clone(), pos.clone());
+                        }
+
+                        let id_expr_kind = RuleExpressionKind::IdWithArgs {
+                            generics_args: new_generics_args,
+                            template_args: new_template_args,
+                        };
+
+                        (pos, id_expr_kind, id)
                     },
                     ".Rule.Str" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
                     ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
@@ -1322,6 +1313,10 @@ impl BlockParser {
     }
 
     fn to_rule_id_from_elements(replaced_file_alias_names: &Arc<HashMap<String, String>>, file_alias_name: &String, block_name: &String, rule_name: &String) -> String {
+        if PRIMITIVE_RULE_NAMES.contains(&rule_name.as_str()) {
+            return rule_name.clone();
+        }
+
         let replaced_file_alias_name = match replaced_file_alias_names.get(file_alias_name) {
             Some(v) => v,
             None => file_alias_name,
@@ -1551,14 +1546,14 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
+        // code: DefineCmd <- Misc.SingleID DefineCmdGenerics? DefineCmdTemplate? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
         let define_cmd_rule = rule!{
             ".Block.DefineCmd",
             choice!{
                 vec![],
                 expr!(Id, ".Misc.SingleID"),
-                expr!(Id, ".Block.DefineCmdGenericsIDs", "?"),
-                expr!(Id, ".Block.DefineCmdFuncIDs", "?"),
+                expr!(Id, ".Block.DefineCmdGenerics", "?"),
+                expr!(Id, ".Block.DefineCmdTemplate", "?"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "<-", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1568,9 +1563,9 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmdGenericsIDs <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
-        let define_cmd_generics_ids_rule = rule!{
-            ".Block.DefineCmdGenericsIDs",
+        // code: DefineCmdGenerics <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
+        let define_cmd_generics_rule = rule!{
+            ".Block.DefineCmdGenerics",
             choice!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1590,9 +1585,9 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmdFuncIDs <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,
-        let define_cmd_func_ids_rule = rule!{
-            ".Block.DefineCmdFuncIDs",
+        // code: DefineCmdTemplate <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,
+        let define_cmd_template_rule = rule!{
+            ".Block.DefineCmdTemplate",
             choice!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1655,7 +1650,7 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Block", vec![block_rule, cmd_rule, comment_rule, define_cmd_rule, define_cmd_generics_ids_rule, define_cmd_func_ids_rule, start_cmd_rule, use_cmd_rule, use_cmd_block_alias_rule]);
+        return block!(".Block", vec![block_rule, cmd_rule, comment_rule, define_cmd_rule, define_cmd_generics_rule, define_cmd_template_rule, start_cmd_rule, use_cmd_rule, use_cmd_block_alias_rule]);
     }
 
     fn get_rule_block() -> Block {
@@ -1746,7 +1741,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Expr <- Generics : ArgID : Func : ID : Str : CharClass : Wildcard,
+        // code: Expr <- ArgID : ID : Str : CharClass : Wildcard,
         let expr_rule = rule!{
             ".Rule.Expr",
             choice!{
@@ -1756,14 +1751,6 @@ impl FCPEGBlock {
                     choice!{
                         vec![],
                         expr!(Id, ".Rule.ArgID"),
-                    },
-                    choice!{
-                        vec![],
-                        expr!(Id, ".Rule.Generics"),
-                    },
-                    choice!{
-                        vec![],
-                        expr!(Id, ".Rule.Func"),
                     },
                     choice!{
                         vec![],
@@ -1908,12 +1895,14 @@ impl FCPEGBlock {
             },
         };
 
-        // code: ID <- Misc.ChainID,
+        // code: ID <- Misc.ChainID Generics? Template?,
         let id_rule = rule!{
             ".Rule.ID",
             choice!{
                 vec![],
                 expr!(Id, ".Misc.ChainID"),
+                expr!(Id, ".Rule.Generics", "?"),
+                expr!(Id, ".Rule.Template", "?"),
             },
         };
 
@@ -1927,12 +1916,11 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Generics <- Misc.ChainID "<"# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ">"#,
+        // code: Generics <- "<"# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ">"#,
         let generics_rule = rule!{
             ".Rule.Generics",
             choice!{
                 vec![],
-                expr!(Id, ".Misc.ChainID"),
                 expr!(String, "<", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.Seq"),
@@ -1951,12 +1939,11 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Func <- Misc.ChainID "("# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ")"#,
-        let func_rule = rule!{
-            ".Rule.Func",
+        // code: Template <- "("# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ")"#,
+        let template_rule = rule!{
+            ".Rule.Template",
             choice!{
                 vec![],
-                expr!(Id, ".Misc.ChainID"),
                 expr!(String, "(", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.Seq"),
@@ -2095,6 +2082,6 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Rule", vec![pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
+        return block!(".Rule", vec![pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, template_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }
