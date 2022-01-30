@@ -62,7 +62,7 @@ macro_rules! start_cmd {
 }
 
 #[macro_export]
-macro_rules! choice {
+macro_rules! group {
     ($options:expr, $($sub_elem:expr), *,) => {
         {
             let mut group = RuleGroup::new(RuleGroupKind::Sequence);
@@ -1349,11 +1349,11 @@ impl FCPEGBlock {
         // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* "\z"#,
         let fcpeg_rule = rule!{
             ".Syntax.FCPEG",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Space", "*", "#"),
                 expr!(Id, ".Symbol.LineEnd", "*", "#"),
-                choice!{
+                group!{
                     vec!["*"],
                     expr!(Id, ".Block.Block"),
                     expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1369,7 +1369,7 @@ impl FCPEGBlock {
         // code: Space <- " ",
         let space_rule = rule!{
             ".Symbol.Space",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, " "),
             },
@@ -1378,7 +1378,7 @@ impl FCPEGBlock {
         // code: LineEnd <- Space* "\n" Space*,
         let line_end_rule = rule!{
             ".Symbol.LineEnd",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Space", "*"),
                 expr!(String, "\n"),
@@ -1389,15 +1389,15 @@ impl FCPEGBlock {
         // code: Div <- Space : "\n",
         let div_rule = rule!{
             ".Symbol.Div",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Symbol.Space"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "\n"),
                     },
@@ -1408,18 +1408,18 @@ impl FCPEGBlock {
         // note: CommaDiv <- Div* (",," LineEnd Div* : "," Space*),
         let comma_div_rule = rule!{
             ".Symbol.CommaDiv",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "*"),
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, ",,"),
                         expr!(Id, ".Symbol.LineEnd"),
                         expr!(Id, ".Symbol.Div", "*"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, ","),
                         expr!(Id, ".Symbol.Space", "*"),
@@ -1431,7 +1431,7 @@ impl FCPEGBlock {
         // code: EOF <- "\z",
         let eof_rule = rule!{
             ".Symbol.EOF",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "\0", "#"),
             },
@@ -1444,7 +1444,7 @@ impl FCPEGBlock {
         // code: SingleID <- [a-zA-Z_] [a-zA-Z0-9_]*,
         let single_id_rule = rule!{
             ".Misc.SingleID",
-            choice!{
+            group!{
                 vec![],
                 expr!(CharClass, "[a-zA-Z_]"),
                 expr!(CharClass, "[a-zA-Z0-9_]", "*"),
@@ -1454,12 +1454,12 @@ impl FCPEGBlock {
         // code: ChainID <- SingleID ("."# SingleID)*##,
         let chain_id_rule = rule!{
             ".Misc.ChainID",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Misc.SingleID"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, ".", "#"),
                         expr!(Id, ".Misc.SingleID"),
@@ -1475,7 +1475,7 @@ impl FCPEGBlock {
         // code: Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
         let block_rule = rule!{
             ".Block.Block",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "[", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1485,9 +1485,9 @@ impl FCPEGBlock {
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "{", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                choice!{
+                group!{
                     vec!["*"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Block.Cmd"),
                         expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1500,21 +1500,21 @@ impl FCPEGBlock {
         // code: Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
         let cmd_rule = rule!{
             ".Block.Cmd",
-            choice!{
+            group!{
                 vec![":"],
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Block.CommentCmd"),
                 },
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Block.DefineCmd"),
                 },
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Block.StartCmd"),
                 },
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Block.UseCmd"),
                 },
@@ -1524,19 +1524,19 @@ impl FCPEGBlock {
         // code: CommentCmd <- "%"# (!"," . : ",,")*## ","#,
         let comment_rule = rule!{
             ".Block.CommentCmd",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "%", "#"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![":"],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, ",", "!"),
                             expr!(Wildcard, "."),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, ",,"),
                         },
@@ -1549,7 +1549,7 @@ impl FCPEGBlock {
         // code: DefineCmd <- Misc.SingleID DefineCmdGenerics? DefineCmdTemplate? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
         let define_cmd_rule = rule!{
             ".Block.DefineCmd",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Misc.SingleID"),
                 expr!(Id, ".Block.DefineCmdGenerics", "?"),
@@ -1566,13 +1566,13 @@ impl FCPEGBlock {
         // code: DefineCmdGenerics <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
         let define_cmd_generics_rule = rule!{
             ".Block.DefineCmdGenerics",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "<", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.ArgID"),
-                choice!{
+                group!{
                     vec!["*", "##"],
                     expr!(Id, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
@@ -1588,13 +1588,13 @@ impl FCPEGBlock {
         // code: DefineCmdTemplate <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,
         let define_cmd_template_rule = rule!{
             ".Block.DefineCmdTemplate",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "(", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.ArgID"),
-                choice!{
+                group!{
                     vec!["*", "##"],
                     expr!(Id, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
@@ -1610,7 +1610,7 @@ impl FCPEGBlock {
         // code: StartCmd <- "+"# Symbol.Div*# "start"# Symbol.Div+# Misc.ChainID Symbol.Div*# ","#,
         let start_cmd_rule = rule!{
             ".Block.StartCmd",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "+", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1625,7 +1625,7 @@ impl FCPEGBlock {
         // code: UseCmd <- "+"# Symbol.Div*# "use"# Symbol.Div+# Misc.ChainID UseCmdBlockAlias? Symbol.Div*# ","#,
         let use_cmd_rule = rule!{
             ".Block.UseCmd",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "+", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1641,7 +1641,7 @@ impl FCPEGBlock {
         // code: UseCmdBlockAlias <- Symbol.Div+# "as" Symbol.Div+# Misc.SingleID,
         let use_cmd_block_alias_rule = rule!{
             ".Block.UseCmdBlockAlias",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "+", "#"),
                 expr!(String, "as", "#"),
@@ -1657,22 +1657,22 @@ impl FCPEGBlock {
         // code: PureChoice <- Seq ((Symbol.Div+# ":" Symbol.Div+# : ",")## Seq)*##,
         let pure_choice_rule = rule!{
             ".Rule.PureChoice",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Rule.Seq"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec!["##"],
-                        choice!{
+                        group!{
                             vec![":"],
-                            choice!{
+                            group!{
                                 vec!["##"],
                                 expr!(Id, ".Symbol.Div", "+", "#"),
                                 expr!(String, ":"),
                                 expr!(Id, ".Symbol.Div", "+", "#"),
                             },
-                            choice!{
+                            group!{
                                 vec!["##"],
                                 expr!(String, ","),
                                 expr!(Id, ".Symbol.Space", "#"),
@@ -1687,7 +1687,7 @@ impl FCPEGBlock {
         // code: Choice <- "("# PureChoice ")"#,
         let choice_rule = rule!{
             ".Rule.Choice",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "(", "#"),
                 expr!(Id, ".Rule.PureChoice"),
@@ -1698,14 +1698,14 @@ impl FCPEGBlock {
         // code: Seq <- SeqElem (Symbol.Div+# SeqElem)*##,
         let seq_rule = rule!{
             ".Rule.Seq",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Rule.SeqElem"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(Id, ".Symbol.Div", "+", "#"),
                             expr!(Id, ".Rule.SeqElem"),
@@ -1718,18 +1718,18 @@ impl FCPEGBlock {
         // code: SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
         let seq_elem_rule = rule!{
             ".Rule.SeqElem",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Rule.Lookahead", "?"),
-                choice!{
+                group!{
                     vec!["##"],
-                    choice!{
+                    group!{
                         vec![":"],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(Id, ".Rule.Choice"),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(Id, ".Rule.Expr"),
                         },
@@ -1744,27 +1744,27 @@ impl FCPEGBlock {
         // code: Expr <- ArgID : ID : Str : CharClass : Wildcard,
         let expr_rule = rule!{
             ".Rule.Expr",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.ArgID"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.ID"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.Str"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.CharClass"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.Wildcard"),
                     },
@@ -1775,15 +1775,15 @@ impl FCPEGBlock {
         // code: Lookahead <- "!" : "&",
         let lookahead_rule = rule!{
             ".Rule.Lookahead",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "!"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "&"),
                     },
@@ -1794,23 +1794,23 @@ impl FCPEGBlock {
         // code: Loop <- "?" : "*" : "+" : LoopRange,
         let loop_rule = rule!{
             ".Rule.Loop",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "?"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "*"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "+"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.LoopRange"),
                     },
@@ -1821,12 +1821,12 @@ impl FCPEGBlock {
         // code: LoopRange <- "{"# Symbol.Div*# Num?#MinNum (Symbol.CommaDiv# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "}"#,
         let loop_range_rule = rule!{
             ".Rule.LoopRange",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "{", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.Num", "?", "#MinNum"),
-                choice!{
+                group!{
                     vec!["?", "#MaxNumGroup"],
                     expr!(Id, ".Symbol.CommaDiv", "#"),
                     expr!(Id, ".Rule.Num", "?", "#MaxNum"),
@@ -1839,7 +1839,7 @@ impl FCPEGBlock {
         // expr: RandomOrder <- "^"# RandomOrderRange?,
         let random_order_rule = rule!{
             ".Rule.RandomOrder",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "^", "#"),
                 expr!(Id, ".Rule.RandomOrderRange", "?"),
@@ -1849,12 +1849,12 @@ impl FCPEGBlock {
         // code: RandomOrderRange <- "["# Symbol.Div*# Num?#MinNum (Symbol.Div*# "-"# Symbol.Div*# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "]"#,
         let random_order_range_rule = rule!{
             ".Rule.RandomOrderRange",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "[", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.Num", "?", "#MinNum"),
-                choice!{
+                group!{
                     vec!["?", "#MaxNumGroup"],
                     expr!(Id, ".Symbol.Div", "*", "#"),
                     expr!(String, "-", "#"),
@@ -1869,15 +1869,15 @@ impl FCPEGBlock {
         // code: ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,
         let ast_reflection_rule = rule!{
             ".Rule.ASTReflectionStyle",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "##"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "#", "#"),
                         expr!(Id, ".Misc.SingleID", "?", "##"),
@@ -1889,7 +1889,7 @@ impl FCPEGBlock {
         // code: Num <- [0-9]+,
         let num_rule = rule!{
             ".Rule.Num",
-            choice!{
+            group!{
                 vec![],
                 expr!(CharClass, "[0-9]+", "+"),
             },
@@ -1898,7 +1898,7 @@ impl FCPEGBlock {
         // code: ID <- Misc.ChainID Generics? Template?,
         let id_rule = rule!{
             ".Rule.ID",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Misc.ChainID"),
                 expr!(Id, ".Rule.Generics", "?"),
@@ -1909,7 +1909,7 @@ impl FCPEGBlock {
         // code: ArgID <- "$"# Misc.SingleID##,
         let arg_id_rule = rule!{
             ".Rule.ArgID",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "$", "#"),
                 expr!(Id, ".Misc.SingleID", "##"),
@@ -1919,14 +1919,14 @@ impl FCPEGBlock {
         // code: Generics <- "<"# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ">"#,
         let generics_rule = rule!{
             ".Rule.Generics",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "<", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.Seq"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec!["##"],
                         expr!(Id, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
@@ -1942,14 +1942,14 @@ impl FCPEGBlock {
         // code: Template <- "("# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ")"#,
         let template_rule = rule!{
             ".Rule.Template",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "(", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.Seq"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec!["##"],
                         expr!(Id, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
@@ -1965,30 +1965,30 @@ impl FCPEGBlock {
         // code: EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
         let esc_seq_rule = rule!{
             ".Rule.EscSeq",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "\\", "#"),
-                choice!{
+                group!{
                     vec!["##"],
-                    choice!{
+                    group!{
                         vec![":"],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "\\"),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "\""),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "n"),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "t"),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "z"),
                         },
@@ -2000,28 +2000,28 @@ impl FCPEGBlock {
         // code: Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))*## "\""#,
         let str_rule = rule!{
             ".Rule.Str",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "\"", "#"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![":"],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(Id, ".Rule.EscSeq"),
                         },
-                        choice!{
+                        group!{
                             vec![],
-                            choice!{
+                            group!{
                                 vec!["!"],
-                                choice!{
+                                group!{
                                     vec![":"],
-                                    choice!{
+                                    group!{
                                         vec![],
                                         expr!(String, "\\"),
                                     },
-                                    choice!{
+                                    group!{
                                         vec![],
                                         expr!(String, "\""),
                                     },
@@ -2038,31 +2038,31 @@ impl FCPEGBlock {
         // code: CharClass <- "["# (!"[" !"]" !Symbol.LineEnd (("\\[" : "\\]" : "\\\\" : .))##)+## "]"#,
         let char_class_rule = rule!{
             ".Rule.CharClass",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "[", "#"),
-                choice!{
+                group!{
                     vec!["+", "##"],
                     expr!(String, "[", "!"),
                     expr!(String, "]", "!"),
                     expr!(Id, ".Symbol.LineEnd", "!"),
-                    choice!{
+                    group!{
                         vec!["##"],
-                        choice!{
+                        group!{
                             vec![":"],
-                            choice!{
+                            group!{
                                 vec![],
                                 expr!(String, "\\["),
                             },
-                            choice!{
+                            group!{
                                 vec![],
                                 expr!(String, "\\]"),
                             },
-                            choice!{
+                            group!{
                                 vec![],
                                 expr!(String, "\\\\"),
                             },
-                            choice!{
+                            group!{
                                 vec![],
                                 expr!(Wildcard, "."),
                             },
@@ -2076,7 +2076,7 @@ impl FCPEGBlock {
         // code: Wildcard <- ".",
         let wildcard_rule = rule!{
             ".Rule.Wildcard",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "."),
             },

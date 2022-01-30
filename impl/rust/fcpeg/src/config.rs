@@ -451,13 +451,13 @@ impl ConfigurationBlock {
         // code: Main <- Symbol.Space*# Symbol.LineEnd*# (Prop.Item Symbol.Div*#)*## "\z"#,
         let main_rule = rule!{
             ".Main.Main",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Space", "*", "#"),
                 expr!(Id, ".Symbol.LineEnd", "*", "#"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Prop.Item"),
                         expr!(Id, ".Symbol.Div", "*", "#"),
@@ -474,7 +474,7 @@ impl ConfigurationBlock {
         // code: Space <- " ",
         let space_rule = rule!{
             ".Symbol.Space",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, " "),
             },
@@ -483,7 +483,7 @@ impl ConfigurationBlock {
         // code: LineEnd <- Space* "\n" Space*,
         let line_end_rule = rule!{
             ".Symbol.LineEnd",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Space", "*"),
                 expr!(String, "\n"),
@@ -494,15 +494,15 @@ impl ConfigurationBlock {
         // code: Div <- Space : "\n",
         let div_rule = rule!{
             ".Symbol.Div",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Symbol.Space"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "\n"),
                     },
@@ -517,13 +517,13 @@ impl ConfigurationBlock {
         // code: Item <- ChildItem : ParentItem,
         let item_rule = rule!{
             ".Prop.Item",
-            choice!{
+            group!{
                 vec![":"],
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Prop.ChildItem"),
                 },
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Prop.ParentItem"),
                 },
@@ -533,7 +533,7 @@ impl ConfigurationBlock {
         // code: ParentItem <- Key,
         let parent_item_rule = rule!{
             ".Prop.ParentItem",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Prop.Key"),
             },
@@ -542,7 +542,7 @@ impl ConfigurationBlock {
         // code: ChildItem <- Key Value ","#,
         let child_item_rule = rule!{
             ".Prop.ChildItem",
-            choice!{
+            group!{
             vec![],
                 expr!(Id, ".Prop.Key"),
                 expr!(Id, ".Prop.Value"),
@@ -553,9 +553,9 @@ impl ConfigurationBlock {
         // code: Key <- ("||"*)#Pipes Symbol.Space*# Id Symbol.Space*# ":"# Symbol.Space*#,
         let key_rule = rule!{
             ".Prop.Key",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec!["#Pipes"],
                     expr!(String, "||", "*"),
                 },
@@ -570,15 +570,15 @@ impl ConfigurationBlock {
         // code: Value <- (EscSeq : !"\n" !"," !"\\" .)*##,
         let value_rule = rule!{
             ".Prop.Value",
-            choice!{
+            group!{
                 vec!["*", "##"],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Prop.EscSeq"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "\n", "!"),
                         expr!(String, ",", "!"),
@@ -592,7 +592,7 @@ impl ConfigurationBlock {
         // code: Id <- JOIN([a-zA-Z_] [a-zA-Z0-9_]*),
         let id_rule = rule!{
             ".Prop.Id",
-            choice!{
+            group!{
                 vec![],
                 expr!(CharClass, "[a-zA-Z_]"),
                 expr!(CharClass, "[a-zA-Z0-9_]", "*"),
@@ -602,24 +602,24 @@ impl ConfigurationBlock {
         // code: EscSeq <- "\\"# ("\\" : "n" : "t" : ",")##,
         let esc_seq_rule = rule!{
             ".Prop.EscSeq",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "\\", "#"),
-                choice!{
+                group!{
                     vec![":", "##"],
-                    choice!{
+                    group!{
                         vec!["##"],
                         expr!(String, "\\"),
                     },
-                    choice!{
+                    group!{
                         vec!["##"],
                         expr!(String, "n"),
                     },
-                    choice!{
+                    group!{
                         vec!["##"],
                         expr!(String, "t"),
                     },
-                    choice!{
+                    group!{
                         vec!["##"],
                         expr!(String, ","),
                     },
