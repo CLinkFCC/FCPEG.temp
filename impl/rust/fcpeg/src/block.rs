@@ -1474,7 +1474,7 @@ impl FCPEGBlock {
     }
 
     fn get_attr_block() -> Block {
-        // code: AttrList <- Attr ((Symbol.LineEnd+# : Symbol.Space*# ";"# Symbol.Space*#)# Attr)*## Symbol.LineEnd+#,
+        // code: AttrList <- Attr ((Symbol.LineEnd+# Attr)*## Symbol.LineEnd+#,
         let attr_list_rule = rule!{
             ".Attr.AttrList",
             group!{
@@ -1482,22 +1482,11 @@ impl FCPEGBlock {
                 expr!(Id, ".Attr.Attr"),
                 group!{
                     vec!["*", "##"],
-                    group!{
-                        vec![":", "#"],
-                        group!{
-                            vec![],
-                            expr!(Id, ".Symbol.LineEnd", "+", "#"),
-                        },
-                        group!{
-                            vec![],
-                            expr!(Id, ".Symbol.Space", "*", "#"),
-                            expr!(String, ";", "#"),
-                            expr!(Id, ".Symbol.Space", "*", "#"),
-                        },
-                    },
+                    expr!(Id, ".Symbol.LineEnd", "+", "#"),
                     expr!(Id, ".Attr.Attr"),
                 },
-                expr!(Id, ".Symbol.LineEnd", "+", "#"),
+                // fix: "+" に設定するとなぜかパースに失敗する
+                expr!(Id, ".Symbol.LineEnd", "*", "#"),
             },
         };
 
