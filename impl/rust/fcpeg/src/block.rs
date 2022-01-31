@@ -235,6 +235,7 @@ impl BlockParser {
             };
 
             let tree = Box::new(block_parser.to_syntax_tree(rule_map.clone(), enable_memoization)?);
+            tree.print(true);
             block_maps.push(block_parser.to_block_map(tree)?);
 
             if block_parser.file_alias_name == "" {
@@ -1335,6 +1336,7 @@ impl FCPEGBlock {
             "Syntax" => FCPEGBlock::get_syntax_block(),
             "Symbol" => FCPEGBlock::get_symbol_block(),
             "Misc" => FCPEGBlock::get_misc_block(),
+            "Attr" => FCPEGBlock::get_attr_block(),
             "Block" => FCPEGBlock::get_block_block(),
             "Rule" => FCPEGBlock::get_rule_block(),
         };
@@ -1471,12 +1473,79 @@ impl FCPEGBlock {
         return block!(".Misc", vec![single_id_rule, chain_id_rule]);
     }
 
+    fn get_attr_block() -> Block {
+        // code: AttrList <- Attr ((Symbol.LineEnd+# : Symbol.Space*# ";"# Symbol.Space*#)# Attr)*## Symbol.LineEnd+#,
+        let attr_list_rule = rule!{
+            ".Attr.AttrList",
+            group!{
+                vec![],
+                expr!(Id, ".Attr.Attr"),
+                group!{
+                    vec!["*", "##"],
+                    group!{
+                        vec![":", "#"],
+                        group!{
+                            vec![],
+                            expr!(Id, ".Symbol.LineEnd", "+", "#"),
+                        },
+                        group!{
+                            vec![],
+                            expr!(Id, ".Symbol.Space", "*", "#"),
+                            expr!(String, ";", "#"),
+                            expr!(Id, ".Symbol.Space", "*", "#"),
+                        },
+                    },
+                    expr!(Id, ".Attr.Attr"),
+                },
+                expr!(Id, ".Symbol.LineEnd", "+", "#"),
+            },
+        };
+
+        // code: Attr <- "@"# Symbol.Div*# Misc.SingleID Symbol.Div*# "["# Symbol.Div*# Item (Symbol.Div*# ","# Symbol.Div*# Item)*## Symbol.Div*# "]"#,
+        let attr_rule = rule!{
+            ".Attr.Attr",
+            group!{
+                vec![],
+                expr!(String, "@", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Misc.SingleID"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(String, "[", "#"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Attr.Item"),
+                group!{
+                    vec!["*", "##"],
+                    expr!(Id, ".Symbol.Div", "*", "#"),
+                    expr!(String, ",", "#"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
+                    expr!(Id, ".Attr.Item"),
+                },
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(String, "]", "#"),
+            },
+        };
+
+        // code: Item <- "!"?#Negative Symbol.Div*# Misc.SingleID,
+        let item_rule = rule!{
+            ".Attr.Item",
+            group!{
+                vec![],
+                expr!(String, "!", "?", "#Negative"),
+                expr!(Id, ".Symbol.Div", "*", "#"),
+                expr!(Id, ".Misc.SingleID"),
+            },
+        };
+
+        return block!(".Attr", vec![attr_list_rule, attr_rule, item_rule]);
+    }
+
     fn get_block_block() -> Block {
-        // code: Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
+        // code: Block <- Attr.AttrList? "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
         let block_rule = rule!{
             ".Block.Block",
             group!{
                 vec![],
+                expr!(Id, ".Attr.AttrList", "?"),
                 expr!(String, "[", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Misc.SingleID"),
@@ -1546,11 +1615,12 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmd <- Misc.SingleID DefineCmdGenerics? DefineCmdTemplate? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
+        // code: DefineCmd <- Attr.AttrList? Misc.SingleID DefineCmdGenerics? DefineCmdTemplate? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
         let define_cmd_rule = rule!{
             ".Block.DefineCmd",
             group!{
                 vec![],
+                expr!(Id, ".Attr.AttrList", "?"),
                 expr!(Id, ".Misc.SingleID"),
                 expr!(Id, ".Block.DefineCmdGenerics", "?"),
                 expr!(Id, ".Block.DefineCmdTemplate", "?"),

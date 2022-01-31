@@ -22,15 +22,25 @@
     ChainID <- SingleID ("."# SingleID)*##,
 }
 
+[Attr]{
+    + use Misc,
+    + use Symbol,
+
+    AttrList <- Attr ((Symbol.LineEnd+# : Symbol.Space*# ";"# Symbol.Space*#)# Attr)*## Symbol.LineEnd+#,
+    Attr <- "@"# Symbol.Div*# Misc.SingleID Symbol.Div*# "["# Symbol.Div*# Item (Symbol.Div*# ","# Symbol.Div*# Item)*## Symbol.Div*# "]"#,
+    Item <- "!"?#Negative Symbol.Div*# Misc.SingleID,
+}
+
 [Block]{
+    + use Attr,
     + use Misc,
     + use Rule,
     + use Symbol,
 
-    Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
+    Block <- Attr.AttrList? "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
     Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
     CommentCmd <- "%"# (!"," . : ",,")*## ","#,
-    DefineCmd <- Misc.SingleID DefineCmdGenerics? DefineCmdTemplate? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
+    DefineCmd <- Attr.AttrList? Misc.SingleID DefineCmdGenerics? DefineCmdTemplate? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
     DefineCmdGenerics <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
     DefineCmdTemplate <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,
     StartCmd <- "+"# Symbol.Div*# "start"# Symbol.Div+# Misc.ChainID Symbol.Div*# ","#,
