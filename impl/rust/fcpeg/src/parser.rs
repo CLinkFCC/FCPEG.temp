@@ -154,7 +154,7 @@ impl SyntaxParser {
         let start_rule_id = parser.rule_map.start_rule_id.clone();
 
         if parser.src_content.chars().count() == 0 {
-            return Ok(SyntaxTree::from_node_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
+            return Ok(SyntaxTree::from_node_child_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
         }
 
         let start_rule_pos = parser.rule_map.start_rule_pos.clone();
@@ -185,7 +185,7 @@ impl SyntaxParser {
             return Err(());
         }
 
-        return Ok(SyntaxTree::from_node(root_node));
+        return Ok(SyntaxTree::from_node_child(root_node));
     }
 
     fn parse_rule(&mut self, rule_id: &String, pos: &CharacterPosition) -> ConsoleResult<SyntaxParsingResult<SyntaxNodeChild>> {

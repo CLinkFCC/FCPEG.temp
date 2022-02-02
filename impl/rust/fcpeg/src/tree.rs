@@ -125,13 +125,13 @@ pub struct SyntaxTree {
 }
 
 impl SyntaxTree {
-    pub fn from_node(node: SyntaxNodeChild) -> SyntaxTree {
+    pub fn from_node_child(node: SyntaxNodeChild) -> SyntaxTree {
         return SyntaxTree {
             child: node,
         };
     }
 
-    pub fn from_node_args(subelems: Vec<SyntaxNodeChild>, ast_reflection_style: ASTReflectionStyle) -> SyntaxTree {
+    pub fn from_node_child_args(subelems: Vec<SyntaxNodeChild>, ast_reflection_style: ASTReflectionStyle) -> SyntaxTree {
         return SyntaxTree {
             child: SyntaxNodeChild::Node(Box::new(SyntaxNode::new(Uuid::new_v4(), subelems, ast_reflection_style))),
         };
