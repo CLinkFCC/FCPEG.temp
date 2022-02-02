@@ -29,7 +29,7 @@ macro_rules! block_map {
 #[macro_export]
 macro_rules! block {
     ($block_name:expr, $cmds:expr) => {
-        Block::new($block_name.to_string(), $cmds)
+        Block::new($block_name.to_string(), $cmds, AttributeMap::new())
     };
 }
 
@@ -49,7 +49,7 @@ macro_rules! rule {
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
             let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), String::new(), Vec::new(), Vec::new(), root_group);
-            BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule }
+            BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule, attr_map: AttributeMap::new() }
         }
     };
 }
@@ -128,10 +128,12 @@ pub enum BlockParsingLog {
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
     BlockAliasNotFoundOrUsed { pos: CharacterPosition, block_alias_name: String },
     // ChildElementNotMatched { parent_uuid: Uuid, expected: String, },
+    DuplicateAttributeName { pos: CharacterPosition, attr_name: String },
     DuplicateBlockName { pos: CharacterPosition, block_name: String },
     DuplicateArgumentID { pos: CharacterPosition, arg_id: String },
     DuplicateRuleName { pos: CharacterPosition, rule_name: String },
     DuplicateStartCommand { pos: CharacterPosition },
+    ExpectedNodeName { uuid: Uuid, expected: String },
     InvalidID { pos: CharacterPosition, id: String },
     InvalidLoopRange { pos: CharacterPosition, msg: String },
     NamingRuleViolation { pos: CharacterPosition, id: String },
@@ -154,17 +156,19 @@ impl ConsoleLogger for BlockParsingLog {
             BlockParsingLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
             BlockParsingLog::BlockAliasNotFoundOrUsed { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found or used", block_alias_name), format!("at:\t{}", pos)),
             // BlockParsingLog::ChildElementNotMatched { parent_uuid, expected } => log!(Error, format!("child element not matched"), format!("parent:\t{}", parent_uuid), format!("expected:\t{}", expected)),
+            BlockParsingLog::DuplicateAttributeName { pos, attr_name } => log!(Error, format!("duplicate attribute name '{}'", attr_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateBlockName { pos, block_name } => log!(Error, format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateArgumentID { pos, arg_id } => log!(Error, format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateRuleName { pos, rule_name } => log!(Error, format!("duplicate rule name '{}'", rule_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateStartCommand { pos } => log!(Error, "duplicate start command", format!("at:\t{}", pos)),
+            BlockParsingLog::ExpectedNodeName { uuid, expected } => log!(Error, format!("expected node name {}", expected), format!("uuid:\t{}", uuid)),
             BlockParsingLog::InvalidID { pos, id } => log!(Error, format!("invalid id '{}'", id), format!("at:\t{}", pos)),
             BlockParsingLog::InvalidLoopRange { pos, msg } => log!(Error, format!("invalid loop range"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParsingLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
             BlockParsingLog::RandomOrderInExpression { pos } => log!(Error, "random order in expression", format!("at:\t{}", pos), format!("{}", "cannot specify random order symbol to expression".bright_black())),
             BlockParsingLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
-            BlockParsingLog::UnexpectedChildName { parent_uuid, unexpected, expected } => log!(Error, format!("unknown node name {}, expected {}", unexpected, expected), format!("parent uuid:\t{}", parent_uuid)),
-            BlockParsingLog::UnexpectedNodeName { uuid, unexpected, expected } => log!(Error, format!("unknown node name {}, expected {}", unexpected, expected), format!("uuid:\t{}", uuid)),
+            BlockParsingLog::UnexpectedChildName { parent_uuid, unexpected, expected } => log!(Error, format!("unexpected node name {}, expected {}", unexpected, expected), format!("parent uuid:\t{}", parent_uuid)),
+            BlockParsingLog::UnexpectedNodeName { uuid, unexpected, expected } => log!(Error, format!("unexpected node name {}, expected {}", unexpected, expected), format!("uuid:\t{}", uuid)),
             BlockParsingLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
             BlockParsingLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at:\t{}", pos)),
             BlockParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
@@ -235,7 +239,6 @@ impl BlockParser {
             };
 
             let tree = Box::new(block_parser.to_syntax_tree(rule_map.clone(), enable_memoization)?);
-            tree.print(true);
             block_maps.push(block_parser.to_block_map(tree)?);
 
             if block_parser.file_alias_name == "" {
@@ -294,6 +297,7 @@ impl BlockParser {
     fn to_block_map(&mut self, tree: Box<SyntaxTree>) -> ConsoleResult<BlockMap> {
         let mut block_map = BlockMap::new();
         let root = tree.get_child_ref();
+
         let block_nodes = match root.get_node(&self.cons)?.get_node_child_at(&self.cons, 0) {
             Ok(v) => v.get_reflectable_children(),
             Err(()) => {
@@ -304,65 +308,90 @@ impl BlockParser {
 
         for each_block_elem in &block_nodes {
             let each_block_node = each_block_elem.get_node(&self.cons)?;
-            let block_name_node = each_block_node.get_node_child_at(&self.cons, 0)?;
-            let block_pos = block_name_node.get_position(&self.cons)?;
-            self.block_name = block_name_node.join_child_leaf_values();
 
-            if !BlockParser::is_pascal_case(&self.block_name) {
-                self.cons.borrow_mut().append_log(BlockParsingLog::NamingRuleViolation {
-                    pos: block_pos.clone(),
-                    id: self.block_name.clone(),
-                }.get_log());
-            }
+            let attr_map = match each_block_node.find_first_child_node(vec![".Attr.AttrList"]) {
+                Some(attr_list_node) => self.to_attribution_map(attr_list_node)?,
+                None => AttributeMap::new(),
+            };
 
-            if block_map.contains_key(&self.block_name) {
-                self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateBlockName {
-                    pos: block_name_node.get_position(&self.cons)?,
-                    block_name: self.block_name.clone(),
-                }.get_log());
+            let block_name = {
+                let id_node_name = ".Misc.SingleID";
 
-                return Err(());
-            }
+                let (block_name, block_pos) = match each_block_node.find_first_child_node(vec![id_node_name]) {
+                    Some(id_node) => (id_node.join_child_leaf_values(), id_node.get_position(&self.cons)?),
+                    None => {
+                        self.cons.borrow_mut().append_log(BlockParsingLog::ExpectedNodeName {
+                            uuid: each_block_node.uuid.clone(),
+                            expected: format!("'{}'", id_node_name),
+                        }.get_log());
 
-            let mut cmds = Vec::<BlockCommand>::new();
-            let mut rule_names = Vec::<String>::new();
+                        return Err(());
+                    },
+                };
 
-            match each_block_node.get_node_child_at(&self.cons, 1) {
-                Ok(cmd_elems) => {
-                    for each_cmd_elem in &cmd_elems.get_reflectable_children() {
-                        let each_cmd_node = each_cmd_elem.get_node(&self.cons)?.get_node_child_at(&self.cons, 0)?;
-                        let new_cmd = self.to_block_cmd(each_cmd_node)?;
+                // note: 命名規則チェック
+                if !BlockParser::is_pascal_case(&block_name) {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::NamingRuleViolation {
+                        pos: block_pos.clone(),
+                        id: block_name.clone(),
+                    }.get_log());
+                }
 
-                        // ルール名の重複チェック
-                        match &new_cmd {
-                            BlockCommand::Define { pos: _, rule } => {
-                                if rule_names.contains(&rule.name) {
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateRuleName {
-                                        pos: rule.pos.clone(),
-                                        rule_name: rule.name.clone(),
-                                    }.get_log());
+                // note: ブロック名重複チェック
+                if block_map.contains_key(&block_name) {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateBlockName {
+                        pos: block_pos.clone(),
+                        block_name: block_name.clone(),
+                    }.get_log());
 
-                                    return Err(());
-                                }
+                    return Err(());
+                }
 
-                                rule_names.push(rule.name.clone())
-                            },
-                            _ => (),
-                        }
+                block_name
+            };
 
-                        cmds.push(new_cmd);
+            self.block_name = block_name;
+
+            let cmds = {
+                let mut cmds = Vec::<BlockCommand>::new();
+                // note: 規則名の重複チェック用
+                let mut rule_names = Vec::<String>::new();
+
+                // note: cmds に命令を追加
+                for each_cmd_node in &each_block_node.find_child_nodes(vec![".Block.Cmd"]) {
+                    let new_cmd = self.to_block_cmd(each_cmd_node.get_node_child_at(&self.cons, 0)?)?;
+
+                    // note: 規則名の重複チェック
+                    match &new_cmd {
+                        BlockCommand::Define { pos: _, rule, attr_map: _ } => {
+                            if rule_names.contains(&rule.name) {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateRuleName {
+                                    pos: rule.pos.clone(),
+                                    rule_name: rule.name.clone(),
+                                }.get_log());
+
+                                return Err(());
+                            }
+
+                            rule_names.push(rule.name.clone())
+                        },
+                        _ => (),
                     }
-                },
-                Err(()) => self.cons.borrow_mut().pop_log(),
-            }
+
+                    cmds.push(new_cmd);
+                }
+
+                cmds
+            };
 
             self.block_id_map.push(BlockParser::to_block_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name));
-            block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds)));
+            block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds, attr_map)));
             // note: ファイルを抜けるためクリア
             self.block_alias_map.clear();
         }
 
-        block_map.insert(String::new(), Box::new(Block::new("Main".to_string(), Vec::new())));
+        // fix: これいる？
+        // block_map.insert(String::new(), Box::new(Block::new("Main".to_string(), Vec::new(), AttributeMap::new())));
         return Ok(block_map);
     }
 
@@ -485,16 +514,34 @@ impl BlockParser {
     }
 
     fn to_define_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
-        let rule_name_node = cmd_node.get_node_child_at(&self.cons, 0)?;
-        let rule_pos = rule_name_node.get_position(&self.cons)?;
-        let rule_name = rule_name_node.join_child_leaf_values();
+        let id_node_name = ".Misc.SingleID";
 
+        let (rule_name, rule_pos) = match cmd_node.find_first_child_node(vec![id_node_name]) {
+            Some(id_node) => {
+                (id_node.join_child_leaf_values(), id_node.get_position(&self.cons)?)
+            },
+            None => {
+                self.cons.borrow_mut().append_log(BlockParsingLog::ExpectedNodeName {
+                    uuid: cmd_node.uuid.clone(),
+                    expected: format!("'{}'", id_node_name),
+                }.get_log());
+
+                return Err(());
+            }
+        };
+
+        // note: 規則名の命名規則チェック
         if !BlockParser::is_pascal_case(&rule_name) {
             self.cons.borrow_mut().append_log(BlockParsingLog::NamingRuleViolation {
                 pos: rule_pos.clone(),
                 id: rule_name.clone(),
             }.get_log());
         }
+
+        let attr_map = match cmd_node.find_first_child_node(vec![".Attr.AttrList"]) {
+            Some(attr_list_node) => self.to_attribution_map(attr_list_node)?,
+            None => AttributeMap::new(),
+        };
 
         let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenerics"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
@@ -521,7 +568,7 @@ impl BlockParser {
 
         let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name, &rule_name);
         let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, template_args, new_choice);
-        return Ok(BlockCommand::Define { pos: rule_pos, rule: rule });
+        return Ok(BlockCommand::Define { pos: rule_pos, rule: rule, attr_map: attr_map });
     }
 
     fn to_define_cmd_arg_ids(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<Vec<String>> {
@@ -1285,6 +1332,57 @@ impl BlockParser {
         return Ok(ids.join("."));
     }
 
+    fn to_attribution_map(&mut self, attr_list_node: &SyntaxNode) -> ConsoleResult<AttributeMap> {
+        let mut attr_map = AttributeMap::new();
+
+        for each_attr_node in &attr_list_node.find_child_nodes(vec![".Attr.Attr"]) {
+            let new_attr = self.to_attribution(each_attr_node)?;
+
+            // note: 属性名の重複チェック
+            if attr_map.contains_key(&new_attr.name) {
+                self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateAttributeName {
+                    pos: new_attr.pos.clone(),
+                    attr_name: new_attr.name.clone(),
+                }.get_log());
+
+                return Err(());
+            }
+
+            attr_map.insert(new_attr.name.clone(), new_attr);
+        }
+
+        return Ok(attr_map);
+    }
+
+    fn to_attribution(&mut self, attr_node: &SyntaxNode) -> ConsoleResult<Attribute> {
+        let pos = attr_node.get_position(&self.cons)?;
+        let name = attr_node.get_node_child_at(&self.cons, 0)?.join_child_leaf_values();
+        let mut values = Vec::<AttributeValue>::new();
+
+        for each_attr_value_node in &attr_node.find_child_nodes(vec![".Attr.Item"]) {
+            let is_negative = each_attr_value_node.find_first_child_node(vec!["Negative"]).is_some();
+            let id_node_name = ".Misc.SingleID";
+
+            match each_attr_value_node.find_first_child_node(vec![id_node_name]) {
+                Some(id_node) => {
+                    let new_value = AttributeValue::new(id_node.get_position(&self.cons)?, is_negative, id_node.join_child_leaf_values());
+                    values.push(new_value);
+                },
+                None => {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::ExpectedNodeName {
+                        uuid: each_attr_value_node.uuid.clone(),
+                        expected: format!("'{}'", id_node_name),
+                    }.get_log());
+
+                    return Err(());
+                }
+            }
+        }
+
+        let attr = Attribute::new(pos, name, values);
+        return Ok(attr);
+    }
+
     // ret: 空文字の場合は false
     fn is_pascal_case(id: &String) -> bool {
         let mut id_chars = id.chars();
@@ -1514,12 +1612,15 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Item <- "!"?#Negative Symbol.Div*# Misc.SingleID,
+        // code: Item <- ("!")?#Negative Symbol.Div*# Misc.SingleID,
         let item_rule = rule!{
             ".Attr.Item",
             group!{
                 vec![],
-                expr!(String, "!", "?", "#Negative"),
+                group!{
+                    vec!["?", "#Negative"],
+                    expr!(String, "!"),
+                },
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Misc.SingleID"),
             },
@@ -1529,7 +1630,7 @@ impl FCPEGBlock {
     }
 
     fn get_block_block() -> Block {
-        // code: Block <- Attr.AttrList? "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
+        // code: Block <- Attr.AttrList? "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)*## "}"#,
         let block_rule = rule!{
             ".Block.Block",
             group!{
@@ -1544,12 +1645,9 @@ impl FCPEGBlock {
                 expr!(String, "{", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 group!{
-                    vec!["*"],
-                    group!{
-                        vec![],
-                        expr!(Id, ".Block.Cmd"),
-                        expr!(Id, ".Symbol.Div", "*", "#"),
-                    },
+                    vec!["*", "##"],
+                    expr!(Id, ".Block.Cmd"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
                 },
                 expr!(String, "}", "#"),
             },

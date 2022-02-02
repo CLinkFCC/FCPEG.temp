@@ -471,13 +471,15 @@ impl SyntaxLeaf {
 pub struct Block {
     pub name: String,
     pub cmds: Vec<BlockCommand>,
+    pub attr_map: AttributeMap,
 }
 
 impl Block {
-    pub fn new(name: String, cmds: Vec<BlockCommand>) -> Block {
+    pub fn new(name: String, cmds: Vec<BlockCommand>, attr_map: AttributeMap) -> Block {
         return Block {
             name: name,
             cmds: cmds,
+            attr_map: attr_map,
         };
     }
 
@@ -489,18 +491,21 @@ impl Block {
 #[derive(Clone)]
 pub enum BlockCommand {
     Comment { pos: CharacterPosition, value: String },
-    Define { pos: CharacterPosition, rule: Rule },
+    Define { pos: CharacterPosition, rule: Rule, attr_map: AttributeMap },
     Start { pos: CharacterPosition, file_alias_name: String, block_name: String, rule_name: String },
     Use { pos: CharacterPosition, file_alias_name: String, block_name: String, block_alias_name: String },
 }
 
 impl Display for BlockCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            BlockCommand::Comment { pos, value } => return write!(f, "{}| %{},", pos.line, value),
-            BlockCommand::Define { pos, rule } => return write!(f, "{}| rule {}", pos.line, rule),
-            BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => return write!(f, "{}| start rule '{}.{}.{}'", pos.line, file_alias_name, block_name, rule_name),
-            BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => return write!(f, "{}| use block '{}.{}' as '{}'", pos.line, file_alias_name, block_name, block_alias_name),
-        }
+        let s = match self {
+            BlockCommand::Comment { pos, value } => format!("{}| %{},", pos.line, value),
+            // todo: 属性マップを表示
+            BlockCommand::Define { pos, rule, attr_map: _ } => format!("{}| rule {}", pos.line, rule),
+            BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => format!("{}| start rule '{}.{}.{}'", pos.line, file_alias_name, block_name, rule_name),
+            BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => format!("{}| use block '{}.{}' as '{}'", pos.line, file_alias_name, block_name, block_alias_name),
+        };
+
+        return write!(f, "{}", s);
     }
 }

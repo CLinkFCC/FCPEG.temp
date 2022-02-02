@@ -28,7 +28,7 @@
 
     AttrList <- Attr ((Symbol.LineEnd+# Attr)*## Symbol.LineEnd+#,
     Attr <- "@"# Symbol.Div*# Misc.SingleID Symbol.Div*# "["# Symbol.Div*# Item (Symbol.Div*# ","# Symbol.Div*# Item)*## Symbol.Div*# "]"#,
-    Item <- "!"?#Negative Symbol.Div*# Misc.SingleID,
+    Item <- ("!")?#Negative Symbol.Div*# Misc.SingleID,
 }
 
 [Block]{
@@ -37,7 +37,7 @@
     + use Rule,
     + use Symbol,
 
-    Block <- Attr.AttrList? "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
+    Block <- Attr.AttrList? "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)*## "}"#,
     Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
     CommentCmd <- "%"# (!"," . : ",,")*## ","#,
     DefineCmd <- Attr.AttrList? Misc.SingleID DefineCmdGenerics? DefineCmdTemplate? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,

@@ -8,6 +8,56 @@ use rustnutlib::console::ConsoleResult;
 
 use uuid::Uuid;
 
+pub type AttributeMap = HashMap<String, Attribute>;
+
+#[derive(Clone, PartialEq)]
+pub struct Attribute {
+    pub pos: CharacterPosition,
+    pub name: String,
+    pub values: Vec<AttributeValue>,
+}
+
+impl Attribute {
+    pub fn new(pos: CharacterPosition, name: String, values: Vec<AttributeValue>) -> Attribute {
+        return Attribute {
+            pos: pos,
+            name: name,
+            values: values,
+        };
+    }
+}
+
+impl Display for Attribute {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let values_txt = self.values.iter().map(|v| v.to_string()).collect::<Vec<String>>().join(", ");
+        return write!(f, "@{}[{}]", self.name, values_txt);
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub struct AttributeValue {
+    pub pos: CharacterPosition,
+    pub is_negative: bool,
+    pub value: String,
+}
+
+impl AttributeValue {
+    pub fn new(pos: CharacterPosition, is_negative: bool, value: String) -> AttributeValue {
+        return AttributeValue {
+            pos: pos,
+            is_negative: is_negative,
+            value: value,
+        };
+    }
+}
+
+impl Display for AttributeValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let negative_symbol = if self.is_negative { "!" } else { "" };
+        return write!(f, "{}{}", negative_symbol, self.value);
+    }
+}
+
 #[derive(Clone)]
 pub struct RuleMap {
     pub rule_map: HashMap<String, Box<Rule>>,
@@ -40,7 +90,7 @@ impl RuleMap {
             for (_, each_block) in each_block_map {
                 for each_cmd in each_block.cmds {
                     match each_cmd {
-                        BlockCommand::Define { pos: _, rule } => {
+                        BlockCommand::Define { pos: _, rule, attr_map: _ } => {
                             rule_map.insert(rule.id.clone(), Box::new(rule));
                         },
                         _ => (),
