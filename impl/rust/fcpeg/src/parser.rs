@@ -66,7 +66,7 @@ impl ArgumentMap {
 
 pub struct MemoizationMap {
     // note: HashMap<(group_uuid, src_i), (src_len, result)>
-    map: HashMap<(Uuid, usize), (usize, Option<Vec<SyntaxNodeChild>>)>,
+    map: HashMap<(Uuid, usize), (usize, SyntaxParsingResult<Vec<SyntaxNodeChild>>)>,
 }
 
 impl MemoizationMap {
@@ -76,14 +76,29 @@ impl MemoizationMap {
         };
     }
 
-    pub fn push(&mut self, group_uuid: Uuid, src_i: usize, src_len: usize, result: Option<Vec<SyntaxNodeChild>>) {
+    pub fn push(&mut self, group_uuid: Uuid, src_i: usize, src_len: usize, result: SyntaxParsingResult<Vec<SyntaxNodeChild>>) {
         self.map.insert((group_uuid, src_i), (src_len, result));
     }
 
-    pub fn find(&self, pattern: &Uuid, src_i: usize) -> Option<(usize, Option<Vec<SyntaxNodeChild>>)> {
+    pub fn find(&self, pattern: &Uuid, src_i: usize) -> Option<(usize, SyntaxParsingResult<Vec<SyntaxNodeChild>>)> {
         return match self.map.get(&(*pattern, src_i)) {
             Some((src_len, result)) => Some((*src_len, result.clone())),
             None => None,
+        };
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum SyntaxParsingResult<T: Clone> {
+    Success(T),
+    Fail,
+}
+
+impl<T: Clone> SyntaxParsingResult<T> {
+    pub fn is_successful(&self) -> bool {
+        return match self {
+            SyntaxParsingResult::Success(_) => true,
+            SyntaxParsingResult::Fail => false,
         };
     }
 }
@@ -143,8 +158,8 @@ impl SyntaxParser {
 
         let start_rule_pos = parser.rule_map.start_rule_pos.clone();
         let mut root_node = match parser.parse_rule(&start_rule_id, &start_rule_pos)? {
-            Some(v) => v,
-            None => {
+            SyntaxParsingResult::Success(v) => v,
+            SyntaxParsingResult::Fail => {
                 parser.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
                     rule_id: start_rule_id.clone(),
                     pos: parser.get_char_position(),
@@ -172,7 +187,7 @@ impl SyntaxParser {
         return Ok(SyntaxTree::from_node(root_node));
     }
 
-    fn parse_rule(&mut self, rule_id: &String, pos: &CharacterPosition) -> ConsoleResult<Option<SyntaxNodeChild>> {
+    fn parse_rule(&mut self, rule_id: &String, pos: &CharacterPosition) -> ConsoleResult<SyntaxParsingResult<SyntaxNodeChild>> {
         let rule_group = match self.rule_map.rule_map.get(rule_id) {
             Some(rule) => rule.group.clone(),
             None => {
@@ -188,7 +203,7 @@ impl SyntaxParser {
         self.rule_stack.push((self.get_char_position(), rule_id.clone()));
 
         return match self.parse_group(&rule_group.elem_order, &rule_group)? {
-            Some(v) => {
+            SyntaxParsingResult::Success(v) => {
                 let mut ast_reflection_style = match &rule_group.subelems.get(0) {
                     Some(v) => {
                         match v {
@@ -209,15 +224,15 @@ impl SyntaxParser {
 
                 self.rule_stack.pop().unwrap();
                 let new_node = SyntaxNodeChild::from_node_args(v, ast_reflection_style);
-                Ok(Some(new_node))
+                Ok(SyntaxParsingResult::Success(new_node))
             },
-            None => {
-                Ok(None)
+            SyntaxParsingResult::Fail => {
+                Ok(SyntaxParsingResult::Fail)
             },
         }
     }
 
-    fn parse_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         if self.enable_memoization {
             match self.memoized_map.find(&group.uuid, self.src_i) {
                 Some((src_len, result)) => {
@@ -240,7 +255,7 @@ impl SyntaxParser {
         return Ok(result);
     }
 
-    fn parse_lookahead_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_lookahead_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         return if group.lookahead_kind.is_none() {
             self.parse_loop_group(parent_elem_order, group)
         } else {
@@ -250,15 +265,15 @@ impl SyntaxParser {
             let result = self.parse_loop_group(parent_elem_order, group)?;
             self.src_i = start_src_i;
 
-            if result.is_some() == is_lookahead_positive {
-                Ok(Some(Vec::new()))
+            if result.is_successful() == is_lookahead_positive {
+                Ok(SyntaxParsingResult::Success(Vec::new()))
             } else {
-                Ok(None)
+                Ok(SyntaxParsingResult::Fail)
             }
         };
     }
 
-    fn parse_loop_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_loop_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         let (min_count, max_count) = group.loop_range.to_tuple();
 
         if max_count != -1 && min_count as isize > max_count {
@@ -282,7 +297,7 @@ impl SyntaxParser {
             }
 
             match self.parse_element_order_group(parent_elem_order, group)? {
-                Some(node_children) => {
+                SyntaxParsingResult::Success(node_children) => {
                     for each_elem in node_children {
                         match &each_elem {
                             SyntaxNodeChild::Node(node) => {
@@ -297,27 +312,27 @@ impl SyntaxParser {
                     loop_count += 1;
 
                     if max_count != -1 && loop_count == max_count {
-                        return Ok(Some(children));
+                        return Ok(SyntaxParsingResult::Success(children));
                     }
                 },
-                None => {
+                SyntaxParsingResult::Fail => {
                     if loop_count >= min_count as isize && (max_count == -1 || loop_count <= max_count) {
-                        return Ok(Some(children));
+                        return Ok(SyntaxParsingResult::Success(children));
                     } else {
-                        return Ok(None);
+                        return Ok(SyntaxParsingResult::Fail);
                     }
                 },
             }
         }
 
         if loop_count >= min_count as isize && (max_count == -1 || loop_count <= max_count) {
-            return Ok(Some(children));
+            return Ok(SyntaxParsingResult::Success(children));
         } else {
-            return Ok(None);
+            return Ok(SyntaxParsingResult::Fail);
         }
     }
 
-    fn parse_element_order_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_element_order_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         let mut children = Vec::<SyntaxNodeChild>::new();
 
         return match parent_elem_order {
@@ -359,7 +374,7 @@ impl SyntaxParser {
                                 conved_subgroup.loop_range = random_order_loop_range.clone();
 
                                 match self.parse_group(&ElementOrder::Sequential, &conved_subgroup)? {
-                                    Some(node_children) => {
+                                    SyntaxParsingResult::Success(node_children) => {
                                         if subgroup_matching_list[subgroup_i] {
                                             subgroup_i += 1;
                                             continue;
@@ -379,7 +394,7 @@ impl SyntaxParser {
                                         subgroup_matching_list[subgroup_i] = true;
                                         break;
                                     },
-                                    None => self.src_i = elem_start_src_i,
+                                    SyntaxParsingResult::Fail => self.src_i = elem_start_src_i,
                                 }
                             },
                             _ => (),
@@ -389,20 +404,20 @@ impl SyntaxParser {
                     }
 
                     if subgroup_matching_list.iter().find(|v| !**v).is_none() {
-                        return Ok(Some(children));
+                        return Ok(SyntaxParsingResult::Success(children));
                     }
 
                     subgroup_i = 0;
                 }
 
                 self.src_i = random_order_start_src_i;
-                Ok(None)
+                Ok(SyntaxParsingResult::Fail)
             },
             ElementOrder::Sequential => self.parse_raw_group(group),
         };
     }
 
-    fn parse_raw_group(&mut self, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_raw_group(&mut self, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         let mut children = Vec::<SyntaxNodeChild>::new();
 
         for each_elem in &group.subelems {
@@ -418,7 +433,7 @@ impl SyntaxParser {
                                 match each_subelem {
                                     RuleElement::Group(each_subgroup) => {
                                         match self.parse_group(&each_group.elem_order, each_subgroup)? {
-                                            Some(v) => {
+                                            SyntaxParsingResult::Success(v) => {
                                                 if group.subelems.len() != 1 {
                                                     let new_child = SyntaxNodeChild::from_node_args(v, each_subgroup.ast_reflection_style.clone());
 
@@ -440,7 +455,7 @@ impl SyntaxParser {
                                                 is_successful = true;
                                                 break;
                                             },
-                                            None => {
+                                            SyntaxParsingResult::Fail => {
                                                 self.src_i = start_src_i;
                                             },
                                         }
@@ -450,12 +465,12 @@ impl SyntaxParser {
                             }
 
                             if !is_successful {
-                                return Ok(None);
+                                return Ok(SyntaxParsingResult::Fail);
                             }
                         },
                         RuleGroupKind::Sequence => {
                             match self.parse_group(&each_group.elem_order, each_group)? {
-                                Some(v) => {
+                                SyntaxParsingResult::Success(v) => {
                                     if group.subelems.len() != 1 {
                                         let new_child = SyntaxNodeChild::from_node_args(v, each_group.ast_reflection_style.clone());
 
@@ -476,9 +491,9 @@ impl SyntaxParser {
 
                                     continue;
                                 },
-                                None => {
+                                SyntaxParsingResult::Fail => {
                                     self.src_i = start_src_i;
-                                    return Ok(None);
+                                    return Ok(SyntaxParsingResult::Fail);
                                 },
                             }
                         },
@@ -486,7 +501,7 @@ impl SyntaxParser {
                 },
                 RuleElement::Expression(each_expr) => {
                     match self.parse_expr(each_expr)? {
-                        Some(node_children) => {
+                        SyntaxParsingResult::Success(node_children) => {
                             for each_elem in node_children {
                                 match each_elem {
                                     SyntaxNodeChild::Node(node) if node.subelems.len() == 0 => (),
@@ -496,23 +511,23 @@ impl SyntaxParser {
 
                             continue;
                         },
-                        None => {
+                        SyntaxParsingResult::Fail => {
                             self.src_i = start_src_i;
-                            return Ok(None);
+                            return Ok(SyntaxParsingResult::Fail);
                         },
                     }
                 }
             }
         }
 
-        return Ok(Some(children));
+        return Ok(SyntaxParsingResult::Success(children));
     }
 
-    fn parse_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         return self.parse_lookahead_expr(expr);
     }
 
-    fn parse_lookahead_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_lookahead_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         return if expr.lookahead_kind.is_none() {
             self.parse_loop_expr(expr)
         } else {
@@ -522,15 +537,15 @@ impl SyntaxParser {
             let result = self.parse_loop_expr(expr)?;
             self.src_i = start_src_i;
 
-            if result.is_some() == is_lookahead_positive {
-                Ok(Some(Vec::new()))
+            if result.is_successful() == is_lookahead_positive {
+                Ok(SyntaxParsingResult::Success(Vec::new()))
             } else {
-                Ok(None)
+                Ok(SyntaxParsingResult::Fail)
             }
         }
     }
 
-    fn parse_loop_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_loop_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         let (min_count, max_count) = expr.loop_range.to_tuple();
 
         if max_count != -1 && min_count as isize > max_count {
@@ -554,7 +569,7 @@ impl SyntaxParser {
             }
 
             match self.parse_raw_expr(expr)? {
-                Some(node) => {
+                SyntaxParsingResult::Success(node) => {
                     for each_node in node {
                         match each_node {
                             SyntaxNodeChild::Node(node) if node.subelems.len() == 0 => (),
@@ -565,29 +580,29 @@ impl SyntaxParser {
                     loop_count += 1;
 
                     if max_count != -1 && loop_count as isize == max_count {
-                        return Ok(Some(children));
+                        return Ok(SyntaxParsingResult::Success(children));
                     }
                 },
-                None => {
+                SyntaxParsingResult::Fail => {
                     return if loop_count >= min_count && (max_count == -1 || loop_count as isize <= max_count) {
-                        Ok(Some(children))
+                        Ok(SyntaxParsingResult::Success(children))
                     } else {
-                        Ok(None)
+                        Ok(SyntaxParsingResult::Fail)
                     }
                 },
             }
         }
 
         return if loop_count >= min_count && (max_count == -1 || loop_count as isize <= max_count) {
-            Ok(Some(children))
+            Ok(SyntaxParsingResult::Success(children))
         } else {
-            Ok(None)
+            Ok(SyntaxParsingResult::Fail)
         }
     }
 
-    fn parse_raw_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_raw_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         if self.src_i >= self.src_content.chars().count() {
-            return Ok(None);
+            return Ok(SyntaxParsingResult::Fail);
         }
 
         match &expr.kind {
@@ -619,17 +634,17 @@ impl SyntaxParser {
                     match &result {
                         Ok(v) => {
                             match v {
-                                Some(node_children) => {
+                                SyntaxParsingResult::Success(node_children) => {
                                     match node_children.get(0) {
                                         Some(each_node_child) => {
                                             let mut new_node_child = each_node_child.clone();
                                             new_node_child.set_ast_reflection_style(expr.ast_reflection_style.clone());
-                                            Ok(Some(vec![new_node_child]))
+                                            Ok(SyntaxParsingResult::Success(vec![new_node_child]))
                                         },
                                         _ => result,
                                     }
                                 },
-                                None => result,
+                                SyntaxParsingResult::Fail => result,
                             }
                         },
                         Err(()) => result,
@@ -640,7 +655,7 @@ impl SyntaxParser {
             },
             RuleExpressionKind::CharClass => {
                 if self.src_content.chars().count() < self.src_i + 1 {
-                    return Ok(None);
+                    return Ok(SyntaxParsingResult::Fail);
                 }
 
                 // note: Regex パターンが見つからない場合は新しく追加する
@@ -669,9 +684,9 @@ impl SyntaxParser {
                     let new_leaf = SyntaxNodeChild::from_leaf_args(self.get_char_position(), tar_char.clone(), expr.ast_reflection_style.clone());
                     self.add_source_index_by_string(&tar_char);
 
-                    return Ok(Some(vec![new_leaf]));
+                    return Ok(SyntaxParsingResult::Success(vec![new_leaf]));
                 } else {
-                    return Ok(None);
+                    return Ok(SyntaxParsingResult::Fail);
                 }
             },
             RuleExpressionKind::Id => self.parse_id_expr(expr),
@@ -693,7 +708,7 @@ impl SyntaxParser {
                                 }
 
                                 return match self.parse_group(&ElementOrder::Sequential, tar_arg)? {
-                                    Some(result_elems) => {
+                                    SyntaxParsingResult::Success(result_elems) => {
                                         let mut joined_str = String::new();
 
                                         for each_elem in result_elems {
@@ -705,9 +720,9 @@ impl SyntaxParser {
                                         }
 
                                         let new_leaf = SyntaxNodeChild::from_leaf_args(self.get_char_position(), joined_str, expr.ast_reflection_style.clone());
-                                        Ok(Some(vec![new_leaf]))
+                                        Ok(SyntaxParsingResult::Success(vec![new_leaf]))
                                     },
-                                    None => Ok(None),
+                                    SyntaxParsingResult::Fail => Ok(SyntaxParsingResult::Fail),
                                 };
                             },
                             _ => {
@@ -821,35 +836,35 @@ impl SyntaxParser {
             },
             RuleExpressionKind::String => {
                 if self.src_content.chars().count() < self.src_i + expr.value.chars().count() {
-                    return Ok(None);
+                    return Ok(SyntaxParsingResult::Fail);
                 }
 
                 if self.substring_src_content(self.src_i, expr.value.chars().count()) == expr.value {
                     let new_leaf = SyntaxNodeChild::from_leaf_args(self.get_char_position(), expr.value.clone(), expr.ast_reflection_style.clone());
                     self.add_source_index_by_string(&expr.value);
 
-                    return Ok(Some(vec![new_leaf]));
+                    return Ok(SyntaxParsingResult::Success(vec![new_leaf]));
                 } else {
-                    return Ok(None);
+                    return Ok(SyntaxParsingResult::Fail);
                 }
             },
             RuleExpressionKind::Wildcard => {
                 if self.src_content.chars().count() < self.src_i + 1 {
-                    return Ok(None);
+                    return Ok(SyntaxParsingResult::Fail);
                 }
 
                 let expr_value = self.substring_src_content(self.src_i, 1);
                 let new_leaf = SyntaxNodeChild::from_leaf_args(self.get_char_position(), expr_value.clone(), expr.ast_reflection_style.clone());
                 self.add_source_index_by_string(&expr_value);
 
-                return Ok(Some(vec![new_leaf]));
+                return Ok(SyntaxParsingResult::Success(vec![new_leaf]));
             },
         }
     }
 
-    fn parse_id_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<Option<Vec<SyntaxNodeChild>>> {
+    fn parse_id_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         match self.parse_rule(&expr.value, &expr.pos)? {
-            Some(node_child) => {
+            SyntaxParsingResult::Success(node_child) => {
                 let conv_node_children = match &node_child {
                     SyntaxNodeChild::Node(node) => {
                         let sub_ast_reflection_style = match &expr.ast_reflection_style {
@@ -879,10 +894,10 @@ impl SyntaxParser {
                     SyntaxNodeChild::Leaf(_) => vec![node_child],
                 };
 
-                return Ok(Some(conv_node_children));
+                return Ok(SyntaxParsingResult::Success(conv_node_children));
             },
-            None => {
-                return Ok(None);
+            SyntaxParsingResult::Fail => {
+                return Ok(SyntaxParsingResult::Fail);
             },
         };
     }

@@ -1568,7 +1568,7 @@ impl FCPEGBlock {
     }
 
     fn get_attr_block() -> Block {
-        // code: AttrList <- Attr ((Symbol.LineEnd+# Attr)*## Symbol.LineEnd+#,
+        // code: AttrList <- Attr (Symbol.LineEnd+# Attr)*## Symbol.LineEnd+#,
         let attr_list_rule = rule!{
             ".Attr.AttrList",
             group!{
