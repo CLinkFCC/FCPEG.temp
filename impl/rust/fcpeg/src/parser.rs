@@ -104,6 +104,8 @@ impl<T: Clone> SyntaxParsingResult<T> {
     }
 }
 
+pub type RegexMap = HashMap<String, Regex>;
+
 pub struct SyntaxParser {
     cons: Rc<RefCell<Console>>,
     rule_map: Arc<Box<RuleMap>>,
@@ -133,7 +135,7 @@ impl SyntaxParser {
             loop_limit: 65536,
             arg_maps: Box::new(Vec::new()),
             rule_stack: Box::new(Vec::new()),
-            regex_map: Box::new(HashMap::new()),
+            regex_map: Box::new(RegexMap::new()),
             memoized_map: Box::new(MemoizationMap::new()),
             enable_memoization: enable_memoization,
         };
