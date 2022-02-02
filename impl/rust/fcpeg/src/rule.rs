@@ -107,7 +107,6 @@ impl Display for BlockCommand {
 
 pub type RuleId = String;
 
-#[derive(Clone)]
 pub struct RuleMap {
     pub rule_map: HashMap<RuleId, Box<Rule>>,
     pub start_rule_pos: CharacterPosition,
@@ -164,7 +163,7 @@ impl Display for RuleMap {
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq)]
 pub enum LookaheadKind {
     None,
     Positive,
@@ -233,19 +232,19 @@ impl Display for Rule {
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
-pub enum Infinitable<T: Clone + Display + Num + PartialEq + PartialOrd> {
+#[derive(Clone, PartialEq)]
+pub enum Infinitable<T: Clone + Display + Num + PartialEq> {
     Finite(T),
     Infinite,
 }
 
-impl<T: Clone + Display + Num + PartialEq + PartialOrd> Infinitable<T> {
+impl<T: Clone + Display + Num + PartialEq> Infinitable<T> {
     pub fn is_infinite(&self) -> bool {
         return *self == Infinitable::<T>::Infinite;
     }
 }
 
-impl<T: Clone + Display + Num + PartialEq + PartialOrd> Display for Infinitable<T> {
+impl<T: Clone + Display + Num + PartialEq> Display for Infinitable<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let s = match self {
             Infinitable::Finite(v) => v.to_string(),
@@ -256,7 +255,7 @@ impl<T: Clone + Display + Num + PartialEq + PartialOrd> Display for Infinitable<
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq)]
 pub struct LoopRange {
     pub min: usize,
     pub max: Infinitable<usize>,
@@ -332,7 +331,7 @@ impl LoopRange {
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq)]
 pub enum ElementOrder {
     Random(LoopRange),
     Sequential,
@@ -370,7 +369,7 @@ impl Display for RuleElement {
     }
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq)]
 pub enum RuleGroupKind {
     Choice,
     Sequence,

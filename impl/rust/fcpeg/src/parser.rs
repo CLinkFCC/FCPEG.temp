@@ -16,6 +16,7 @@ use rustnutlib::console::*;
 
 use uuid::Uuid;
 
+#[derive(Clone, PartialEq)]
 pub enum SyntaxParsingLog {
     InvalidCharClassFormat { value: String },
     InvalidGenericsArgumentLength { pos: CharacterPosition, expected_arg_len: usize },

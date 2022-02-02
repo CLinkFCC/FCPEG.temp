@@ -13,6 +13,7 @@ use rustnutlib::*;
 use rustnutlib::console::*;
 use rustnutlib::file::*;
 
+#[derive(Clone, PartialEq)]
 pub enum ConfigurationLog {
     DuplicateFileAliasName { alias_name: String },
     DuplicatePropertyName { prop_name: String },
@@ -45,6 +46,7 @@ impl ConsoleLogger for ConfigurationLog {
 
 pub type PropertyMap = HashMap<String, PropertyItem>;
 
+#[derive(Clone, PartialEq)]
 pub struct PropertyItem {
     children: Box<PropertyMap>,
     values: Vec<String>,
@@ -132,6 +134,7 @@ impl Display for RegexMode {
     }
 }
 
+#[derive(Clone, PartialEq)]
 pub enum ConfigurationItemKind {
     ASTReflection,
     FileAliases,
@@ -151,6 +154,7 @@ impl ConfigurationItemKind {
     }
 }
 
+#[derive(Clone, PartialEq)]
 pub struct Configuration {
     pub file_alias_map: HashMap<String, String>,
     pub regex_mode: RegexMode,

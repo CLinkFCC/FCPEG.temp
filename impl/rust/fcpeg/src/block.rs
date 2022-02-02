@@ -122,6 +122,7 @@ macro_rules! expr {
     };
 }
 
+#[derive(Clone, PartialEq)]
 pub enum BlockParsingLog {
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
     BlockAliasNotFoundOrUsed { pos: CharacterPosition, block_alias_name: String },
@@ -176,6 +177,7 @@ impl ConsoleLogger for BlockParsingLog {
     }
 }
 
+#[derive(Clone, PartialEq)]
 pub struct RawRange {
     pub min_num: usize,
     pub max_num: Infinitable<usize>,

@@ -9,6 +9,7 @@ use rustnutlib::console::*;
 
 use uuid::Uuid;
 
+#[derive(Clone, PartialEq)]
 pub enum TreeLog {
     Unknown {},
     CharacterPositionNotFound { uuid: Uuid },
