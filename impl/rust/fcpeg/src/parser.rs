@@ -1,7 +1,9 @@
+use std::cell::RefCell;
 use std::collections::*;
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::Arc;
 
+use crate::block::*;
 use crate::rule::*;
 use crate::tree::*;
 
@@ -16,12 +18,15 @@ use uuid::Uuid;
 
 pub enum SyntaxParsingLog {
     InvalidCharClassFormat { value: String },
-    InvalidGenericsArgumentLength { arg_ids: Vec<String> },
-    InvalidFunctionArgumentLength { arg_ids: Vec<String> },
+    InvalidGenericsArgumentLength { pos: CharacterPosition, expected_arg_len: usize },
+    InvalidTemplateArgumentLength { pos: CharacterPosition, expected_arg_len: usize },
     InvalidLoopRange { msg: String },
+    InvalidRuleElementStructure { uuid: Uuid, msg: String },
     NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
     TooLongRepetition { loop_limit: usize },
-    UnknownArgumentID { arg_id: String },
+    UncoveredPrimitiveRule { pos: CharacterPosition, rule_name: String },
+    UnknownGenericsArgumentID { arg_id: String },
+    UnknownTemplateArgumentID { arg_id: String },
     UnknownLookaheadKind { uuid: Uuid, kind: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
 }
@@ -30,39 +35,33 @@ impl ConsoleLogger for SyntaxParsingLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
             SyntaxParsingLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),
-            SyntaxParsingLog::InvalidGenericsArgumentLength { arg_ids } => log!(Error, format!("invalid generics argument length ({:?})", arg_ids)),
-            SyntaxParsingLog::InvalidFunctionArgumentLength { arg_ids } => log!(Error, format!("invalid function argument length ({:?})", arg_ids)),
+            SyntaxParsingLog::InvalidGenericsArgumentLength { pos, expected_arg_len } => log!(Error, format!("invalid generics argument length; expected {} argument(s)", expected_arg_len), format!("pos:\t{}", pos)),
+            SyntaxParsingLog::InvalidTemplateArgumentLength { pos, expected_arg_len } => log!(Error, format!("invalid template argument length; expected {} argument(s)", expected_arg_len), format!("pos:\t{}", pos)),
             SyntaxParsingLog::InvalidLoopRange { msg } => log!(Error, format!("invalid loop range"), format!("{}", msg.bright_black())),
+            SyntaxParsingLog::InvalidRuleElementStructure { uuid, msg } => log!(Error, format!("invalid rule element structure"), format!("uuid:\t{}", uuid), format!("{}", msg.bright_black())),
             SyntaxParsingLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
             SyntaxParsingLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
-            SyntaxParsingLog::UnknownArgumentID { arg_id } => log!(Error, format!("unknown argument id '{}'", arg_id)),
+            SyntaxParsingLog::UncoveredPrimitiveRule { pos, rule_name } => log!(Error, format!("uncovered primitive rule '{}'", rule_name), format!("pos:\t{}", pos)),
+            SyntaxParsingLog::UnknownGenericsArgumentID { arg_id } => log!(Error, format!("unknown generics argument id '{}'", arg_id)),
+            SyntaxParsingLog::UnknownTemplateArgumentID { arg_id } => log!(Error, format!("unknown template argument id '{}'", arg_id)),
             SyntaxParsingLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid:\t{}", uuid)),
             SyntaxParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
         };
     }
 }
 
-pub type ArgumentMap = HashMap<String, Argument>;
-
-// todo: 取り外す
-#[allow(unused)]
-pub struct Argument {
-    kind: ArgumentKind,
-    rule_group: Box<RuleGroup>,
+pub struct ArgumentMap {
+    generics_group: HashMap<String, Box<RuleGroup>>,
+    template_group: HashMap<String, Box<RuleGroup>>,
 }
 
-impl Argument {
-    pub fn new(kind: ArgumentKind, rule_group: Box<RuleGroup>) -> Argument {
-        return Argument {
-            kind: kind,
-            rule_group: rule_group,
+impl ArgumentMap {
+    pub fn new() -> ArgumentMap {
+        return ArgumentMap {
+            generics_group: HashMap::new(),
+            template_group: HashMap::new(),
         };
     }
-}
-
-pub enum ArgumentKind {
-    Function,
-    Generics,
 }
 
 pub struct MemoizationMap {
@@ -91,12 +90,12 @@ impl MemoizationMap {
 
 pub struct SyntaxParser {
     cons: Rc<RefCell<Console>>,
-    rule_map: Box<RuleMap>,
+    rule_map: Arc<Box<RuleMap>>,
     src_i: usize,
     src_line: usize,
     src_latest_line_i: usize,
     src_path: String,
-    src_content: String,
+    src_content: Box<String>,
     loop_limit: usize,
     arg_maps: Box<Vec<ArgumentMap>>,
     rule_stack: Box<Vec<(CharacterPosition, String)>>,
@@ -106,59 +105,50 @@ pub struct SyntaxParser {
 }
 
 impl SyntaxParser {
-    pub fn new(cons: Rc<RefCell<Console>>, rule_map: Box<RuleMap>, enable_memoization: bool) -> ConsoleResult<SyntaxParser> {
-        return Ok(SyntaxParser {
+    pub fn parse(cons: Rc<RefCell<Console>>, rule_map: Arc<Box<RuleMap>>, src_path: String, src_content: Box<String>, enable_memoization: bool) -> ConsoleResult<SyntaxTree> {
+        let mut parser = SyntaxParser {
             cons: cons,
             rule_map: rule_map,
             src_i: 0,
             src_line: 0,
             src_latest_line_i: 0,
-            src_path: String::new(),
-            src_content: String::new(),
+            src_path: src_path,
+            src_content: src_content,
             loop_limit: 65536,
             arg_maps: Box::new(Vec::new()),
             rule_stack: Box::new(Vec::new()),
             regex_map: Box::new(HashMap::new()),
             memoized_map: Box::new(MemoizationMap::new()),
             enable_memoization: enable_memoization,
-        });
-    }
-
-    pub fn parse(&mut self, src_path: String, src_content: &Box<String>) -> ConsoleResult<SyntaxTree> {
-        let mut tmp_src_content = *src_content.clone();
+        };
 
         // note: 余分な改行コード 0x0d を排除する
         loop {
-            match tmp_src_content.find(0x0d as char) {
+            match parser.src_content.find(0x0d as char) {
                 Some(v) => {
-                    let _ = tmp_src_content.remove(v);
+                    let _ = parser.src_content.remove(v);
                 },
                 None => break,
             }
         }
 
         // EOF 用のヌル文字
-        tmp_src_content += "\0";
+        *parser.src_content += "\0";
 
-        // フィールドを初期化
-        self.src_i = 0;
-        self.src_path = src_path;
-        self.src_content = tmp_src_content;
+        let start_rule_id = parser.rule_map.start_rule_id.clone();
 
-        let start_rule_id = self.rule_map.start_rule_id.clone();
-
-        if self.src_content.chars().count() == 0 {
+        if parser.src_content.chars().count() == 0 {
             return Ok(SyntaxTree::from_node_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
         }
 
-        let start_rule_pos = self.rule_map.start_rule_pos.clone();
-        let mut root_node = match self.parse_rule(&start_rule_id, &start_rule_pos)? {
+        let start_rule_pos = parser.rule_map.start_rule_pos.clone();
+        let mut root_node = match parser.parse_rule(&start_rule_id, &start_rule_pos)? {
             Some(v) => v,
             None => {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
+                parser.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
                     rule_id: start_rule_id.clone(),
-                    pos: self.get_char_position(),
-                    rule_stack: *self.rule_stack.clone(),
+                    pos: parser.get_char_position(),
+                    rule_stack: *parser.rule_stack.clone(),
                 }.get_log());
 
                 return Err(());
@@ -169,11 +159,11 @@ impl SyntaxParser {
         root_node.set_ast_reflection_style(ASTReflectionStyle::Reflection(start_rule_id.clone()));
 
         // note: 入力位置が length を超えると失敗
-        if self.src_i < self.src_content.chars().count() {
-            self.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
+        if parser.src_i < parser.src_content.chars().count() {
+            parser.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
                 rule_id: start_rule_id.clone(),
-                pos: self.get_char_position(),
-                rule_stack: *self.rule_stack.clone(),
+                pos: parser.get_char_position(),
+                rule_stack: *parser.rule_stack.clone(),
             }.get_log());
 
             return Err(());
@@ -269,24 +259,7 @@ impl SyntaxParser {
     }
 
     fn parse_loop_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
-        let (min_count, max_count) = match parent_elem_order {
-            RuleElementOrder::Random(tmp_occurrence_count) => {
-                let (mut tmp_min_count, mut tmp_max_count) = tmp_occurrence_count.to_tuple();
-                tmp_min_count += group.loop_range.min - 1;
-
-                if tmp_max_count != -1 {
-                    let max_num = match group.loop_range.max {
-                        Infinitable::Finite(v) => v as isize,
-                        Infinitable::Infinite => -1,
-                    };
-
-                    tmp_max_count += max_num - 1;
-                }
-
-                (tmp_min_count, tmp_max_count)
-            },
-            RuleElementOrder::Sequential => group.loop_range.to_tuple(),
-        };
+        let (min_count, max_count) = group.loop_range.to_tuple();
 
         if max_count != -1 && min_count as isize > max_count {
             self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidLoopRange {
@@ -308,7 +281,7 @@ impl SyntaxParser {
                 return Err(());
             }
 
-            match self.parse_raw_choice(group)? {
+            match self.parse_element_order_group(parent_elem_order, group)? {
                 Some(node_elems) => {
                     for each_elem in node_elems {
                         match &each_elem {
@@ -344,7 +317,92 @@ impl SyntaxParser {
         }
     }
 
-    fn parse_raw_choice(&mut self, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
+    fn parse_element_order_group(&mut self, parent_elem_order: &RuleElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
+        let mut children = Vec::<SyntaxNodeElement>::new();
+
+        return match parent_elem_order {
+            RuleElementOrder::Random(random_order_loop_range) => {
+                let tar_elems = match group.sub_elems.get(0) {
+                    Some(tar_parent_elem) => {
+                        match tar_parent_elem {
+                            RuleElement::Group(tar_parent_group) => &tar_parent_group.sub_elems,
+                            _ => {
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidRuleElementStructure {
+                                    uuid: group.uuid.clone(),
+                                    msg: "child element of random order group must be a group".to_string(),
+                                }.get_log());
+
+                                return Err(());
+                            },
+                        }
+                    },
+                    None => {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidRuleElementStructure {
+                            uuid: group.uuid.clone(),
+                            msg: "random order group must have a child group".to_string(),
+                        }.get_log());
+
+                        return Err(());
+                    },
+                };
+
+                let random_order_start_src_i = self.src_i;
+                let mut is_each_subgroup_matched = vec![false; tar_elems.len()];
+                let mut subgroup_i = 0usize;
+
+                for _ in 0..tar_elems.len() {
+                    let elem_start_src_i = self.src_i;
+                    for subelem in tar_elems {
+                        match subelem {
+                            RuleElement::Group(subgroup) => {
+                                let mut conved_subgroup = subgroup.clone();
+                                conved_subgroup.loop_range = random_order_loop_range.clone();
+
+                                match self.parse_group(&RuleElementOrder::Sequential, &conved_subgroup)? {
+                                    Some(node_elems) => {
+                                        if is_each_subgroup_matched[subgroup_i] {
+                                            subgroup_i += 1;
+                                            continue;
+                                        }
+
+                                        for each_elem in node_elems {
+                                            match &each_elem {
+                                                SyntaxNodeElement::Node(node) => {
+                                                    if node.sub_elems.len() != 0 {
+                                                        children.push(each_elem);
+                                                    }
+                                                },
+                                                _ => children.push(each_elem),
+                                            }
+                                        }
+
+                                        is_each_subgroup_matched[subgroup_i] = true;
+                                        break;
+                                    },
+                                    None => self.src_i = elem_start_src_i,
+                                }
+                            },
+                            _ => (),
+                        }
+
+                        subgroup_i += 1;
+                    }
+
+                    if is_each_subgroup_matched.iter().find(|v| !**v).is_none() {
+                        return Ok(Some(children));
+                    }
+
+                    subgroup_i = 0;
+                }
+
+                self.src_i = random_order_start_src_i;
+                Ok(None)
+            },
+            RuleElementOrder::Sequential => self.parse_raw_group(group),
+        };
+    }
+
+    fn parse_raw_group(&mut self, group: &Box<RuleGroup>) -> ConsoleResult<Option<Vec<SyntaxNodeElement>>> {
         let mut children = Vec::<SyntaxNodeElement>::new();
 
         for each_elem in &group.sub_elems {
@@ -352,131 +410,75 @@ impl SyntaxParser {
 
             match each_elem {
                 RuleElement::Group(each_group) => {
-                    match &each_group.elem_order {
-                        RuleElementOrder::Random(_) => {
-                            let mut new_sub_children = Vec::<SyntaxNodeElement>::new();
-                            let mut matched_choices = [false].repeat(each_group.sub_elems.len());
+                    match each_group.kind {
+                        RuleGroupKind::Choice => {
+                            let mut is_successful = false;
 
-                            for _i in 0..each_group.sub_elems.len() {
-                                for (sub_elem_i, each_sub_elem) in each_group.sub_elems.iter().enumerate() {
-                                    let is_check_done = *matched_choices.get(sub_elem_i).unwrap();
-                                    let elem_start_src_i = self.src_i;
+                            for each_sub_elem in &each_group.sub_elems {
+                                match each_sub_elem {
+                                    RuleElement::Group(each_sub_group) => {
+                                        match self.parse_group(&each_group.elem_order, each_sub_group)? {
+                                            Some(v) => {
+                                                if group.sub_elems.len() != 1 {
+                                                    let new_child = SyntaxNodeElement::from_node_args(v, each_sub_group.ast_reflection_style.clone());
 
-                                    match each_sub_elem {
-                                        RuleElement::Group(each_sub_choice) if !is_check_done => {
-                                            match self.parse_group(&each_group.elem_order, each_sub_choice)? {
-                                                Some(v) => {
-                                                    for each_result_sub_elem in v {
-                                                        match each_result_sub_elem {
-                                                            SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
-                                                            _ => {
-                                                                match each_result_sub_elem {
-                                                                    SyntaxNodeElement::Node(result_node) if result_node.ast_reflection_style.is_expandable() => {
-                                                                        new_sub_children.append(&mut result_node.sub_elems.clone());
-                                                                    },
-                                                                    _ => new_sub_children.push(each_result_sub_elem),
-                                                                }
-                                                            },
-                                                        }
+                                                    match new_child {
+                                                        SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
+                                                        _ => {
+                                                            match new_child {
+                                                                SyntaxNodeElement::Node(new_node) if new_node.ast_reflection_style.is_expandable() => {
+                                                                    children.append(&mut new_node.sub_elems.clone());
+                                                                },
+                                                                _ => children.push(new_child),
+                                                            }
+                                                        },
                                                     }
+                                                } else {
+                                                    children = v;
+                                                }
 
-                                                    matched_choices[sub_elem_i] = true;
-                                                    break;
-                                                },
-                                                None => {
-                                                    self.src_i = elem_start_src_i;
-                                                    continue;
-                                                },
-                                            }
-                                        },
-                                        _ => (),
-                                    }
+                                                is_successful = true;
+                                                break;
+                                            },
+                                            None => {
+                                                self.src_i = start_src_i;
+                                            },
+                                        }
+                                    },
+                                    _ => (),
                                 }
                             }
 
-                            if matched_choices.contains(&false) {
+                            if !is_successful {
                                 return Ok(None);
                             }
-
-                            let new_child = SyntaxNodeElement::from_node_args(new_sub_children, each_group.ast_reflection_style.clone());
-
-                            match new_child {
-                                SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
-                                _ => children.push(new_child),
-                            }
                         },
-                        RuleElementOrder::Sequential => {
-                            match each_group.kind {
-                                RuleGroupKind::Choice => {
-                                    let mut is_successful = false;
+                        RuleGroupKind::Sequence => {
+                            match self.parse_group(&each_group.elem_order, each_group)? {
+                                Some(v) => {
+                                    if group.sub_elems.len() != 1 {
+                                        let new_child = SyntaxNodeElement::from_node_args(v, each_group.ast_reflection_style.clone());
 
-                                    for each_sub_elem in &each_group.sub_elems {
-                                        match each_sub_elem {
-                                            RuleElement::Group(each_sub_group) => {
-                                                match self.parse_group(&each_group.elem_order, each_sub_group)? {
-                                                    Some(v) => {
-                                                        if group.sub_elems.len() != 1 {
-                                                            let new_child = SyntaxNodeElement::from_node_args(v, each_sub_group.ast_reflection_style.clone());
-
-                                                            match new_child {
-                                                                SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
-                                                                _ => {
-                                                                    match new_child {
-                                                                        SyntaxNodeElement::Node(new_node) if new_node.ast_reflection_style.is_expandable() => {
-                                                                            children.append(&mut new_node.sub_elems.clone());
-                                                                        },
-                                                                        _ => children.push(new_child),
-                                                                    }
-                                                                },
-                                                            }
-                                                        } else {
-                                                            children = v;
-                                                        }
-
-                                                        is_successful = true;
-                                                        break;
+                                        match new_child {
+                                            SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
+                                            _ => {
+                                                match new_child {
+                                                    SyntaxNodeElement::Node(new_node) if new_node.ast_reflection_style.is_expandable() => {
+                                                        children.append(&mut new_node.sub_elems.clone());
                                                     },
-                                                    None => {
-                                                        self.src_i = start_src_i;
-                                                    },
+                                                    _ => children.push(new_child),
                                                 }
                                             },
-                                            _ => (),
                                         }
+                                    } else {
+                                        children = v;
                                     }
 
-                                    if !is_successful {
-                                        return Ok(None);
-                                    }
+                                    continue;
                                 },
-                                RuleGroupKind::Sequence => {
-                                    match self.parse_group(&each_group.elem_order, each_group)? {
-                                        Some(v) => {
-                                            if group.sub_elems.len() != 1 {
-                                                let new_child = SyntaxNodeElement::from_node_args(v, each_group.ast_reflection_style.clone());
-
-                                                match new_child {
-                                                    SyntaxNodeElement::Node(node) if node.sub_elems.len() == 0 => (),
-                                                    _ => {
-                                                        match new_child {
-                                                            SyntaxNodeElement::Node(new_node) if new_node.ast_reflection_style.is_expandable() => {
-                                                                children.append(&mut new_node.sub_elems.clone());
-                                                            },
-                                                            _ => children.push(new_child),
-                                                        }
-                                                    },
-                                                }
-                                            } else {
-                                                children = v;
-                                            }
-
-                                            continue;
-                                        },
-                                        None => {
-                                            self.src_i = start_src_i;
-                                            return Ok(None);
-                                        },
-                                    }
+                                None => {
+                                    self.src_i = start_src_i;
+                                    return Ok(None);
                                 },
                             }
                         },
@@ -589,24 +591,23 @@ impl SyntaxParser {
         }
 
         match &expr.kind {
-            // todo: argid に引数 kind を追加
             RuleExpressionKind::ArgId => {
-                let mut group = Option::<Box<RuleGroup>>::None;
+                let mut generics_group = Option::<Box<RuleGroup>>::None;
 
                 for each_arg_map in &*self.arg_maps {
-                    match each_arg_map.get(&expr.value) {
+                    match each_arg_map.generics_group.get(&expr.value) {
                         Some(v) => {
-                            group = Some(v.rule_group.clone());
+                            generics_group = Some(v.clone());
                             break;
                         },
                         None => (),
                     };
                 }
 
-                let result = match &group {
+                let result = match &generics_group {
                     Some(v) => self.parse_group(&RuleElementOrder::Sequential, &v),
                     None => {
-                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
                             arg_id: expr.value.clone(),
                         }.get_log());
 
@@ -673,69 +674,24 @@ impl SyntaxParser {
                     return Ok(None);
                 }
             },
-            RuleExpressionKind::Generics(args) => {
+            RuleExpressionKind::Id => self.parse_id_expr(expr),
+            RuleExpressionKind::IdWithArgs { generics_args, template_args } => {
                 let rule_id = &expr.value;
-
                 let mut new_arg_map = ArgumentMap::new();
-                let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
-                    Some(rule) => &rule.generics_arg_ids,
-                    None => {
-                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
-                            pos: expr.pos.clone(),
-                            rule_id: rule_id.clone(),
-                        }.get_log());
 
-                        return Err(());
-                    },
-                };
-
-                if args.len() != new_arg_ids.len() {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
-                        arg_ids: new_arg_ids.clone(),
-                    }.get_log());
-
-                    return Err(());
-                }
-
-                for i in 0..args.len() {
-                    let new_arg_id = match new_arg_ids.get(i) {
-                        Some(v) => v,
-                        None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
-                                arg_id: format!("[{}]", i),
-                            }.get_log());
-
-                            return Err(());
-                        },
-                    };
-
-                    let new_arg_group = match args.get(i) {
-                        Some(v) => v,
-                        None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
-                                arg_id: format!("[{}]", i),
-                            }.get_log());
-
-                            return Err(());
-                        }
-                    };
-
-                    new_arg_map.insert(new_arg_id.clone(), Argument::new(ArgumentKind::Generics, new_arg_group.clone()));
-                }
-
-                self.arg_maps.push(new_arg_map);
-                let result = self.parse_id_expr(expr);
-                self.arg_maps.pop();
-                return result;
-            },
-            RuleExpressionKind::Func(args) => {
-                let rule_id = &expr.value;
-
-                // note: プリミティブ関数
                 match rule_id.as_str() {
                     "JOIN" => {
-                        match args.get(0) {
-                            Some(tar_arg) if args.len() == 1 => {
+                        match generics_args.get(0) {
+                            Some(tar_arg) if generics_args.len() == 1 => {
+                                if template_args.len() != 0 {
+                                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidTemplateArgumentLength {
+                                        pos: expr.pos.clone(),
+                                        expected_arg_len: 0,
+                                    }.get_log());
+
+                                    return Err(());
+                                }
+
                                 return match self.parse_group(&RuleElementOrder::Sequential, tar_arg)? {
                                     Some(result_elems) => {
                                         let mut joined_str = String::new();
@@ -755,42 +711,62 @@ impl SyntaxParser {
                                 };
                             },
                             _ => {
-                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidFunctionArgumentLength {
-                                    arg_ids: vec!["Item".to_string()],
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
+                                    pos: expr.pos.clone(),
+                                    expected_arg_len: 1,
                                 }.get_log());
 
                                 return Err(());
                             },
                         }
                     },
-                    _ => (),
+                    _ => {
+                        if PRIMITIVE_RULE_NAMES.contains(&rule_id.as_str()) {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UncoveredPrimitiveRule {
+                                pos: expr.pos.clone(),
+                                rule_name: rule_id.clone(),
+                            }.get_log());
+
+                            return Err(());
+                        }
+                    },
                 }
 
-                let mut new_arg_map = ArgumentMap::new();
-                let new_arg_ids = match self.rule_map.rule_map.get(rule_id) {
-                    Some(rule) => &rule.func_arg_ids,
+                let (generics_arg_ids, template_arg_ids) = match self.rule_map.rule_map.get(rule_id) {
+                    Some(rule) => (&rule.generics_arg_ids, &rule.template_arg_ids),
                     None => {
                         self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
-                            pos: expr.pos.clone(), rule_id: rule_id.clone(),
+                            pos: expr.pos.clone(),
+                            rule_id: rule_id.clone(),
                         }.get_log());
 
                         return Err(());
                     },
                 };
 
-                if args.len() != new_arg_ids.len() {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidFunctionArgumentLength {
-                        arg_ids: new_arg_ids.clone(),
+                if generics_args.len() != generics_arg_ids.len() {
+                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
+                        pos: expr.pos.clone(),
+                        expected_arg_len: generics_arg_ids.len(),
                     }.get_log());
 
                     return Err(());
                 }
 
-                for i in 0..args.len() {
-                    let new_arg_id = match new_arg_ids.get(i) {
+                if template_args.len() != template_arg_ids.len() {
+                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidTemplateArgumentLength {
+                        pos: expr.pos.clone(),
+                        expected_arg_len: template_arg_ids.len(),
+                    }.get_log());
+
+                    return Err(());
+                }
+
+                for i in 0..generics_arg_ids.len() {
+                    let new_arg_id = match generics_arg_ids.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
                                 arg_id: format!("[{}]", i),
                             }.get_log());
 
@@ -798,10 +774,25 @@ impl SyntaxParser {
                         },
                     };
 
-                    let new_arg_group = match args.get(i) {
+                    let new_arg_group = match generics_args.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownArgumentID {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
+                                arg_id: format!("[{}]", i),
+                            }.get_log());
+
+                            return Err(());
+                        }
+                    };
+
+                    new_arg_map.generics_group.insert(new_arg_id.clone(), new_arg_group.clone());
+                }
+
+                for i in 0..template_arg_ids.len() {
+                    let new_arg_id = match template_arg_ids.get(i) {
+                        Some(v) => v,
+                        None => {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownTemplateArgumentID {
                                 arg_id: format!("[{}]", i),
                             }.get_log());
 
@@ -809,16 +800,24 @@ impl SyntaxParser {
                         },
                     };
 
-                    new_arg_map.insert(new_arg_id.clone(), Argument::new(ArgumentKind::Function, new_arg_group.clone()));
+                    let new_arg_group = match template_args.get(i) {
+                        Some(v) => v,
+                        None => {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownTemplateArgumentID {
+                                arg_id: format!("[{}]", i),
+                            }.get_log());
+
+                            return Err(());
+                        }
+                    };
+
+                    new_arg_map.template_group.insert(new_arg_id.clone(), new_arg_group.clone());
                 }
 
                 self.arg_maps.push(new_arg_map);
                 let result = self.parse_id_expr(expr);
                 self.arg_maps.pop();
                 return result;
-            },
-            RuleExpressionKind::Id => {
-                return self.parse_id_expr(expr);
             },
             RuleExpressionKind::String => {
                 if self.src_content.chars().count() < self.src_i + expr.value.chars().count() {

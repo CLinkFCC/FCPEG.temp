@@ -118,7 +118,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
     let start_count = Instant::now();
     // let mut file_alias_map = HashMap::<String, String>::new();
     // file_alias_map.insert("A".to_string(), "src/a.fcpeg".to_string());
-    let mut parser = match FCPEGParser::load(cons, fcpeg_file_path, HashMap::<String, String>::new(), !disable_opt) {
+    let mut parser = match FCPEGParser::load(cons.clone(), fcpeg_file_path, HashMap::<String, String>::new(), !disable_opt) {
         Ok(v) => v,
         Err(()) => {
             cons.borrow().print_all();
@@ -131,7 +131,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
         },
     };
 
-    let tree = match parser.parse(cons, input_file_path.clone()) {
+    let tree = match parser.parse(input_file_path.clone()) {
         Ok(v) => v,
         Err(()) => {
             cons.borrow().print_all();
@@ -150,7 +150,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
         println!("--- Syntax Tree ---");
         println!();
         println!("{}", input_file_path);
-        tree.print(false);
+        tree.print(true);
         println!();
     }
 

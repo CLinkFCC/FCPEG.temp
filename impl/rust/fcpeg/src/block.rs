@@ -1,6 +1,7 @@
 use std::collections::*;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::*;
 use crate::parser::*;
@@ -14,22 +15,25 @@ use rustnutlib::console::*;
 
 use uuid::Uuid;
 
+#[macro_export]
 macro_rules! block_map {
-    ($($block_name:expr => $func_name:ident), *,) => {
+    ($($block_name:expr => $block:expr), *,) => {
         {
             let mut block_map = BlockMap::new();
-            $(block_map.insert($block_name.to_string(), Box::new(FCPEGBlock::$func_name()));)*
+            $(block_map.insert($block_name.to_string(), Box::new($block));)*
             block_map
         }
     };
 }
 
+#[macro_export]
 macro_rules! block {
     ($block_name:expr, $cmds:expr) => {
         Block::new($block_name.to_string(), $cmds)
     };
 }
 
+#[macro_export]
 macro_rules! rule {
     ($rule_name:expr, $($choice:expr), *,) => {
         {
@@ -50,13 +54,15 @@ macro_rules! rule {
     };
 }
 
+#[macro_export]
 macro_rules! start_cmd {
     ($file_alias_name:expr, $block_name:expr, $rule_name:expr) => {
         BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: $file_alias_name.to_string(), block_name: $block_name.to_string(), rule_name: $rule_name.to_string() }
     };
 }
 
-macro_rules! choice {
+#[macro_export]
+macro_rules! group {
     ($options:expr, $($sub_elem:expr), *,) => {
         {
             let mut group = RuleGroup::new(RuleGroupKind::Sequence);
@@ -81,13 +87,19 @@ macro_rules! choice {
     };
 }
 
+#[macro_export]
 macro_rules! expr {
+    ($expr:expr) => {
+        RuleElement::Expression(Box::new($expr))
+    };
+
     ($kind:ident, $value:expr $(, $option:expr) *) => {
         {
             let mut expr = RuleExpression::new(CharacterPosition::get_empty(), RuleExpressionKind::$kind, $value.to_string());
 
             let leaf_name = match RuleExpressionKind::$kind {
                 RuleExpressionKind::Id => $value.to_string(),
+                RuleExpressionKind::IdWithArgs { generics_args:_, template_args: _ } => $value.to_string(),
                 _ => String::new(),
             };
 
@@ -114,7 +126,7 @@ pub type BlockMap = HashMap<String, Box<Block>>;
 
 pub enum BlockParsingLog {
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
-    BlockAliasNotFound { pos: CharacterPosition, block_alias_name: String },
+    BlockAliasNotFoundOrUsed { pos: CharacterPosition, block_alias_name: String },
     // ChildElementNotMatched { parent_uuid: Uuid, expected: String, },
     DuplicateBlockName { pos: CharacterPosition, block_name: String },
     DuplicateArgumentID { pos: CharacterPosition, arg_id: String },
@@ -123,6 +135,7 @@ pub enum BlockParsingLog {
     InvalidID { pos: CharacterPosition, id: String },
     InvalidLoopRange { pos: CharacterPosition, msg: String },
     NamingRuleViolation { pos: CharacterPosition, id: String },
+    RandomOrderInExpression { pos: CharacterPosition },
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnexpectedChildName { parent_uuid: Uuid, unexpected: String, expected: String },
     UnexpectedNodeName { uuid: Uuid, unexpected: String, expected: String },
@@ -139,7 +152,7 @@ impl ConsoleLogger for BlockParsingLog {
     fn get_log(&self) -> ConsoleLog {
         match self {
             BlockParsingLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
-            BlockParsingLog::BlockAliasNotFound { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found", block_alias_name), format!("at:\t{}", pos)),
+            BlockParsingLog::BlockAliasNotFoundOrUsed { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found or used", block_alias_name), format!("at:\t{}", pos)),
             // BlockParsingLog::ChildElementNotMatched { parent_uuid, expected } => log!(Error, format!("child element not matched"), format!("parent:\t{}", parent_uuid), format!("expected:\t{}", expected)),
             BlockParsingLog::DuplicateBlockName { pos, block_name } => log!(Error, format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateArgumentID { pos, arg_id } => log!(Error, format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
@@ -148,6 +161,7 @@ impl ConsoleLogger for BlockParsingLog {
             BlockParsingLog::InvalidID { pos, id } => log!(Error, format!("invalid id '{}'", id), format!("at:\t{}", pos)),
             BlockParsingLog::InvalidLoopRange { pos, msg } => log!(Error, format!("invalid loop range"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParsingLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
+            BlockParsingLog::RandomOrderInExpression { pos } => log!(Error, "random order in expression", format!("at:\t{}", pos), format!("{}", "cannot specify random order symbol to expression".bright_black())),
             BlockParsingLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParsingLog::UnexpectedChildName { parent_uuid, unexpected, expected } => log!(Error, format!("unknown node name {}, expected {}", unexpected, expected), format!("parent uuid:\t{}", parent_uuid)),
             BlockParsingLog::UnexpectedNodeName { uuid, unexpected, expected } => log!(Error, format!("unknown node name {}, expected {}", unexpected, expected), format!("uuid:\t{}", uuid)),
@@ -162,18 +176,30 @@ impl ConsoleLogger for BlockParsingLog {
     }
 }
 
-// note: プリミティブ関数の名前一覧
-const PRIM_FUNC_NAMES: &[&'static str] = &["JOIN"];
+pub struct RawRange {
+    pub min_num: usize,
+    pub max_num: Infinitable<usize>,
+    pub is_min_num_specified: bool,
+    pub is_max_num_specified: bool,
+    pub range_node_pos: CharacterPosition,
+    pub min_num_pos: Option<CharacterPosition>,
+    pub max_num_pos: Option<CharacterPosition>,
+}
+
+// note: プリミティブ規則名の一覧
+pub const PRIMITIVE_RULE_NAMES: &[&'static str] = &["JOIN"];
 // note: デフォルトの開始規則 ID
-const DEFAULT_START_RULE_ID: &'static str = ".Main.Main";
+pub const DEFAULT_START_RULE_ID: &'static str = ".Main.Main";
 
 pub struct BlockParser {
     cons: Rc<RefCell<Console>>,
     start_rule_id: Option<String>,
     file_alias_name: String,
+    replaced_file_alias_names: Arc<HashMap<String, String>>,
     used_block_ids: Box<HashMap<String, CharacterPosition>>,
     used_rule_ids: Box<HashMap<String, CharacterPosition>>,
     block_name: String,
+    // note: <ブロックエイリアス名, ブロック ID>
     block_alias_map: HashMap<String, String>,
     block_id_map: Vec::<String>,
     file_path: String,
@@ -182,14 +208,11 @@ pub struct BlockParser {
 
 impl BlockParser {
     // note: FileMap から最終的な RuleMap を取得する
-    pub fn get_rule_map(cons: Rc<RefCell<Console>>, fcpeg_file_map: &mut FCPEGFileMap, enable_memoization: bool) -> ConsoleResult<Box<RuleMap>> {
+    pub fn get_rule_map(cons: Rc<RefCell<Console>>, fcpeg_file_map: &mut FCPEGFileMap, enable_memoization: bool) -> ConsoleResult<Arc<Box<RuleMap>>> {
         let block_map = FCPEGBlock::get_block_map();
-        let rule_map = Box::new(RuleMap::new(vec![block_map], ".Syntax.FCPEG".to_string())?);
-
-        let mut parser = SyntaxParser::new(cons.clone(), rule_map, enable_memoization)?;
+        let rule_map = Arc::new(Box::new(RuleMap::new(vec![block_map], ".Syntax.FCPEG".to_string())?));
         let mut block_maps = Vec::<BlockMap>::new();
 
-        // note: HashMap<エイリアス名, ブロックマップ>
         let mut used_block_ids = Box::new(HashMap::<String, CharacterPosition>::new());
         let mut used_rule_ids = Box::new(HashMap::<String, CharacterPosition>::new());
         let mut block_id_map = Vec::<String>::new();
@@ -201,6 +224,7 @@ impl BlockParser {
                 cons: cons.clone(),
                 start_rule_id: None,
                 file_alias_name: file_alias_name.clone(),
+                replaced_file_alias_names: fcpeg_file_map.replaced_file_alias_names.clone(),
                 used_block_ids: used_block_ids,
                 used_rule_ids: used_rule_ids,
                 block_name: String::new(),
@@ -210,7 +234,7 @@ impl BlockParser {
                 file_content: fcpeg_file.file_content.clone(),
             };
 
-            let tree = Box::new(block_parser.to_syntax_tree(&mut parser)?);
+            let tree = Box::new(block_parser.to_syntax_tree(rule_map.clone(), enable_memoization)?);
             block_maps.push(block_parser.to_block_map(tree)?);
 
             if block_parser.file_alias_name == "" {
@@ -227,7 +251,7 @@ impl BlockParser {
             None => DEFAULT_START_RULE_ID.to_string(),
         };
 
-        let rule_map = Box::new(RuleMap::new(block_maps, start_rule_id_str)?);
+        let rule_map = Arc::new(Box::new(RuleMap::new(block_maps, start_rule_id_str)?));
 
         let mut has_id_error = false;
 
@@ -243,7 +267,7 @@ impl BlockParser {
         }
 
         for (each_rule_id, each_pos) in *used_rule_ids {
-            if !rule_map.rule_map.contains_key(&each_rule_id) {
+            if !rule_map.rule_map.contains_key(&each_rule_id) && !PRIMITIVE_RULE_NAMES.contains(&each_rule_id.as_str()) {
                 cons.borrow_mut().append_log(BlockParsingLog::UnknownRuleID {
                     pos: each_pos,
                     rule_id: each_rule_id,
@@ -260,8 +284,8 @@ impl BlockParser {
         };
     }
 
-    fn to_syntax_tree(&mut self, parser: &mut SyntaxParser) -> ConsoleResult<SyntaxTree> {
-        let tree = parser.parse(self.file_path.clone(), &self.file_content)?;
+    fn to_syntax_tree(&mut self, rule_map: Arc<Box<RuleMap>>, enable_memoization: bool) -> ConsoleResult<SyntaxTree> {
+        let tree = SyntaxParser::parse(self.cons.clone(), rule_map, self.file_path.clone(), self.file_content.clone(), enable_memoization)?;
         return Ok(tree);
     }
 
@@ -331,8 +355,9 @@ impl BlockParser {
                 Err(()) => self.cons.borrow_mut().pop_log(),
             }
 
-            self.block_id_map.push(format!("{}.{}", self.file_alias_name, self.block_name));
+            self.block_id_map.push(BlockParser::to_block_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name));
             block_map.insert(self.block_name.clone(), Box::new(Block::new(self.block_name.clone(), cmds)));
+            // note: ファイルを抜けるためクリア
             self.block_alias_map.clear();
         }
 
@@ -367,7 +392,7 @@ impl BlockParser {
                                     return Err(());
                                 }
 
-                                let rule_id = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
+                                let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &file_alias_name, &block_name, &rule_name);
 
                                 if !self.used_rule_ids.contains_key(&rule_id) {
                                     self.used_rule_ids.insert(rule_id.clone(), pos.clone());
@@ -386,18 +411,45 @@ impl BlockParser {
 
                     match &use_cmd {
                         BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => {
-                            let block_id = format!("{}.{}", file_alias_name, block_name);
-                            self.block_alias_map.insert(block_alias_name.clone(), block_id.clone());
+                            let block_id = BlockParser::to_block_id_from_elements(&self.replaced_file_alias_names, file_alias_name, block_name);
+                            let used_from = BlockParser::to_block_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name);
 
-                            if block_id == format!("{}.{}", self.file_alias_name, self.block_name) {
+                            // note: ブロック ID が自身のブロックと同じであれば警告
+                            if block_id == used_from {
                                 self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
                                     pos: pos.clone(),
                                     msg: format!("block '{}' is the self block", block_id),
                                 }.get_log());
                             }
 
-                            if !self.used_block_ids.contains_key(&block_id) {
-                                self.used_block_ids.insert(block_id, pos.clone());
+                            let mut disable_map_insert = false;
+
+                            // note: ブロック ID / ブロックエイリアスがすでに use されていれば警告
+                            for (each_alias_name, each_id) in &self.block_alias_map {
+                                if *each_id == block_id {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
+                                        pos: pos.clone(),
+                                        msg: format!("block '{}' is already used", block_id),
+                                    }.get_log());
+
+                                    disable_map_insert = true;
+                                } else if each_alias_name == block_alias_name {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
+                                        pos: pos.clone(),
+                                        msg: format!("block alias '{}' is already used", block_alias_name),
+                                    }.get_log());
+
+                                    disable_map_insert = true;
+                                }
+                            }
+
+                            // note: 先に use されたほうが優先; 警告が出れば弾く
+                            if !disable_map_insert {
+                                if !self.used_block_ids.contains_key(&block_id) {
+                                    self.used_block_ids.insert(block_id.clone(), pos.clone());
+                                }
+
+                                self.block_alias_map.insert(block_alias_name.clone(), block_id);
                             }
                         },
                         _ => (),
@@ -443,12 +495,12 @@ impl BlockParser {
             }.get_log());
         }
 
-        let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenericsIDs"]) {
+        let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenerics"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
             None => Vec::new(),
         };
 
-        let func_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdFuncIDs"]) {
+        let template_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdTemplate"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
             None => Vec::new(),
         };
@@ -465,8 +517,9 @@ impl BlockParser {
                 return Err(());
             },
         };
-        let rule_id = format!("{}.{}.{}", self.file_alias_name, self.block_name, rule_name);
-        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, func_args, new_choice);
+
+        let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name, &rule_name);
+        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, template_args, new_choice);
         return Ok(BlockCommand::Define { pos: rule_pos, rule: rule });
     }
 
@@ -515,7 +568,7 @@ impl BlockParser {
         };
 
         // note: ブロック ID がデフォルトと同じであれば警告
-        if DEFAULT_START_RULE_ID == format!("{}.{}.{}", file_alias_name, block_name, rule_name) {
+        if DEFAULT_START_RULE_ID == BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &file_alias_name, &block_name, &rule_name) {
             self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryStartCommand {
                 pos: cmd_node.get_position(&self.cons)?,
                 msg: format!("rule '{}' is the same as the default", DEFAULT_START_RULE_ID),
@@ -611,146 +664,96 @@ impl BlockParser {
 
             // note: Loop ノード
             let loop_range = match each_seq_elem_node.find_first_child_node(vec![".Rule.Loop"]) {
-                Some(v) => {
-                    match v.get_child_at(&self.cons, 0)? {
+                Some(loop_node) => {
+                    match loop_node.get_child_at(&self.cons, 0)? {
                         SyntaxNodeElement::Node(range_node) => {
-                            let range_node_pos = range_node.get_position(&self.cons)?;
+                            let raw_range = self.to_raw_range(range_node)?;
 
-                            let (min_num, is_min_num_specified) = match range_node.find_child_nodes(vec!["MinNum"]).get(0) {
-                                Some(min_num_node) => {
-                                    let min_str = min_num_node.join_child_leaf_values();
+                            let raw_loop_range_txt = {
+                                let min_num_txt = if raw_range.is_min_num_specified {
+                                    raw_range.min_num.to_string()
+                                } else {
+                                    String::new()
+                                };
 
-                                    match min_str.parse::<usize>() {
-                                        Ok(v) => (v, true),
-                                        Err(_) => {
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                                pos: min_num_node.get_position(&self.cons)?,
-                                                msg: format!("'{}' is too long or not a number", min_str),
-                                            }.get_log());
-
-                                            return Err(());
-                                        },
-                                    }
-                                },
-                                None => (0usize, false),
+                                match &raw_range.max_num {
+                                    Infinitable::Finite(v) => format!("{{{},{}}}", min_num_txt, v),
+                                    Infinitable::Infinite => format!("{{{},}}", min_num_txt),
+                                }
                             };
 
-                            let (max_num, max_num_pos, is_max_num_specified) = match range_node.find_child_nodes(vec!["MaxNumGroup"]).get(0) {
-                                Some(max_node_group) => {
-                                    match max_node_group.find_child_nodes(vec!["MaxNum"]).get(0) {
-                                        Some(max_num_node) => {
-                                            // note: {n,m} の場合 (#MaxNumGroup 内に #MaxNum が存在する)
-                                            let max_num_pos = max_num_node.get_position(&self.cons)?;
-                                            let max_str = max_num_node.join_child_leaf_values();
-
-                                            match max_str.parse::<usize>() {
-                                                Ok(v) => (Infinitable::Finite(v), Some(max_num_pos), true),
-                                                Err(_) => {
-                                                    self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                                        pos: max_num_pos,
-                                                        msg: format!("'{}' is too long or not a number", max_str),
-                                                    }.get_log());
-
-                                                    return Err(());
-                                                },
-                                            }
-                                        },
-                                        None => (Infinitable::Infinite, None, false),
-                                    }
-                                },
-                                // note: {n} の場合 (#MaxNumGroup が存在しない)
-                                None => {
-                                    if !is_min_num_specified {
-                                        // note: 最小, 最大回数どちらも指定されていない場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                            pos: range_node_pos,
-                                            msg: format!("no number specified"),
-                                        }.get_log());
-
-                                        return Err(());
-                                    }
-
-                                    (Infinitable::Finite(min_num), None, false)
-                                },
-                            };
-
-                            let raw_loop_range_txt = match &max_num {
-                                Infinitable::Finite(v) => format!("{{{},{}}}", min_num, v),
-                                Infinitable::Infinite => format!("{{{},}}", min_num),
-                            };
-
-                            match &max_num {
+                            match &raw_range.max_num {
                                 Infinitable::Finite(max_v) => {
-                                    if min_num > *max_v {
+                                    if raw_range.min_num > *max_v {
                                         // note: 最小回数が最大回数より大きかった場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                            pos: range_node_pos.clone(),
-                                            msg: format!("min value '{}' is bigger than max value '{}'", min_num, max_v),
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("min value '{}' is bigger than max value '{}'", raw_range.min_num, max_v),
                                         }.get_log());
 
                                         return Err(());
                                     }
 
-                                    if is_min_num_specified && !is_max_num_specified && min_num == 0 && *max_v == 0 {
+                                    if raw_range.is_min_num_specified && !raw_range.is_max_num_specified && raw_range.min_num == 0 && *max_v == 0 {
                                         // note: {0} の場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                            pos: range_node_pos.clone(),
+                                            pos: raw_range.range_node_pos.clone(),
                                             msg: format!("loop range '{{0}}' is invalid"),
                                         }.get_log());
 
                                         return Err(());
-                                    } else if min_num == 1 && *max_v == 1 {
-                                        if is_min_num_specified && !is_max_num_specified {
+                                    } else if raw_range.min_num == 1 && *max_v == 1 {
+                                        if raw_range.is_min_num_specified && !raw_range.is_max_num_specified {
                                             // note: {1} の場合
                                             self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                                pos: range_node_pos.clone(),
+                                                pos: raw_range.range_node_pos.clone(),
                                                 msg: format!("loop range '{{1}}' is unnecessary"),
                                             }.get_log());
                                         } else {
                                             // note: {1,1} の場合
                                             self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                                pos: range_node_pos.clone(),
+                                                pos: raw_range.range_node_pos.clone(),
                                                 msg: format!("loop range '{{1,1}}' is unnecessary"),
                                             }.get_log());
                                         }
                                     } else if *max_v == 0 {
                                         // note: 最大回数に 0 が指定された場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
-                                            pos: max_num_pos.unwrap(),
-                                            msg: format!("max number '{}' is invalid", min_num),
+                                            pos: raw_range.max_num_pos.unwrap(),
+                                            msg: format!("max number '{}' is invalid", raw_range.min_num),
                                         }.get_log());
 
                                         return Err(());
-                                    } else if is_max_num_specified && min_num == *max_v {
+                                    } else if raw_range.is_max_num_specified && raw_range.min_num == *max_v {
                                         // note: 最小回数と最大回数が同じだった場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                            pos: range_node_pos.clone(),
-                                            msg: format!("modify '{}' to '{{{}}}'", raw_loop_range_txt, min_num),
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("modify '{}' to '{{{}}}'", raw_loop_range_txt, raw_range.min_num),
                                         }.get_log());
-                                    } else if is_min_num_specified && min_num == 0 {
+                                    } else if raw_range.is_min_num_specified && raw_range.min_num == 0 {
                                         // note: 最小回数に 0 が指定された場合
                                         self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                            pos: range_node_pos.clone(),
+                                            pos: raw_range.range_node_pos.clone(),
                                             msg: format!("modify '{}' to '{{,{}}}'", raw_loop_range_txt, max_v),
                                         }.get_log());
                                     }
                                 },
-                                Infinitable::Infinite if is_min_num_specified && min_num == 0 => {
-                                    // note: 最小回数に 0 が指定された場合
+                                Infinitable::Infinite if raw_range.is_min_num_specified && raw_range.min_num == 0 => {
+                                    // note: {0,} の場合
                                     self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                        pos: range_node_pos.clone(),
+                                        pos: raw_range.range_node_pos.clone(),
                                         msg: format!("modify '{}' to '{{,}}'", raw_loop_range_txt),
                                     }.get_log());
                                 },
                                 _ => (),
                             }
 
-                            let loop_range = RuleElementLoopRange::new(min_num, max_num);
+                            let loop_range = RuleElementLoopRange::new(raw_range.min_num, raw_range.max_num);
 
                             match loop_range.to_symbol_string() {
                                 Some(symbol_str) => {
                                     self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
-                                        pos: range_node_pos.clone(),
+                                        pos: raw_range.range_node_pos.clone(),
                                         msg: format!("prefer {} to {}", raw_loop_range_txt, symbol_str),
                                     }.get_log());
                                 },
@@ -777,6 +780,105 @@ impl BlockParser {
                     }
                 },
                 None => RuleElementLoopRange::get_single_loop(),
+            };
+
+            // note: RandomOrder ノード
+            let (elem_order, random_order_node_pos) = match each_seq_elem_node.find_first_child_node(vec![".Rule.RandomOrder"]) {
+                Some(random_order_node) => {
+                    let random_order_node_pos = random_order_node.get_position(&self.cons)?;
+
+                    let (min_num, max_num) = match random_order_node.find_first_child_node(vec![".Rule.RandomOrderRange"]) {
+                        Some(range_node) => {
+                            let raw_range = self.to_raw_range(range_node)?;
+
+                            let raw_loop_range_txt = {
+                                let min_num_txt = if raw_range.is_min_num_specified {
+                                    raw_range.min_num.to_string()
+                                } else {
+                                    String::new()
+                                };
+
+                                match &raw_range.max_num {
+                                    Infinitable::Finite(v) => format!("[{},{}]", min_num_txt, v),
+                                    Infinitable::Infinite => format!("[{},]", min_num_txt),
+                                }
+                            };
+
+                            match &raw_range.max_num {
+                                Infinitable::Finite(max_v) => {
+                                    if raw_range.min_num > *max_v {
+                                        // note: 最小回数が最大回数より大きかった場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("min value '{}' is bigger than max value '{}'", raw_range.min_num, max_v),
+                                        }.get_log());
+
+                                        return Err(());
+                                    }
+
+                                    if raw_range.is_min_num_specified && !raw_range.is_max_num_specified && raw_range.min_num == 0 && *max_v == 0 {
+                                        // note: [0] の場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("loop range '[0]' is invalid"),
+                                        }.get_log());
+
+                                        return Err(());
+                                    } else if raw_range.min_num == 1 && *max_v == 1 {
+                                        if raw_range.is_min_num_specified && !raw_range.is_max_num_specified {
+                                            // note: [1] の場合
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                                pos: raw_range.range_node_pos.clone(),
+                                                msg: format!("loop range '[1]' is unnecessary"),
+                                            }.get_log());
+                                        } else {
+                                            // note: [1,1] の場合
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                                pos: raw_range.range_node_pos.clone(),
+                                                msg: format!("loop range [1-1]' is unnecessary"),
+                                            }.get_log());
+                                        }
+                                    } else if *max_v == 0 {
+                                        // note: 最大回数に 0 が指定された場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                            pos: raw_range.max_num_pos.unwrap(),
+                                            msg: format!("max number '{}' is invalid", raw_range.min_num),
+                                        }.get_log());
+
+                                        return Err(());
+                                    } else if raw_range.is_max_num_specified && raw_range.min_num == *max_v {
+                                        // note: 最小回数と最大回数が同じだった場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("modify '{}' to '[{}]'", raw_loop_range_txt, raw_range.min_num),
+                                        }.get_log());
+                                    } else if raw_range.is_min_num_specified && raw_range.min_num == 0 {
+                                        // note: 最小回数に 0 が指定された場合
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            pos: raw_range.range_node_pos.clone(),
+                                            msg: format!("modify '{}' to '[-{}]'", raw_loop_range_txt, max_v),
+                                        }.get_log());
+                                    }
+                                },
+                                Infinitable::Infinite if raw_range.is_min_num_specified && raw_range.min_num == 0 => {
+                                    // note: [0-] の場合
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                        pos: raw_range.range_node_pos.clone(),
+                                        msg: format!("modify '{}' to '[,]'", raw_loop_range_txt),
+                                    }.get_log());
+                                },
+                                _ => (),
+                            }
+
+                            (raw_range.min_num, raw_range.max_num)
+                        },
+                        None => (1, Infinitable::Finite(1)),
+                    };
+
+                    let loop_range = RuleElementLoopRange::new(min_num, max_num);
+                    (RuleElementOrder::Random(loop_range), random_order_node_pos)
+                },
+                None => (RuleElementOrder::Sequential, CharacterPosition::get_empty()),
             };
 
             // note: ASTReflectionStyle ノード
@@ -819,16 +921,25 @@ impl BlockParser {
                     let new_elem = match name.as_str() {
                         ".Rule.Choice" => {
                             let mut new_choice = Box::new(self.to_rule_choice_elem(choice_or_expr_node.get_node_child_at(&self.cons, 0)?, generics_args)?);
+                            new_choice.ast_reflection_style = ast_reflection_style;
                             new_choice.lookahead_kind = lookahead_kind;
                             new_choice.loop_range = loop_range;
-                            new_choice.ast_reflection_style = ast_reflection_style;
+                            new_choice.elem_order = elem_order;
                             RuleElement::Group(new_choice)
                         },
                         ".Rule.Expr" => {
+                            if elem_order.is_random() {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::RandomOrderInExpression {
+                                    pos: random_order_node_pos,
+                                }.get_log());
+
+                                return Err(());
+                            }
+
                             let mut new_expr = Box::new(self.to_rule_expr_elem(choice_or_expr_node, generics_args)?);
+                            new_expr.ast_reflection_style = ast_reflection_style;
                             new_expr.lookahead_kind = lookahead_kind;
                             new_expr.loop_range = loop_range;
-                            new_expr.ast_reflection_style = ast_reflection_style;
                             RuleElement::Expression(new_expr)
                         },
                         _ => {
@@ -859,6 +970,81 @@ impl BlockParser {
         let mut seq = Box::new(RuleGroup::new(RuleGroupKind::Sequence));
         seq.sub_elems = children;
         return Ok(RuleElement::Group(seq));
+    }
+
+    fn to_raw_range(&mut self, range_node: &SyntaxNode) -> ConsoleResult<RawRange> {
+        let range_node_pos = range_node.get_position(&self.cons)?;
+
+        let (min_num, min_num_pos, is_min_num_specified) = match range_node.find_child_nodes(vec!["MinNum"]).get(0) {
+            Some(min_num_node) => {
+                let min_num_pos = min_num_node.get_position(&self.cons)?;
+                let min_str = min_num_node.join_child_leaf_values();
+
+                match min_str.parse::<usize>() {
+                    Ok(v) => (v, Some(min_num_pos), true),
+                    Err(_) => {
+                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                            pos: min_num_node.get_position(&self.cons)?,
+                            msg: format!("'{}' is too long or not a number", min_str),
+                        }.get_log());
+
+                        return Err(());
+                    },
+                }
+            },
+            None => (0usize, None, false),
+        };
+
+        let (max_num, max_num_pos, is_max_num_specified) = match range_node.find_child_nodes(vec!["MaxNumGroup"]).get(0) {
+            Some(max_node_group) => {
+                match max_node_group.find_child_nodes(vec!["MaxNum"]).get(0) {
+                    Some(max_num_node) => {
+                        // note: {n,m} の場合 (#MaxNumGroup 内に #MaxNum が存在する)
+                        let max_num_pos = max_num_node.get_position(&self.cons)?;
+                        let max_str = max_num_node.join_child_leaf_values();
+
+                        match max_str.parse::<usize>() {
+                            Ok(v) => (Infinitable::Finite(v), Some(max_num_pos), true),
+                            Err(_) => {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                    pos: max_num_pos,
+                                    msg: format!("'{}' is too long or not a number", max_str),
+                                }.get_log());
+
+                                return Err(());
+                            },
+                        }
+                    },
+                    None => (Infinitable::Infinite, None, false),
+                }
+            },
+            // note: {n} の場合 (#MaxNumGroup が存在しない)
+            None => {
+                if !is_min_num_specified {
+                    // note: 最小, 最大回数どちらも指定されていない場合
+                    self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                        pos: range_node_pos,
+                        msg: format!("no number specified"),
+                    }.get_log());
+
+                    return Err(());
+                }
+
+                (Infinitable::Finite(min_num), None, false)
+            },
+        };
+
+        let raw_range = RawRange {
+            min_num: min_num,
+            max_num: max_num,
+            is_min_num_specified: is_min_num_specified,
+            is_max_num_specified: is_max_num_specified,
+            range_node_pos: range_node_pos,
+            min_num_pos: min_num_pos,
+            max_num_pos: max_num_pos,
+        };
+
+        return Ok(raw_range);
     }
 
     // note: Rule.PureChoice ノードの解析
@@ -903,65 +1089,55 @@ impl BlockParser {
                 match name.as_str() {
                     ".Rule.ArgID" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::ArgId, expr_child_node.join_child_leaf_values()),
                     ".Rule.CharClass" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
-                    ".Rule.Generics" | ".Rule.Func" => {
-                        let mut args = Vec::<Box<RuleGroup>>::new();
-                        for instant_pure_choice_node in expr_child_node.find_child_nodes(vec![".Rule.InstantPureChoice"]) {
-                            args.push(Box::new(self.to_rule_choice_elem(instant_pure_choice_node, generics_args)?));
-                        }
-
-                        let parent_node = expr_child_node.get_node_child_at(&self.cons, 0)?.get_node_child_at(&self.cons, 0)?;
-                        let pos = parent_node.get_position(&self.cons)?;
-
-                        let generics = match name.as_str() {
-                            ".Rule.Generics" => RuleExpressionKind::Generics(args),
-                            ".Rule.Func" => RuleExpressionKind::Func(args),
-                            _ => {
-                                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
-                                    parent_uuid: expr_child_node.uuid.clone(),
-                                    unexpected: format!("'{}'", name),
-                                    expected: "generics or template node".to_string(),
-                                }.get_log());
-
-                                return Err(());
-                            },
-                        };
-
-                        let raw_id = BlockParser::to_string_vec(&self.cons, expr_child_node.get_node_child_at(&self.cons, 0)?)?;
-                        let joined_raw_id = raw_id.join(".");
-                        let id = if name == ".Rule.Func" && PRIM_FUNC_NAMES.contains(&joined_raw_id.as_str()) {
-                            joined_raw_id.clone()
-                        } else {
-                            match BlockParser::to_rule_id(&self.cons, &pos, &raw_id, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
-                                Ok(id) => {
-                                    if !self.used_rule_ids.contains_key(&id) {
-                                        self.used_rule_ids.insert(id.clone(), pos.clone());
-                                    }
-
-                                    id
-                                },
-                                Err(()) => return Err(()),
-                            }
-                        };
-
-                        (pos, generics, id)
-                    },
                     ".Rule.ID" => {
                         let chain_id_node = expr_child_node.get_node_child_at(&self.cons, 0)?;
                         let parent_node = chain_id_node.get_node_child_at(&self.cons, 0)?;
                         let pos = parent_node.get_position(&self.cons)?;
 
-                        let id = match BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name) {
-                            Ok(id) => {
-                                if !self.used_rule_ids.contains_key(&id) {
-                                    self.used_rule_ids.insert(id.clone(), pos.clone());
+                        let new_generics_args = match expr_child_node.find_first_child_node(vec![".Rule.Generics"]) {
+                            Some(generics_node) => {
+                                let mut args = Vec::<Box<RuleGroup>>::new();
+
+                                for seq_node in generics_node.find_child_nodes(vec![".Rule.Seq"]) {
+                                    match self.to_seq_elem(seq_node, generics_args)? {
+                                        RuleElement::Group(new_arg) => args.push(new_arg),
+                                        _ => (),
+                                    };
                                 }
 
-                                id
+                                args
                             },
-                            Err(()) => return Err(()),
+                            None => Vec::new(),
                         };
 
-                        (pos, RuleExpressionKind::Id, id)
+                        let new_template_args = match expr_child_node.find_first_child_node(vec![".Rule.Template"]) {
+                            Some(template_node) => {
+                                let mut args = Vec::<Box<RuleGroup>>::new();
+
+                                for seq_node in template_node.find_child_nodes(vec![".Rule.Seq"]) {
+                                    match self.to_seq_elem(seq_node, generics_args)? {
+                                        RuleElement::Group(new_arg) => args.push(new_arg),
+                                        _ => (),
+                                    };
+                                }
+
+                                args
+                            },
+                            None => Vec::new(),
+                        };
+
+                        let id = BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_file_alias_names)?;
+
+                        if !self.used_rule_ids.contains_key(&id) {
+                            self.used_rule_ids.insert(id.clone(), pos.clone());
+                        }
+
+                        let id_expr_kind = RuleExpressionKind::IdWithArgs {
+                            generics_args: new_generics_args,
+                            template_args: new_template_args,
+                        };
+
+                        (pos, id_expr_kind, id)
                     },
                     ".Rule.Str" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
                     ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
@@ -1001,11 +1177,11 @@ impl BlockParser {
         return Ok(str_vec);
     }
 
-    fn to_rule_id(cons: &Rc<RefCell<Console>>, pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String) -> ConsoleResult<String> {
+    fn to_rule_id(cons: &Rc<RefCell<Console>>, pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String, replaced_file_alias_names: &Arc<HashMap<String, String>>) -> ConsoleResult<String> {
         let (new_id, id_block_name, id_rule_name) = match id_tokens.len() {
             1 => {
                 let id_rule_name = id_tokens.get(0).unwrap();
-                let new_id = format!("{}.{}.{}", file_alias_name, block_name, id_rule_name);
+                let new_id = BlockParser::to_rule_id_from_elements(replaced_file_alias_names, file_alias_name, block_name, id_rule_name);
 
                 (new_id, block_name, id_rule_name.clone())
             },
@@ -1014,14 +1190,14 @@ impl BlockParser {
                 let rule_name = id_tokens.get(1).unwrap().to_string();
 
                 if block_alias_map.contains_key(&block_name.to_string()) {
-                    let block_name = block_alias_map.get(&block_name.to_string()).unwrap();
                     // note: ブロック名がエイリアスである場合
-                    let new_id = format!("{}.{}", block_name, rule_name);
+                    let block_name = block_alias_map.get(&block_name.to_string()).unwrap();
+                    let new_id = BlockParser::to_block_id_from_elements(&replaced_file_alias_names, &block_name, &rule_name);
 
                     (new_id, block_name, rule_name.clone())
                 } else {
                     // note: ブロック名がエイリアスでない場合
-                    cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNotFound {
+                    cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNotFoundOrUsed {
                         pos: pos.clone(),
                         block_alias_name: block_name.to_string(),
                     }.get_log());
@@ -1030,9 +1206,10 @@ impl BlockParser {
                 }
             },
             3 => {
+                let file_alias_name = id_tokens.get(0).unwrap();
                 let block_name = id_tokens.get(1).unwrap();
                 let rule_name = id_tokens.get(2).unwrap();
-                let new_id = format!("{}.{}.{}", file_alias_name, block_name, rule_name);
+                let new_id = BlockParser::to_rule_id_from_elements(replaced_file_alias_names, file_alias_name, block_name, rule_name);
 
                 (new_id, block_name, rule_name.to_string())
             },
@@ -1125,6 +1302,28 @@ impl BlockParser {
             None => false,
         };
     }
+
+    fn to_block_id_from_elements(replaced_file_alias_names: &Arc<HashMap<String, String>>, file_alias_name: &String, block_name: &String) -> String {
+        let replaced_file_alias_name = match replaced_file_alias_names.get(file_alias_name) {
+            Some(v) => v,
+            None => file_alias_name,
+        };
+
+        return format!("{}.{}", replaced_file_alias_name, block_name);
+    }
+
+    fn to_rule_id_from_elements(replaced_file_alias_names: &Arc<HashMap<String, String>>, file_alias_name: &String, block_name: &String, rule_name: &String) -> String {
+        if PRIMITIVE_RULE_NAMES.contains(&rule_name.as_str()) {
+            return rule_name.clone();
+        }
+
+        let replaced_file_alias_name = match replaced_file_alias_names.get(file_alias_name) {
+            Some(v) => v,
+            None => file_alias_name,
+        };
+
+        return format!("{}.{}.{}", replaced_file_alias_name, block_name, rule_name);
+    }
 }
 
 struct FCPEGBlock {}
@@ -1132,12 +1331,12 @@ struct FCPEGBlock {}
 impl FCPEGBlock {
     pub fn get_block_map() -> BlockMap {
         return block_map!{
-            "Main" => get_main_block,
-            "Syntax" => get_syntax_block,
-            "Symbol" => get_symbol_block,
-            "Misc" => get_misc_block,
-            "Block" => get_block_block,
-            "Rule" => get_rule_block,
+            "Main" => FCPEGBlock::get_main_block(),
+            "Syntax" => FCPEGBlock::get_syntax_block(),
+            "Symbol" => FCPEGBlock::get_symbol_block(),
+            "Misc" => FCPEGBlock::get_misc_block(),
+            "Block" => FCPEGBlock::get_block_block(),
+            "Rule" => FCPEGBlock::get_rule_block(),
         };
     }
 
@@ -1147,23 +1346,18 @@ impl FCPEGBlock {
     }
 
     fn get_syntax_block() -> Block {
-        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* Symbol.LineEnd*# Symbol.Space*# Symbol.EOF#,
+        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* "\z"#,
         let fcpeg_rule = rule!{
             ".Syntax.FCPEG",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Space", "*", "#"),
                 expr!(Id, ".Symbol.LineEnd", "*", "#"),
-                choice!{
+                group!{
                     vec!["*"],
-                    choice!{
-                        vec![],
-                        expr!(Id, ".Block.Block"),
-                        expr!(Id, ".Symbol.Div", "*", "#"),
-                    },
+                    expr!(Id, ".Block.Block"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
                 },
-                expr!(Id, ".Symbol.LineEnd", "*", "#"),
-                expr!(Id, ".Symbol.Space", "*", "#"),
                 expr!(String, "\0", "#"),
             },
         };
@@ -1175,7 +1369,7 @@ impl FCPEGBlock {
         // code: Space <- " ",
         let space_rule = rule!{
             ".Symbol.Space",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, " "),
             },
@@ -1184,7 +1378,7 @@ impl FCPEGBlock {
         // code: LineEnd <- Space* "\n" Space*,
         let line_end_rule = rule!{
             ".Symbol.LineEnd",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Space", "*"),
                 expr!(String, "\n"),
@@ -1195,15 +1389,15 @@ impl FCPEGBlock {
         // code: Div <- Space : "\n",
         let div_rule = rule!{
             ".Symbol.Div",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Symbol.Space"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "\n"),
                     },
@@ -1214,18 +1408,18 @@ impl FCPEGBlock {
         // note: CommaDiv <- Div* (",," LineEnd Div* : "," Space*),
         let comma_div_rule = rule!{
             ".Symbol.CommaDiv",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "*"),
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, ",,"),
                         expr!(Id, ".Symbol.LineEnd"),
                         expr!(Id, ".Symbol.Div", "*"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, ","),
                         expr!(Id, ".Symbol.Space", "*"),
@@ -1237,7 +1431,7 @@ impl FCPEGBlock {
         // code: EOF <- "\z",
         let eof_rule = rule!{
             ".Symbol.EOF",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "\0", "#"),
             },
@@ -1250,7 +1444,7 @@ impl FCPEGBlock {
         // code: SingleID <- [a-zA-Z_] [a-zA-Z0-9_]*,
         let single_id_rule = rule!{
             ".Misc.SingleID",
-            choice!{
+            group!{
                 vec![],
                 expr!(CharClass, "[a-zA-Z_]"),
                 expr!(CharClass, "[a-zA-Z0-9_]", "*"),
@@ -1260,12 +1454,12 @@ impl FCPEGBlock {
         // code: ChainID <- SingleID ("."# SingleID)*##,
         let chain_id_rule = rule!{
             ".Misc.ChainID",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Misc.SingleID"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, ".", "#"),
                         expr!(Id, ".Misc.SingleID"),
@@ -1281,7 +1475,7 @@ impl FCPEGBlock {
         // code: Block <- "["# Symbol.Div*# Misc.SingleID Symbol.Div*# "]"# Symbol.Div*# "{"# Symbol.Div*# (Cmd Symbol.Div*#)* "}"#,
         let block_rule = rule!{
             ".Block.Block",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "[", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1291,9 +1485,9 @@ impl FCPEGBlock {
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "{", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                choice!{
+                group!{
                     vec!["*"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Block.Cmd"),
                         expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1306,21 +1500,21 @@ impl FCPEGBlock {
         // code: Cmd <- CommentCmd : DefineCmd : StartCmd : UseCmd,
         let cmd_rule = rule!{
             ".Block.Cmd",
-            choice!{
+            group!{
                 vec![":"],
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Block.CommentCmd"),
                 },
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Block.DefineCmd"),
                 },
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Block.StartCmd"),
                 },
-                choice!{
+                group!{
                     vec![],
                     expr!(Id, ".Block.UseCmd"),
                 },
@@ -1330,19 +1524,19 @@ impl FCPEGBlock {
         // code: CommentCmd <- "%"# (!"," . : ",,")*## ","#,
         let comment_rule = rule!{
             ".Block.CommentCmd",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "%", "#"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![":"],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, ",", "!"),
                             expr!(Wildcard, "."),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, ",,"),
                         },
@@ -1352,14 +1546,14 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmd <- Misc.SingleID DefineCmdGenericsIDs? DefineCmdFuncIDs? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
+        // code: DefineCmd <- Misc.SingleID DefineCmdGenerics? DefineCmdTemplate? Symbol.Div*# "<-"# Symbol.Div*# Rule.PureChoice Symbol.Div*# ","#,
         let define_cmd_rule = rule!{
             ".Block.DefineCmd",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Misc.SingleID"),
-                expr!(Id, ".Block.DefineCmdGenericsIDs", "?"),
-                expr!(Id, ".Block.DefineCmdFuncIDs", "?"),
+                expr!(Id, ".Block.DefineCmdGenerics", "?"),
+                expr!(Id, ".Block.DefineCmdTemplate", "?"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "<-", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1369,16 +1563,16 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmdGenericsIDs <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
-        let define_cmd_generics_ids_rule = rule!{
-            ".Block.DefineCmdGenericsIDs",
-            choice!{
+        // code: DefineCmdGenerics <- Symbol.Div*# "<"# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ">"# Symbol.Div*#,
+        let define_cmd_generics_rule = rule!{
+            ".Block.DefineCmdGenerics",
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "<", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.ArgID"),
-                choice!{
+                group!{
                     vec!["*", "##"],
                     expr!(Id, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
@@ -1391,16 +1585,16 @@ impl FCPEGBlock {
             },
         };
 
-        // code: DefineCmdFuncIDs <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,
-        let define_cmd_func_ids_rule = rule!{
-            ".Block.DefineCmdFuncIDs",
-            choice!{
+        // code: DefineCmdTemplate <- Symbol.Div*# "("# Symbol.Div*# Rule.ArgID (Symbol.Div*# ","# Symbol.Div*# Rule.ArgID)*## Symbol.Div*# ")"# Symbol.Div*#,
+        let define_cmd_template_rule = rule!{
+            ".Block.DefineCmdTemplate",
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "(", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.ArgID"),
-                choice!{
+                group!{
                     vec!["*", "##"],
                     expr!(Id, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
@@ -1416,7 +1610,7 @@ impl FCPEGBlock {
         // code: StartCmd <- "+"# Symbol.Div*# "start"# Symbol.Div+# Misc.ChainID Symbol.Div*# ","#,
         let start_cmd_rule = rule!{
             ".Block.StartCmd",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "+", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1431,7 +1625,7 @@ impl FCPEGBlock {
         // code: UseCmd <- "+"# Symbol.Div*# "use"# Symbol.Div+# Misc.ChainID UseCmdBlockAlias? Symbol.Div*# ","#,
         let use_cmd_rule = rule!{
             ".Block.UseCmd",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "+", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1447,7 +1641,7 @@ impl FCPEGBlock {
         // code: UseCmdBlockAlias <- Symbol.Div+# "as" Symbol.Div+# Misc.SingleID,
         let use_cmd_block_alias_rule = rule!{
             ".Block.UseCmdBlockAlias",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Symbol.Div", "+", "#"),
                 expr!(String, "as", "#"),
@@ -1456,47 +1650,29 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Block", vec![block_rule, cmd_rule, comment_rule, define_cmd_rule, define_cmd_generics_ids_rule, define_cmd_func_ids_rule, start_cmd_rule, use_cmd_rule, use_cmd_block_alias_rule]);
+        return block!(".Block", vec![block_rule, cmd_rule, comment_rule, define_cmd_rule, define_cmd_generics_rule, define_cmd_template_rule, start_cmd_rule, use_cmd_rule, use_cmd_block_alias_rule]);
     }
 
     fn get_rule_block() -> Block {
-        // code: InstantPureChoice <- Seq ":" Symbol.Space# Seq)*##,
-        let instant_pure_choice_rule = rule!{
-            ".Rule.InstantPureChoice",
-            choice!{
-                vec![],
-                expr!(Id, ".Rule.Seq"),
-                choice!{
-                    vec!["*", "##"],
-                    choice!{
-                        vec!["##"],
-                        expr!(String, ":"),
-                        expr!(Id, ".Symbol.Space", "#"),
-                        expr!(Id, ".Rule.Seq"),
-                    },
-                },
-            },
-        };
-
         // code: PureChoice <- Seq ((Symbol.Div+# ":" Symbol.Div+# : ",")## Seq)*##,
         let pure_choice_rule = rule!{
             ".Rule.PureChoice",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Rule.Seq"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec!["##"],
-                        choice!{
+                        group!{
                             vec![":"],
-                            choice!{
+                            group!{
                                 vec!["##"],
                                 expr!(Id, ".Symbol.Div", "+", "#"),
                                 expr!(String, ":"),
                                 expr!(Id, ".Symbol.Div", "+", "#"),
                             },
-                            choice!{
+                            group!{
                                 vec!["##"],
                                 expr!(String, ","),
                                 expr!(Id, ".Symbol.Space", "#"),
@@ -1511,7 +1687,7 @@ impl FCPEGBlock {
         // code: Choice <- "("# PureChoice ")"#,
         let choice_rule = rule!{
             ".Rule.Choice",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "(", "#"),
                 expr!(Id, ".Rule.PureChoice"),
@@ -1522,14 +1698,14 @@ impl FCPEGBlock {
         // code: Seq <- SeqElem (Symbol.Div+# SeqElem)*##,
         let seq_rule = rule!{
             ".Rule.Seq",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Rule.SeqElem"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(Id, ".Symbol.Div", "+", "#"),
                             expr!(Id, ".Rule.SeqElem"),
@@ -1542,18 +1718,18 @@ impl FCPEGBlock {
         // code: SeqElem <- Lookahead? (Choice : Expr) Loop? RandomOrder? ASTReflectionStyle?,
         let seq_elem_rule = rule!{
             ".Rule.SeqElem",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Rule.Lookahead", "?"),
-                choice!{
+                group!{
                     vec!["##"],
-                    choice!{
+                    group!{
                         vec![":"],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(Id, ".Rule.Choice"),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(Id, ".Rule.Expr"),
                         },
@@ -1565,38 +1741,30 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Expr <- Generics : ArgID : Func : ID : Str : CharClass : Wildcard,
+        // code: Expr <- ArgID : ID : Str : CharClass : Wildcard,
         let expr_rule = rule!{
             ".Rule.Expr",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.ArgID"),
                     },
-                    choice!{
-                        vec![],
-                        expr!(Id, ".Rule.Generics"),
-                    },
-                    choice!{
-                        vec![],
-                        expr!(Id, ".Rule.Func"),
-                    },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.ID"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.Str"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.CharClass"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.Wildcard"),
                     },
@@ -1607,15 +1775,15 @@ impl FCPEGBlock {
         // code: Lookahead <- "!" : "&",
         let lookahead_rule = rule!{
             ".Rule.Lookahead",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "!"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "&"),
                     },
@@ -1626,23 +1794,23 @@ impl FCPEGBlock {
         // code: Loop <- "?" : "*" : "+" : LoopRange,
         let loop_rule = rule!{
             ".Rule.Loop",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "?"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "*"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "+"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(Id, ".Rule.LoopRange"),
                     },
@@ -1653,12 +1821,12 @@ impl FCPEGBlock {
         // code: LoopRange <- "{"# Symbol.Div*# Num?#MinNum (Symbol.CommaDiv# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "}"#,
         let loop_range_rule = rule!{
             ".Rule.LoopRange",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "{", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(Id, ".Rule.Num", "?", "#MinNum"),
-                choice!{
+                group!{
                     vec!["?", "#MaxNumGroup"],
                     expr!(Id, ".Symbol.CommaDiv", "#"),
                     expr!(Id, ".Rule.Num", "?", "#MaxNum"),
@@ -1671,23 +1839,28 @@ impl FCPEGBlock {
         // expr: RandomOrder <- "^"# RandomOrderRange?,
         let random_order_rule = rule!{
             ".Rule.RandomOrder",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "^", "#"),
                 expr!(Id, ".Rule.RandomOrderRange", "?"),
             },
         };
 
-        // code: RandomOrderRange <- "["# Symbol.Div*# Num? Symbol.CommaDiv# Num? Symbol.Div*# "]"#,
+        // code: RandomOrderRange <- "["# Symbol.Div*# Num?#MinNum (Symbol.Div*# "-"# Symbol.Div*# Num?#MaxNum)?#MaxNumGroup Symbol.Div*# "]"#,
         let random_order_range_rule = rule!{
             ".Rule.RandomOrderRange",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "[", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                expr!(Id, ".Rule.Num", "?"),
-                expr!(Id, ".Symbol.CommaDiv", "#"),
-                expr!(Id, ".Rule.Num", "?"),
+                expr!(Id, ".Rule.Num", "?", "#MinNum"),
+                group!{
+                    vec!["?", "#MaxNumGroup"],
+                    expr!(Id, ".Symbol.Div", "*", "#"),
+                    expr!(String, "-", "#"),
+                    expr!(Id, ".Symbol.Div", "*", "#"),
+                    expr!(Id, ".Rule.Num", "?", "#MaxNum"),
+                },
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "]", "#"),
             },
@@ -1696,15 +1869,15 @@ impl FCPEGBlock {
         // code: ASTReflectionStyle <- "##" : "#"# Misc.SingleID?##,
         let ast_reflection_rule = rule!{
             ".Rule.ASTReflectionStyle",
-            choice!{
+            group!{
                 vec![],
-                choice!{
+                group!{
                     vec![":"],
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "##"),
                     },
-                    choice!{
+                    group!{
                         vec![],
                         expr!(String, "#", "#"),
                         expr!(Id, ".Misc.SingleID", "?", "##"),
@@ -1716,48 +1889,49 @@ impl FCPEGBlock {
         // code: Num <- [0-9]+,
         let num_rule = rule!{
             ".Rule.Num",
-            choice!{
+            group!{
                 vec![],
                 expr!(CharClass, "[0-9]+", "+"),
             },
         };
 
-        // code: ID <- Misc.ChainID,
+        // code: ID <- Misc.ChainID Generics? Template?,
         let id_rule = rule!{
             ".Rule.ID",
-            choice!{
+            group!{
                 vec![],
                 expr!(Id, ".Misc.ChainID"),
+                expr!(Id, ".Rule.Generics", "?"),
+                expr!(Id, ".Rule.Template", "?"),
             },
         };
 
         // code: ArgID <- "$"# Misc.SingleID##,
         let arg_id_rule = rule!{
             ".Rule.ArgID",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "$", "#"),
                 expr!(Id, ".Misc.SingleID", "##"),
             },
         };
 
-        // code: Generics <- Misc.ChainID "<"# Symbol.Div*# InstantPureChoice (Symbol.Div*# ","# Symbol.Div*# InstantPureChoice)*## Symbol.Div*# ">"#,
+        // code: Generics <- "<"# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ">"#,
         let generics_rule = rule!{
             ".Rule.Generics",
-            choice!{
+            group!{
                 vec![],
-                expr!(Id, ".Misc.ChainID"),
                 expr!(String, "<", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                expr!(Id, ".Rule.InstantPureChoice"),
-                choice!{
+                expr!(Id, ".Rule.Seq"),
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec!["##"],
                         expr!(Id, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
                         expr!(Id, ".Symbol.Div", "*", "#"),
-                        expr!(Id, ".Rule.InstantPureChoice"),
+                        expr!(Id, ".Rule.Seq"),
                     },
                 },
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1765,23 +1939,22 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Func <- Misc.ChainID "("# Symbol.Div*# InstantPureChoice (Symbol.Div*# ","# Symbol.Div*# InstantPureChoice)*## Symbol.Div*# ")"#,
-        let func_rule = rule!{
-            ".Rule.Func",
-            choice!{
+        // code: Template <- "("# Symbol.Div*# Seq (Symbol.Div*# ","# Symbol.Div*# Seq)*## Symbol.Div*# ")"#,
+        let template_rule = rule!{
+            ".Rule.Template",
+            group!{
                 vec![],
-                expr!(Id, ".Misc.ChainID"),
                 expr!(String, "(", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                expr!(Id, ".Rule.InstantPureChoice"),
-                choice!{
+                expr!(Id, ".Rule.Seq"),
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec!["##"],
                         expr!(Id, ".Symbol.Div", "*", "#"),
                         expr!(String, ",", "#"),
                         expr!(Id, ".Symbol.Div", "*", "#"),
-                        expr!(Id, ".Rule.InstantPureChoice"),
+                        expr!(Id, ".Rule.Seq"),
                     },
                 },
                 expr!(Id, ".Symbol.Div", "*", "#"),
@@ -1792,30 +1965,30 @@ impl FCPEGBlock {
         // code: EscSeq <- "\\"# ("\\" : "\"" : "n" : "t" : "z")##,
         let esc_seq_rule = rule!{
             ".Rule.EscSeq",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "\\", "#"),
-                choice!{
+                group!{
                     vec!["##"],
-                    choice!{
+                    group!{
                         vec![":"],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "\\"),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "\""),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "n"),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "t"),
                         },
-                        choice!{
+                        group!{
                             vec![],
                             expr!(String, "z"),
                         },
@@ -1827,28 +2000,28 @@ impl FCPEGBlock {
         // code: Str <- "\""# ((EscSeq : !(("\\" : "\"")) .))*## "\""#,
         let str_rule = rule!{
             ".Rule.Str",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "\"", "#"),
-                choice!{
+                group!{
                     vec!["*", "##"],
-                    choice!{
+                    group!{
                         vec![":"],
-                        choice!{
+                        group!{
                             vec![],
                             expr!(Id, ".Rule.EscSeq"),
                         },
-                        choice!{
+                        group!{
                             vec![],
-                            choice!{
+                            group!{
                                 vec!["!"],
-                                choice!{
+                                group!{
                                     vec![":"],
-                                    choice!{
+                                    group!{
                                         vec![],
                                         expr!(String, "\\"),
                                     },
-                                    choice!{
+                                    group!{
                                         vec![],
                                         expr!(String, "\""),
                                     },
@@ -1865,31 +2038,31 @@ impl FCPEGBlock {
         // code: CharClass <- "["# (!"[" !"]" !Symbol.LineEnd (("\\[" : "\\]" : "\\\\" : .))##)+## "]"#,
         let char_class_rule = rule!{
             ".Rule.CharClass",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "[", "#"),
-                choice!{
+                group!{
                     vec!["+", "##"],
                     expr!(String, "[", "!"),
                     expr!(String, "]", "!"),
                     expr!(Id, ".Symbol.LineEnd", "!"),
-                    choice!{
+                    group!{
                         vec!["##"],
-                        choice!{
+                        group!{
                             vec![":"],
-                            choice!{
+                            group!{
                                 vec![],
                                 expr!(String, "\\["),
                             },
-                            choice!{
+                            group!{
                                 vec![],
                                 expr!(String, "\\]"),
                             },
-                            choice!{
+                            group!{
                                 vec![],
                                 expr!(String, "\\\\"),
                             },
-                            choice!{
+                            group!{
                                 vec![],
                                 expr!(Wildcard, "."),
                             },
@@ -1903,12 +2076,12 @@ impl FCPEGBlock {
         // code: Wildcard <- ".",
         let wildcard_rule = rule!{
             ".Rule.Wildcard",
-            choice!{
+            group!{
                 vec![],
                 expr!(String, "."),
             },
         };
 
-        return block!(".Rule", vec![instant_pure_choice_rule, pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, func_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
+        return block!(".Rule", vec![pure_choice_rule, choice_rule, seq_rule, seq_elem_rule, expr_rule, lookahead_rule, loop_rule, loop_range_rule, random_order_rule, random_order_range_rule, ast_reflection_rule, num_rule, id_rule, arg_id_rule, generics_rule, template_rule, esc_seq_rule, str_rule, char_class_rule, wildcard_rule]);
     }
 }
