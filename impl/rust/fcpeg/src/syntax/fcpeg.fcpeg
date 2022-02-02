@@ -27,8 +27,8 @@
     + use Symbol,
 
     AttrList <- Attr ((Symbol.LineEnd+# Attr)*## Symbol.LineEnd+#,
-    Attr <- "@"# Symbol.Div*# Misc.SingleID Symbol.Div*# "["# Symbol.Div*# Item (Symbol.Div*# ","# Symbol.Div*# Item)*## Symbol.Div*# "]"#,
-    Item <- ("!")?#Negative Symbol.Div*# Misc.SingleID,
+    Attr <- "@"# Symbol.Div*# Misc.SingleID Symbol.Div*# "["# Symbol.Div*# Value (Symbol.Div*# ","# Symbol.Div*# Value)*## Symbol.Div*# "]"#,
+    Value <- ("!")?#Negative Symbol.Div*# Misc.SingleID,
 }
 
 [Block]{

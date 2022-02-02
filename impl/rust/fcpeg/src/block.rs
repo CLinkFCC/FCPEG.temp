@@ -1359,7 +1359,7 @@ impl BlockParser {
         let name = attr_node.get_node_child_at(&self.cons, 0)?.join_child_leaf_values();
         let mut values = Vec::<AttributeValue>::new();
 
-        for each_attr_value_node in &attr_node.find_child_nodes(vec![".Attr.Item"]) {
+        for each_attr_value_node in &attr_node.find_child_nodes(vec![".Attr.Value"]) {
             let is_negative = each_attr_value_node.find_first_child_node(vec!["Negative"]).is_some();
             let id_node_name = ".Misc.SingleID";
 
@@ -1588,7 +1588,7 @@ impl FCPEGBlock {
             },
         };
 
-        // code: Attr <- "@"# Symbol.Div*# Misc.SingleID Symbol.Div*# "["# Symbol.Div*# Item (Symbol.Div*# ","# Symbol.Div*# Item)*## Symbol.Div*# "]"#,
+        // code: Attr <- "@"# Symbol.Div*# Misc.SingleID Symbol.Div*# "["# Symbol.Div*# Value (Symbol.Div*# ","# Symbol.Div*# Value)*## Symbol.Div*# "]"#,
         let attr_rule = rule!{
             ".Attr.Attr",
             group!{
@@ -1599,22 +1599,22 @@ impl FCPEGBlock {
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "[", "#"),
                 expr!(Id, ".Symbol.Div", "*", "#"),
-                expr!(Id, ".Attr.Item"),
+                expr!(Id, ".Attr.Value"),
                 group!{
                     vec!["*", "##"],
                     expr!(Id, ".Symbol.Div", "*", "#"),
                     expr!(String, ",", "#"),
                     expr!(Id, ".Symbol.Div", "*", "#"),
-                    expr!(Id, ".Attr.Item"),
+                    expr!(Id, ".Attr.Value"),
                 },
                 expr!(Id, ".Symbol.Div", "*", "#"),
                 expr!(String, "]", "#"),
             },
         };
 
-        // code: Item <- ("!")?#Negative Symbol.Div*# Misc.SingleID,
-        let item_rule = rule!{
-            ".Attr.Item",
+        // code: Value <- ("!")?#Negative Symbol.Div*# Misc.SingleID,
+        let value_rule = rule!{
+            ".Attr.Value",
             group!{
                 vec![],
                 group!{
@@ -1626,7 +1626,7 @@ impl FCPEGBlock {
             },
         };
 
-        return block!(".Attr", vec![attr_list_rule, attr_rule, item_rule]);
+        return block!(".Attr", vec![attr_list_rule, attr_rule, value_rule]);
     }
 
     fn get_block_block() -> Block {
