@@ -59,7 +59,8 @@ impl Display for AttributeValue {
     }
 }
 
-pub type BlockMap = HashMap<String, Box<Block>>;
+pub type BlockId = String;
+pub type BlockMap = HashMap<BlockId, Box<Block>>;
 
 #[derive(Clone)]
 pub struct Block {
@@ -104,15 +105,17 @@ impl Display for BlockCommand {
     }
 }
 
+pub type RuleId = String;
+
 #[derive(Clone)]
 pub struct RuleMap {
-    pub rule_map: HashMap<String, Box<Rule>>,
+    pub rule_map: HashMap<RuleId, Box<Rule>>,
     pub start_rule_pos: CharacterPosition,
-    pub start_rule_id: String,
+    pub start_rule_id: RuleId,
 }
 
 impl RuleMap {
-    pub fn new(block_map: Vec<BlockMap>, start_rule_id: String) -> ConsoleResult<RuleMap> {
+    pub fn new(block_map: Vec<BlockMap>, start_rule_id: RuleId) -> ConsoleResult<RuleMap> {
         let raw_rule_map = RuleMap::to_rule_map(block_map)?;
 
         let start_rule_pos = match raw_rule_map.get(&start_rule_id) {
