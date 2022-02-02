@@ -37,7 +37,7 @@ macro_rules! block {
 macro_rules! rule {
     ($rule_name:expr, $($choice:expr), *,) => {
         {
-            let sub_elems = vec![$(
+            let subelems = vec![$(
                 match $choice {
                     RuleElement::Group(_) => $choice,
                     _ => panic!(),
@@ -45,7 +45,7 @@ macro_rules! rule {
             )*];
 
             let mut root_group = Box::new(RuleGroup::new(RuleGroupKind::Choice));
-            root_group.sub_elems = sub_elems;
+            root_group.subelems = subelems;
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
             let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), String::new(), Vec::new(), Vec::new(), root_group);
@@ -63,16 +63,16 @@ macro_rules! start_cmd {
 
 #[macro_export]
 macro_rules! group {
-    ($options:expr, $($sub_elem:expr), *,) => {
+    ($options:expr, $($subelem:expr), *,) => {
         {
             let mut group = RuleGroup::new(RuleGroupKind::Sequence);
-            group.sub_elems = vec![$($sub_elem,)*];
+            group.subelems = vec![$($subelem,)*];
             group.ast_reflection_style = ASTReflectionStyle::Reflection(String::new());
 
             for opt in $options {
                 match opt {
-                    "&" | "!" => group.lookahead_kind = RuleElementLookaheadKind::new(opt),
-                    "?" | "*" | "+" => group.loop_range = RuleElementLoopRange::from(opt),
+                    "&" | "!" => group.lookahead_kind = LookaheadKind::new(opt),
+                    "?" | "*" | "+" => group.loop_range = LoopRange::from(opt),
                     "#" => group.ast_reflection_style = ASTReflectionStyle::NoReflection,
                     "##" => group.ast_reflection_style = ASTReflectionStyle::Expansion,
                     ":" => group.kind = RuleGroupKind::Choice,
@@ -107,8 +107,8 @@ macro_rules! expr {
 
             $(
                 match $option {
-                    "&" | "!" => expr.lookahead_kind = RuleElementLookaheadKind::new($option),
-                    "?" | "*" | "+" => expr.loop_range = RuleElementLoopRange::from($option),
+                    "&" | "!" => expr.lookahead_kind = LookaheadKind::new($option),
+                    "?" | "*" | "+" => expr.loop_range = LoopRange::from($option),
                     "#" => expr.ast_reflection_style = ASTReflectionStyle::NoReflection,
                     "##" => expr.ast_reflection_style = ASTReflectionStyle::Expansion,
                     _ if $option.len() >= 2 && $option.starts_with("#") =>
@@ -122,12 +122,9 @@ macro_rules! expr {
     };
 }
 
-pub type BlockMap = HashMap<String, Box<Block>>;
-
 pub enum BlockParsingLog {
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
     BlockAliasNotFoundOrUsed { pos: CharacterPosition, block_alias_name: String },
-    // ChildElementNotMatched { parent_uuid: Uuid, expected: String, },
     DuplicateAttributeName { pos: CharacterPosition, attr_name: String },
     DuplicateBlockName { pos: CharacterPosition, block_name: String },
     DuplicateArgumentID { pos: CharacterPosition, arg_id: String },
@@ -155,7 +152,6 @@ impl ConsoleLogger for BlockParsingLog {
         match self {
             BlockParsingLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
             BlockParsingLog::BlockAliasNotFoundOrUsed { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found or used", block_alias_name), format!("at:\t{}", pos)),
-            // BlockParsingLog::ChildElementNotMatched { parent_uuid, expected } => log!(Error, format!("child element not matched"), format!("parent:\t{}", parent_uuid), format!("expected:\t{}", expected)),
             BlockParsingLog::DuplicateAttributeName { pos, attr_name } => log!(Error, format!("duplicate attribute name '{}'", attr_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateBlockName { pos, block_name } => log!(Error, format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
             BlockParsingLog::DuplicateArgumentID { pos, arg_id } => log!(Error, format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
@@ -574,9 +570,9 @@ impl BlockParser {
     fn to_define_cmd_arg_ids(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<Vec<String>> {
         let mut args = Vec::<String>::new();
 
-        for each_elem in &cmd_node.sub_elems {
+        for each_elem in &cmd_node.subelems {
             match each_elem {
-                SyntaxNodeElement::Node(each_node) => {
+                SyntaxNodeChild::Node(each_node) => {
                     if each_node.ast_reflection_style == ASTReflectionStyle::Reflection(".Rule.ArgID".to_string()) {
                         let new_arg = each_node.join_child_leaf_values();
 
@@ -693,10 +689,10 @@ impl BlockParser {
             let lookahead_kind = match each_seq_elem_node.find_first_child_node(vec![".Rule.Lookahead"]) {
                 Some(lookahead_node) => {
                     let kind_str = lookahead_node.get_leaf_child_at(&self.cons, 0)?.value.as_str();
-                    let kind = RuleElementLookaheadKind::new(kind_str);
+                    let kind = LookaheadKind::new(kind_str);
 
                     match kind {
-                        RuleElementLookaheadKind::None => {
+                        LookaheadKind::None => {
                             self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownLookaheadKind {
                                 uuid: lookahead_node.uuid,
                                 kind: kind_str.to_string(),
@@ -707,14 +703,14 @@ impl BlockParser {
                         _ => kind,
                     }
                 },
-                None => RuleElementLookaheadKind::None,
+                None => LookaheadKind::None,
             };
 
             // note: Loop ノード
             let loop_range = match each_seq_elem_node.find_first_child_node(vec![".Rule.Loop"]) {
                 Some(loop_node) => {
                     match loop_node.get_child_at(&self.cons, 0)? {
-                        SyntaxNodeElement::Node(range_node) => {
+                        SyntaxNodeChild::Node(range_node) => {
                             let raw_range = self.to_raw_range(range_node)?;
 
                             let raw_loop_range_txt = {
@@ -796,7 +792,7 @@ impl BlockParser {
                                 _ => (),
                             }
 
-                            let loop_range = RuleElementLoopRange::new(raw_range.min_num, raw_range.max_num);
+                            let loop_range = LoopRange::new(raw_range.min_num, raw_range.max_num);
 
                             match loop_range.to_symbol_string() {
                                 Some(symbol_str) => {
@@ -810,11 +806,11 @@ impl BlockParser {
 
                             loop_range
                         },
-                        SyntaxNodeElement::Leaf(leaf) => {
+                        SyntaxNodeChild::Leaf(leaf) => {
                             let kind_str = leaf.value.as_str();
 
                             match kind_str {
-                                "?" | "*" | "+" => RuleElementLoopRange::from(&leaf.value),
+                                "?" | "*" | "+" => LoopRange::from(&leaf.value),
                                 _ => {
                                     self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownLookaheadKind {
                                         uuid: leaf.uuid.clone(),
@@ -827,7 +823,7 @@ impl BlockParser {
                         }
                     }
                 },
-                None => RuleElementLoopRange::get_single_loop(),
+                None => LoopRange::get_single_loop(),
             };
 
             // note: RandomOrder ノード
@@ -923,10 +919,10 @@ impl BlockParser {
                         None => (1, Infinitable::Finite(1)),
                     };
 
-                    let loop_range = RuleElementLoopRange::new(min_num, max_num);
-                    (RuleElementOrder::Random(loop_range), random_order_node_pos)
+                    let loop_range = LoopRange::new(min_num, max_num);
+                    (ElementOrder::Random(loop_range), random_order_node_pos)
                 },
-                None => (RuleElementOrder::Sequential, CharacterPosition::get_empty()),
+                None => (ElementOrder::Sequential, CharacterPosition::get_empty()),
             };
 
             // note: ASTReflectionStyle ノード
@@ -1016,7 +1012,7 @@ impl BlockParser {
         }
 
         let mut seq = Box::new(RuleGroup::new(RuleGroupKind::Sequence));
-        seq.sub_elems = children;
+        seq.subelems = children;
         return Ok(RuleElement::Group(seq));
     }
 
@@ -1103,7 +1099,7 @@ impl BlockParser {
         // Seq ノードをループ
         for seq_elem in &choice_node.get_reflectable_children() {
             match &seq_elem {
-                SyntaxNodeElement::Node(node) => {
+                SyntaxNodeChild::Node(node) => {
                     match &seq_elem.get_ast_reflection_style() {
                         ASTReflectionStyle::Reflection(name) => if name == ".Rule.Seq" {
                             let new_child = self.to_seq_elem(node, generics_args)?;
@@ -1112,7 +1108,7 @@ impl BlockParser {
                         _ => (),
                     }
                 },
-                SyntaxNodeElement::Leaf(leaf) => {
+                SyntaxNodeChild::Leaf(leaf) => {
                     match leaf.value.as_str() {
                         ":" | "," => group_kind = RuleGroupKind::Choice,
                         _ => (),
@@ -1122,10 +1118,10 @@ impl BlockParser {
         }
 
         let mut group = Box::new(RuleGroup::new(group_kind.clone()));
-        group.sub_elems = children;
+        group.subelems = children;
 
         let mut tmp_root_group = RuleGroup::new(RuleGroupKind::Sequence);
-        tmp_root_group.sub_elems = vec![RuleElement::Group(group)];
+        tmp_root_group.subelems = vec![RuleElement::Group(group)];
 
         return Ok(tmp_root_group);
     }
@@ -1287,9 +1283,9 @@ impl BlockParser {
     fn to_string_value(&mut self, str_node: &SyntaxNode) -> ConsoleResult<String> {
         let mut s = String::new();
 
-        for each_elem in &str_node.sub_elems {
+        for each_elem in &str_node.subelems {
             match each_elem {
-                SyntaxNodeElement::Node(node) => {
+                SyntaxNodeChild::Node(node) => {
                     match node.ast_reflection_style {
                         ASTReflectionStyle::Reflection(_) => {
                             s += match node.get_leaf_child_at(&self.cons, 0)?.value.as_str() {
@@ -1310,7 +1306,7 @@ impl BlockParser {
                         _ => (),
                     }
                 },
-                SyntaxNodeElement::Leaf(leaf) => {
+                SyntaxNodeChild::Leaf(leaf) => {
                     match leaf.ast_reflection_style {
                         ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
                         _ => (),

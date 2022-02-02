@@ -305,19 +305,19 @@ impl ConfigurationParser {
         let mut root_item = PropertyItem::new(Vec::new());
 
         for prop_item_node in tree.get_child_ref().get_node(&self.cons)?.find_child_nodes(vec![".Prop.Item"]) {
-            let sub_item = prop_item_node.get_node_child_at(&self.cons, 0)?;
+            let subitem = prop_item_node.get_node_child_at(&self.cons, 0)?;
 
-            match &sub_item.ast_reflection_style {
+            match &subitem.ast_reflection_style {
                 ASTReflectionStyle::Reflection(name) => {
                     match name.as_str() {
                         ".Prop.ChildItem" => {
-                            let (key_stack, key, values) = self.to_child_property(sub_item)?;
+                            let (key_stack, key, values) = self.to_child_property(subitem)?;
                             root_item.add_values(&self.cons, key_stack, 0, key, values)?;
                         },
-                        ".Prop.ParentItem" => self.to_parent_property(sub_item)?,
+                        ".Prop.ParentItem" => self.to_parent_property(subitem)?,
                         _ => {
                             self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                                uuid: sub_item.uuid.clone(),
+                                uuid: subitem.uuid.clone(),
                                 unexpected: format!("'{}'", name),
                                 expected: "parent or child item node name".to_string(),
                             }.get_log());
@@ -328,7 +328,7 @@ impl ConfigurationParser {
                 },
                 _ => {
                     self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                        uuid: sub_item.uuid.clone(),
+                        uuid: subitem.uuid.clone(),
                         unexpected: "no name".to_string(),
                         expected: "parent or child item node name".to_string(),
                     }.get_log());
@@ -406,9 +406,9 @@ impl ConfigurationParser {
         for each_char_elem in value_node.get_reflectable_children() {
             match each_char_elem {
                 // note: エスケープ文字
-                SyntaxNodeElement::Node(node) => raw_values += &self.to_esc_seq_string(node)?,
+                SyntaxNodeChild::Node(node) => raw_values += &self.to_esc_seq_string(node)?,
                 // note: 通常文字
-                SyntaxNodeElement::Leaf(leaf) => raw_values += &leaf.value,
+                SyntaxNodeChild::Leaf(leaf) => raw_values += &leaf.value,
             }
         }
 

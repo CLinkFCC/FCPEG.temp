@@ -1,8 +1,9 @@
 use std::collections::*;
 use std::fmt::*;
 
-use crate::block::*;
 use crate::tree::*;
+
+use num_traits::Num;
 
 use rustnutlib::console::ConsoleResult;
 
@@ -55,6 +56,51 @@ impl Display for AttributeValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let negative_symbol = if self.is_negative { "!" } else { "" };
         return write!(f, "{}{}", negative_symbol, self.value);
+    }
+}
+
+pub type BlockMap = HashMap<String, Box<Block>>;
+
+#[derive(Clone)]
+pub struct Block {
+    pub name: String,
+    pub cmds: Vec<BlockCommand>,
+    pub attr_map: AttributeMap,
+}
+
+impl Block {
+    pub fn new(name: String, cmds: Vec<BlockCommand>, attr_map: AttributeMap) -> Block {
+        return Block {
+            name: name,
+            cmds: cmds,
+            attr_map: attr_map,
+        };
+    }
+
+    pub fn print(&self) {
+        println!("[{}]{{{}}}", self.name, self.cmds.iter().map(|v| format!("    {}", v)).collect::<Vec<String>>().join(""));
+    }
+}
+
+#[derive(Clone)]
+pub enum BlockCommand {
+    Comment { pos: CharacterPosition, value: String },
+    Define { pos: CharacterPosition, rule: Rule, attr_map: AttributeMap },
+    Start { pos: CharacterPosition, file_alias_name: String, block_name: String, rule_name: String },
+    Use { pos: CharacterPosition, file_alias_name: String, block_name: String, block_alias_name: String },
+}
+
+impl Display for BlockCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let s = match self {
+            BlockCommand::Comment { pos, value } => format!("{}| %{},", pos.line, value),
+            // todo: 属性マップを表示
+            BlockCommand::Define { pos, rule, attr_map: _ } => format!("{}| rule {}", pos.line, rule),
+            BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => format!("{}| start rule '{}.{}.{}'", pos.line, file_alias_name, block_name, rule_name),
+            BlockCommand::Use { pos, file_alias_name, block_name, block_alias_name } => format!("{}| use block '{}.{}' as '{}'", pos.line, file_alias_name, block_name, block_alias_name),
+        };
+
+        return write!(f, "{}", s);
     }
 }
 
@@ -116,33 +162,33 @@ impl Display for RuleMap {
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
-pub enum RuleElementLookaheadKind {
+pub enum LookaheadKind {
     None,
     Positive,
     Negative,
 }
 
-impl RuleElementLookaheadKind {
-    // ret: 文字がマッチしなければ RuleElementLookaheadKind::None
-    pub fn new(value: &str) -> RuleElementLookaheadKind {
+impl LookaheadKind {
+    // ret: 文字がマッチしなければ LookaheadKind::None
+    pub fn new(value: &str) -> LookaheadKind {
         return match value {
-            "&" => RuleElementLookaheadKind::Positive,
-            "!" => RuleElementLookaheadKind::Negative,
-            _ => RuleElementLookaheadKind::None,
+            "&" => LookaheadKind::Positive,
+            "!" => LookaheadKind::Negative,
+            _ => LookaheadKind::None,
         }
     }
 
     pub fn is_none(&self) -> bool {
-        return *self == RuleElementLookaheadKind::None;
+        return *self == LookaheadKind::None;
     }
 }
 
-impl Display for RuleElementLookaheadKind {
+impl Display for LookaheadKind {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let s = match self {
-            RuleElementLookaheadKind::None => "",
-            RuleElementLookaheadKind::Positive => "&",
-            RuleElementLookaheadKind::Negative => "!",
+            LookaheadKind::None => "",
+            LookaheadKind::Positive => "&",
+            LookaheadKind::Negative => "!",
         };
 
         return write!(f, "{}", s);
@@ -185,18 +231,18 @@ impl Display for Rule {
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
-pub enum Infinitable<T: Clone + Display + PartialEq + PartialOrd> {
+pub enum Infinitable<T: Clone + Display + Num + PartialEq + PartialOrd> {
     Finite(T),
     Infinite,
 }
 
-impl<T: Clone + Display + PartialEq + PartialOrd> Infinitable<T> {
+impl<T: Clone + Display + Num + PartialEq + PartialOrd> Infinitable<T> {
     pub fn is_infinite(&self) -> bool {
         return *self == Infinitable::<T>::Infinite;
     }
 }
 
-impl<T: Clone + Display + PartialEq + PartialOrd> Display for Infinitable<T> {
+impl<T: Clone + Display + Num + PartialEq + PartialOrd> Display for Infinitable<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let s = match self {
             Infinitable::Finite(v) => v.to_string(),
@@ -208,30 +254,30 @@ impl<T: Clone + Display + PartialEq + PartialOrd> Display for Infinitable<T> {
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
-pub struct RuleElementLoopRange {
+pub struct LoopRange {
     pub min: usize,
     pub max: Infinitable<usize>,
 }
 
-impl RuleElementLoopRange {
-    pub fn new(min: usize, max: Infinitable<usize>) -> RuleElementLoopRange {
-        return RuleElementLoopRange {
+impl LoopRange {
+    pub fn new(min: usize, max: Infinitable<usize>) -> LoopRange {
+        return LoopRange {
             min: min,
             max: max,
         };
     }
 
-    pub fn from(value: &str) -> RuleElementLoopRange {
+    pub fn from(value: &str) -> LoopRange {
         return match value {
-            "?" => RuleElementLoopRange::new(0, Infinitable::Finite(1)),
-            "*" => RuleElementLoopRange::new(0, Infinitable::Infinite),
-            "+" => RuleElementLoopRange::new(1, Infinitable::Infinite),
-            _ => RuleElementLoopRange::new(1, Infinitable::Finite(1)),
+            "?" => LoopRange::new(0, Infinitable::Finite(1)),
+            "*" => LoopRange::new(0, Infinitable::Infinite),
+            "+" => LoopRange::new(1, Infinitable::Infinite),
+            _ => LoopRange::new(1, Infinitable::Finite(1)),
         }
     }
 
-    pub fn get_single_loop() -> RuleElementLoopRange {
-        return RuleElementLoopRange::new(1, Infinitable::Finite(1));
+    pub fn get_single_loop() -> LoopRange {
+        return LoopRange::new(1, Infinitable::Finite(1));
     }
 
     pub fn is_single_loop(&self) -> bool {
@@ -284,22 +330,22 @@ impl RuleElementLoopRange {
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
-pub enum RuleElementOrder {
-    Random(RuleElementLoopRange),
+pub enum ElementOrder {
+    Random(LoopRange),
     Sequential,
 }
 
-impl RuleElementOrder {
+impl ElementOrder {
     pub fn is_random(&self) -> bool {
-        return *self != RuleElementOrder::Sequential;
+        return *self != ElementOrder::Sequential;
     }
 }
 
-impl Display for RuleElementOrder {
+impl Display for ElementOrder {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let s = match self {
-            RuleElementOrder::Random(loop_range) => format!("{}", loop_range.to_string(false, "^", "[", "-", "]")),
-            RuleElementOrder::Sequential => format!(""),
+            ElementOrder::Random(loop_range) => format!("{}", loop_range.to_string(false, "^", "[", "-", "]")),
+            ElementOrder::Sequential => format!(""),
         };
 
         return write!(f, "{}", s);
@@ -342,11 +388,11 @@ impl Display for RuleGroupKind {
 pub struct RuleGroup {
     pub uuid: Uuid,
     pub kind: RuleGroupKind,
-    pub sub_elems: Vec<RuleElement>,
+    pub subelems: Vec<RuleElement>,
     pub ast_reflection_style: ASTReflectionStyle,
-    pub lookahead_kind: RuleElementLookaheadKind,
-    pub loop_range: RuleElementLoopRange,
-    pub elem_order: RuleElementOrder,
+    pub lookahead_kind: LookaheadKind,
+    pub loop_range: LoopRange,
+    pub elem_order: ElementOrder,
 }
 
 impl RuleGroup {
@@ -354,11 +400,11 @@ impl RuleGroup {
         return RuleGroup {
             uuid: Uuid::new_v4(),
             kind: kind,
-            sub_elems: Vec::new(),
-            lookahead_kind: RuleElementLookaheadKind::None,
-            loop_range: RuleElementLoopRange::get_single_loop(),
+            subelems: Vec::new(),
+            lookahead_kind: LookaheadKind::None,
+            loop_range: LoopRange::get_single_loop(),
             ast_reflection_style: ASTReflectionStyle::Reflection(String::new()),
-            elem_order: RuleElementOrder::Sequential,
+            elem_order: ElementOrder::Sequential,
         };
     }
 }
@@ -367,7 +413,7 @@ impl Display for RuleGroup {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let mut seq_text = Vec::<String>::new();
 
-        for each_elem in &self.sub_elems {
+        for each_elem in &self.subelems {
             match each_elem {
                 RuleElement::Group(each_group) => {
                     seq_text.push(each_group.to_string());
@@ -381,8 +427,8 @@ impl Display for RuleGroup {
         let separator = match self.kind {
             RuleGroupKind::Choice => {
                 match self.elem_order {
-                    RuleElementOrder::Random(_) => ", ",
-                    RuleElementOrder::Sequential => " : ",
+                    ElementOrder::Random(_) => ", ",
+                    ElementOrder::Sequential => " : ",
                 }
             },
             RuleGroupKind::Sequence => " ",
@@ -425,8 +471,8 @@ pub struct RuleExpression {
     pub kind: RuleExpressionKind,
     pub value: String,
     pub ast_reflection_style: ASTReflectionStyle,
-    pub lookahead_kind: RuleElementLookaheadKind,
-    pub loop_range: RuleElementLoopRange,
+    pub lookahead_kind: LookaheadKind,
+    pub loop_range: LoopRange,
 }
 
 impl RuleExpression {
@@ -436,8 +482,8 @@ impl RuleExpression {
             kind: kind,
             value: value,
             ast_reflection_style: ASTReflectionStyle::NoReflection,
-            lookahead_kind: RuleElementLookaheadKind::None,
-            loop_range: RuleElementLoopRange::get_single_loop(),
+            lookahead_kind: LookaheadKind::None,
+            loop_range: LoopRange::get_single_loop(),
         }
     }
 }

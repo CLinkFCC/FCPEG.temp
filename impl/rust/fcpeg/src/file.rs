@@ -82,7 +82,7 @@ impl FCPEGFileLoader {
 
         let config_file_path = FileMan::rename_ext(&fcpeg_file_path, "cfg");
         let config = Configuration::load(self.cons.clone(), &config_file_path)?;
-        let sub_file_alias_map = config.file_alias_map.clone();
+        let subfile_alias_map = config.file_alias_map.clone();
 
         let new_file = FCPEGFile {
             alias_name: alias_name.clone(),
@@ -95,11 +95,11 @@ impl FCPEGFileLoader {
         // note: 無限再帰防止; 現在ロード中のエイリアスをロード対象から除外する
         self.loaded_fcpeg_files.insert(alias_name.clone(), fcpeg_file_path.clone());
 
-        'map_loop: for (sub_alias_name, sub_file_path) in sub_file_alias_map {
+        'map_loop: for (subalias_name, subfile_path) in subfile_alias_map {
             // note: エイリアス名の重複チェック
-            if self.loaded_fcpeg_files.contains_key(&sub_alias_name) || self.replaced_file_alias_names.contains_key(&sub_alias_name) {
+            if self.loaded_fcpeg_files.contains_key(&subalias_name) || self.replaced_file_alias_names.contains_key(&subalias_name) {
                 self.cons.borrow_mut().append_log(ConfigurationLog::DuplicateFileAliasName {
-                    alias_name: sub_alias_name.clone(),
+                    alias_name: subalias_name.clone(),
                 }.get_log());
 
                 return Err(());
@@ -107,10 +107,10 @@ impl FCPEGFileLoader {
 
             // note: ロード済みであれば無視
             for (loaded_alias_name, loaded_file_path) in &self.loaded_fcpeg_files {
-                match FileMan::is_same(loaded_file_path, &sub_file_path) {
+                match FileMan::is_same(loaded_file_path, &subfile_path) {
                     Ok(is_same_path) => {
                         if is_same_path {
-                            self.replaced_file_alias_names.insert(sub_alias_name.clone(), loaded_alias_name.clone());
+                            self.replaced_file_alias_names.insert(subalias_name.clone(), loaded_alias_name.clone());
                             continue 'map_loop;
                         }
                     },
@@ -121,7 +121,7 @@ impl FCPEGFileLoader {
                 }
             }
 
-            self.load_file(sub_alias_name, sub_file_path)?;
+            self.load_file(subalias_name, subfile_path)?;
         }
 
         return Ok(());
