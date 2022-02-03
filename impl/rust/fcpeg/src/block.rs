@@ -36,7 +36,7 @@ macro_rules! block {
 
 #[macro_export]
 macro_rules! rule {
-    ($rule_name:expr, $($choice:expr), *,) => {
+    ($rule_id:expr, $($choice:expr), *,) => {
         {
             let subelems = vec![$(
                 match $choice {
@@ -49,7 +49,7 @@ macro_rules! rule {
             root_group.subelems = subelems;
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
-            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), String::new(), Vec::new(), Vec::new(), Vec::new(), root_group);
+            let rule = Rule::new(CharacterPosition::get_empty(), $rule_id.to_string(), String::new(), Vec::new(), Vec::new(), Vec::new(), root_group);
             BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule, attr_map: AttributeMap::new() }
         }
     };

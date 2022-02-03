@@ -120,6 +120,9 @@ pub struct SyntaxParser {
     regex_map: Box<HashMap<String, Regex>>,
     memoized_map: Box<MemoizationMap>,
     enable_memoization: bool,
+    // spec: スキッピング規則のパースをしているかどうか
+    is_skipping_now: bool,
+    skipping_stack: Vec<Vec<String>>,
 }
 
 impl SyntaxParser {
@@ -138,6 +141,8 @@ impl SyntaxParser {
             regex_map: Box::new(RegexMap::new()),
             memoized_map: Box::new(MemoizationMap::new()),
             enable_memoization: enable_memoization,
+            is_skipping_now: false,
+            skipping_stack: Vec::new(),
         };
 
         // note: 余分な改行コード 0x0d を排除する
@@ -192,7 +197,10 @@ impl SyntaxParser {
 
     fn parse_rule(&mut self, rule_id: &String, pos: &CharacterPosition) -> ConsoleResult<SyntaxParsingResult<SyntaxNodeChild>> {
         let rule_group = match self.rule_map.rule_map.get(rule_id) {
-            Some(rule) => rule.group.clone(),
+            Some(rule) => {
+                self.skipping_stack.push(rule.skipping_tar_ids.clone());
+                rule.group.clone()
+            },
             None => {
                 self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
                     pos: pos.clone(),
@@ -226,10 +234,14 @@ impl SyntaxParser {
                 };
 
                 self.rule_stack.pop().unwrap();
+                self.skipping_stack.pop();
+
                 let new_node = SyntaxNodeChild::from_node_args(v, ast_reflection_style);
                 Ok(SyntaxParsingResult::Success(new_node))
             },
             SyntaxParsingResult::Fail => {
+                self.skipping_stack.pop();
+
                 Ok(SyntaxParsingResult::Fail)
             },
         }
@@ -606,6 +618,17 @@ impl SyntaxParser {
     fn parse_raw_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<SyntaxParsingResult<Vec<SyntaxNodeChild>>> {
         if self.src_i >= self.src_content.chars().count() {
             return Ok(SyntaxParsingResult::Fail);
+        }
+
+        // note: 無限再帰防止のためスキッピング時は無視
+        if !self.is_skipping_now {
+            self.is_skipping_now = true;
+
+            for each_tar_id in self.skipping_stack[self.skipping_stack.len() - 1].clone() {
+                self.parse_rule(&each_tar_id, &CharacterPosition::get_empty())?;
+            }
+
+            self.is_skipping_now = false;
         }
 
         match &expr.kind {
