@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::*;
+use crate::config::*;
 use crate::parser::*;
 use crate::rule::*;
 use crate::tree::*;
@@ -48,7 +49,7 @@ macro_rules! rule {
             root_group.subelems = subelems;
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
-            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), String::new(), Vec::new(), Vec::new(), root_group);
+            let rule = Rule::new(CharacterPosition::get_empty(), $rule_name.to_string(), String::new(), Vec::new(), Vec::new(), Vec::new(), root_group);
             BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule, attr_map: AttributeMap::new() }
         }
     };
@@ -142,6 +143,7 @@ pub enum BlockParsingLog {
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
     UnknownBlockID { pos: CharacterPosition, block_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
+    UnknownSkippingName { pos: CharacterPosition, skipping_name: String },
     UnnecessaryBlockAliasName { pos: CharacterPosition, alias_name: String, },
     UnnecessaryStartCommand { pos: CharacterPosition, msg: String },
     UnnecessaryUseCommand { pos: CharacterPosition, msg: String },
@@ -169,6 +171,7 @@ impl ConsoleLogger for BlockParsingLog {
             BlockParsingLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
             BlockParsingLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at:\t{}", pos)),
             BlockParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
+            BlockParsingLog::UnknownSkippingName { pos, skipping_name } => log!(Error, format!("unknown skipping name '{}'", skipping_name), format!("at:\t{}", pos)),
             BlockParsingLog::UnnecessaryBlockAliasName { pos, alias_name } => log!(Warning, format!("unnecessary block alias name"), format!("at:\t{}", pos), format!("alias name:\t{}", alias_name)),
             BlockParsingLog::UnnecessaryStartCommand { pos, msg } => log!(Warning, format!("unnecessary start command"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
             BlockParsingLog::UnnecessaryUseCommand { pos, msg } => log!(Warning, format!("unnecessary use command"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
@@ -195,12 +198,14 @@ pub const DEFAULT_START_RULE_ID: &'static str = ".Main.Main";
 
 pub struct BlockParser {
     cons: Rc<RefCell<Console>>,
+    config: Rc<Configuration>,
     start_rule_id: Option<String>,
     file_alias_name: String,
     replaced_file_alias_names: Arc<HashMap<String, String>>,
     used_block_ids: Box<HashMap<String, CharacterPosition>>,
     used_rule_ids: Box<HashMap<String, CharacterPosition>>,
     block_name: String,
+    block_attr_map: AttributeMap,
     // note: <ブロックエイリアス名, ブロック ID>
     block_alias_map: HashMap<String, String>,
     block_id_map: Vec::<String>,
@@ -224,12 +229,14 @@ impl BlockParser {
         for (file_alias_name, fcpeg_file) in fcpeg_file_map.iter() {
             let mut block_parser = BlockParser {
                 cons: cons.clone(),
+                config: fcpeg_file.config.clone(),
                 start_rule_id: None,
                 file_alias_name: file_alias_name.clone(),
                 replaced_file_alias_names: fcpeg_file_map.replaced_file_alias_names.clone(),
                 used_block_ids: used_block_ids,
                 used_rule_ids: used_rule_ids,
                 block_name: String::new(),
+                block_attr_map: AttributeMap::new(),
                 block_alias_map: HashMap::new(),
                 block_id_map: block_id_map,
                 file_path: fcpeg_file.file_path.clone(),
@@ -348,6 +355,7 @@ impl BlockParser {
                 block_name
             };
 
+            self.block_attr_map = attr_map.clone();
             self.block_name = block_name;
 
             let cmds = {
@@ -541,6 +549,15 @@ impl BlockParser {
             None => AttributeMap::new(),
         };
 
+        let skipping_tar_ids = {
+            let mut skipping_tar_ids = Vec::<String>::new();
+
+            BlockParser::analyze_attribute(&self.cons, &self.config, &self.block_attr_map, &mut skipping_tar_ids)?;
+            BlockParser::analyze_attribute(&self.cons, &self.config, &attr_map, &mut skipping_tar_ids)?;
+
+            skipping_tar_ids
+        };
+
         let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenerics"]) {
             Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
             None => Vec::new(),
@@ -565,7 +582,7 @@ impl BlockParser {
         };
 
         let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name, &rule_name);
-        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, template_args, new_choice);
+        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, template_args, skipping_tar_ids, new_choice);
         return Ok(BlockCommand::Define { pos: rule_pos, rule: rule, attr_map: attr_map });
     }
 
@@ -1379,6 +1396,33 @@ impl BlockParser {
 
         let attr = Attribute::new(pos, name, values);
         return Ok(attr);
+    }
+
+    fn analyze_attribute(cons: &Rc<RefCell<Console>>, config: &Rc<Configuration>, attr_map: &AttributeMap, skipping_tar_ids: &mut Vec<String>) -> ConsoleResult<()> {
+        let skipping_attr_name = "skip";
+
+        match attr_map.get(skipping_attr_name) {
+            Some(attr) => {
+                for each_attr_value in &attr.values {
+                    let tar_id = match config.skipping_map.get(&each_attr_value.value) {
+                        Some(v) => v.clone(),
+                        None => {
+                            cons.borrow_mut().append_log(BlockParsingLog::UnknownSkippingName {
+                                pos: each_attr_value.pos.clone(),
+                                skipping_name: each_attr_value.value.clone(),
+                            }.get_log());
+
+                            return Err(());
+                        }
+                    };
+
+                    skipping_tar_ids.push(tar_id);
+                }
+            },
+            None => (),
+        }
+
+        return Ok(());
     }
 
     // ret: 空文字の場合は false

@@ -139,6 +139,7 @@ pub enum ConfigurationItemKind {
     ASTReflection,
     FileAliases,
     Regex,
+    Skip,
 }
 
 impl ConfigurationItemKind {
@@ -147,6 +148,7 @@ impl ConfigurationItemKind {
             "ASTReflection" => ConfigurationItemKind::ASTReflection,
             "FileAliases" => ConfigurationItemKind::FileAliases,
             "Regex" => ConfigurationItemKind::Regex,
+            "Skip" => ConfigurationItemKind::Skip,
             _ => return None,
         };
 
@@ -156,12 +158,24 @@ impl ConfigurationItemKind {
 
 #[derive(Clone, PartialEq)]
 pub struct Configuration {
+    // note: <file_alias_name, file_path>
     pub file_alias_map: HashMap<String, String>,
+    // note: <skipping_name, skipping_target_id>
+    pub skipping_map: HashMap<String, String>,
     pub regex_mode: RegexMode,
     pub reverse_ast_reflection_style: bool,
 }
 
 impl Configuration {
+    pub fn new() -> Configuration {
+        return Configuration {
+            file_alias_map: HashMap::new(),
+            skipping_map: HashMap::new(),
+            regex_mode: RegexMode::get_default_mode(),
+            reverse_ast_reflection_style: false,
+        };
+    }
+
     pub fn load(cons: Rc<RefCell<Console>>, file_path: &String) -> ConsoleResult<Configuration> {
         let file_content = match FileMan::read_all(file_path) {
             Ok(v) => Box::new(v),
@@ -171,9 +185,10 @@ impl Configuration {
             },
         };
 
-        let mut file_alias_map = HashMap::<String, String>::new();
+        let mut file_alias_map = HashMap::new();
         let mut reverse_ast_reflection_style = false;
         let mut regex_mode = RegexMode::get_default_mode();
+        let mut skipping_map = HashMap::new();
 
         let prop_map = ConfigurationParser::parse(cons.clone(), file_path.clone(), file_content)?;
 
@@ -254,11 +269,28 @@ impl Configuration {
                         },
                     }
                 },
+                ConfigurationItemKind::Skip => {
+                    for (skipping_name, skipping_target_id_item) in &*top_item.children {
+                        let skipping_target_id = match skipping_target_id_item.values.get(0) {
+                            Some(v) => v,
+                            None => {
+                                cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValueLength {
+                                    prop_name: skipping_name.clone()
+                                }.get_log());
+
+                                return Err(());
+                            },
+                        };
+
+                        skipping_map.insert(skipping_name.clone(), skipping_target_id.clone());
+                    }
+                },
             }
         }
 
         let config = Configuration {
             file_alias_map: file_alias_map,
+            skipping_map: skipping_map,
             regex_mode: regex_mode,
             reverse_ast_reflection_style: reverse_ast_reflection_style,
         };

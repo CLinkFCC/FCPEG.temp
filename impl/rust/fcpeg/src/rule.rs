@@ -26,6 +26,10 @@ impl Attribute {
             values: values,
         };
     }
+
+    pub fn values(&self) -> Vec<String> {
+        return self.values.iter().map(|v| v.value.clone()).collect::<Vec<String>>();
+    }
 }
 
 impl Display for Attribute {
@@ -204,17 +208,19 @@ pub struct Rule {
     pub name: String,
     pub generics_arg_ids: Vec<String>,
     pub template_arg_ids: Vec<String>,
+    pub skipping_tar_ids: Vec<RuleId>,
     pub group: Box<RuleGroup>,
 }
 
 impl Rule {
-    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, template_arg_ids: Vec<String>, group: Box<RuleGroup>) -> Rule {
+    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, template_arg_ids: Vec<String>, skipping_tar_ids: Vec<RuleId>, group: Box<RuleGroup>) -> Rule {
         return Rule {
             pos: pos,
             id: id,
             name: name,
             generics_arg_ids: generics_arg_ids,
             template_arg_ids: template_arg_ids,
+            skipping_tar_ids: skipping_tar_ids,
             group: group,
         };
     }

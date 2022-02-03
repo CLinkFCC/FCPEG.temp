@@ -38,7 +38,7 @@ pub struct FCPEGFile {
     pub alias_name: String,
     pub file_path: String,
     pub file_content: Box<String>,
-    pub config: Configuration,
+    pub config: Rc<Configuration>,
 }
 
 struct FCPEGFileLoader {
@@ -88,7 +88,7 @@ impl FCPEGFileLoader {
             alias_name: alias_name.clone(),
             file_path: fcpeg_file_path.clone(),
             file_content: Box::new(file_content),
-            config: config,
+            config: Rc::new(config),
         };
 
         self.file_map_result.insert(alias_name.clone(), new_file);
