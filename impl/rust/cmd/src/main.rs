@@ -90,7 +90,7 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: Console) {
 
     if is_monitored {
         cons_ptr.borrow_mut().append_log(log!(Note, "command help", "You can quit parsing with '^C'."));
-        parse_with_monitoring(&cons_ptr, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt);
+        let _ = parse_with_monitoring(&cons_ptr, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt);
     } else {
         parse(&cons_ptr, fcpeg_file_path, input_file_path, output_tree, count_duration, disable_opt);
     }
@@ -166,9 +166,16 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
     println!();
 }
 
-fn parse_with_monitoring(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool, disable_opt: bool) {
-    let detector_target_file_paths = vec![fcpeg_file_path.clone(), input_file_path.clone()];
-    let mut detector = FileChangeDetector::new(detector_target_file_paths);
+fn parse_with_monitoring(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool, disable_opt: bool) -> ConsoleResult<()> {
+    let cfg_file_path = FileMan::rename_ext(&fcpeg_file_path, "cfg");
+
+    let detector_target_file_paths = vec![
+        &fcpeg_file_path,
+        &cfg_file_path,
+        &input_file_path,
+    ];
+
+    let mut detector = FileChangeDetector::load(cons.clone(), detector_target_file_paths)?;
     let mut loop_count = 0;
 
     parse(cons, fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt);
@@ -183,56 +190,63 @@ fn parse_with_monitoring(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, i
             None => (),
         }
 
-        if detector.detect_multiple_file_changes() {
+        if detector.is_changed()? {
             parse(cons, fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt);
         }
 
         loop_count += 1;
         sleep(Duration::from_millis(1000));
     }
+
+    return Ok(());
 }
 
 struct FileChangeDetector {
-    log_map: HashMap<String, String>,
-    target_file_paths: Vec<String>,
+    cons: Rc<RefCell<Console>>,
+    // note: <file_path, last_modified>
+    file_map: HashMap<String, SystemTime>,
 }
 
 impl FileChangeDetector {
-    pub fn new(target_file_paths: Vec<String>) -> FileChangeDetector {
-        return FileChangeDetector {
-            log_map: HashMap::new(),
-            target_file_paths: target_file_paths,
-        };
-    }
+    pub fn load(cons: Rc<RefCell<Console>>, target_file_paths: Vec<&String>) -> ConsoleResult<FileChangeDetector> {
+        let mut file_map = HashMap::<String, SystemTime>::new();
 
-    fn detect_file_change(&mut self, file_path: String) -> bool {
-        match FileMan::read_all(&file_path) {
-            Err(_e) => return false,
-            Ok(v) => {
-                let is_same_cont = match self.log_map.get(&file_path) {
-                    Some(latest_cont) => *latest_cont == v,
-                    None => {
-                        self.log_map.insert(file_path, v);
-                        return false;
-                    },
-                };
-
-                if !is_same_cont {
-                    self.log_map.insert(file_path, v);
+        for each_path in target_file_paths {
+            let last_modified = match FileMan::get_last_modified(each_path) {
+                Ok(v) => v,
+                Err(e) => {
+                    cons.borrow_mut().append_log(e.get_log());
+                    return Err(());
                 }
+            };
 
-                return !is_same_cont;
-            },
+            file_map.insert(each_path.clone(), last_modified);
+        }
+
+        let detector = FileChangeDetector {
+            cons: cons,
+            file_map: file_map,
         };
+
+        return Ok(detector);
     }
 
-    pub fn detect_multiple_file_changes(&mut self) -> bool {
-        for each_path in self.target_file_paths.clone() {
-            if self.detect_file_change(each_path.clone()) {
-                return true;
+    pub fn is_changed(&mut self) -> ConsoleResult<bool> {
+        for (each_path, each_time) in self.file_map.clone() {
+            let new_time = match FileMan::get_last_modified(&each_path) {
+                Ok(v) => v,
+                Err(e) => {
+                    self.cons.borrow_mut().append_log(e.get_log());
+                    return Err(());
+                }
+            };
+
+            if each_time != new_time {
+                self.file_map.insert(each_path.to_string(), new_time);
+                return Ok(true);
             }
         }
 
-        return false;
+        return Ok(false);
     }
 }
