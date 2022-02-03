@@ -1,12 +1,8 @@
 [Main]{
-    + start Syntax.FCPEG,
-}
-
-[Syntax]{
     + use Block,
     + use Symbol,
 
-    FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* "\z"#,
+    Main <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* "\z"#,
 }
 
 [Symbol]{

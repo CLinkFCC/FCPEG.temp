@@ -56,13 +56,6 @@ macro_rules! rule {
 }
 
 #[macro_export]
-macro_rules! start_cmd {
-    ($file_alias_name:expr, $block_name:expr, $rule_name:expr) => {
-        BlockCommand::Start { pos: CharacterPosition::get_empty(), file_alias_name: $file_alias_name.to_string(), block_name: $block_name.to_string(), rule_name: $rule_name.to_string() }
-    };
-}
-
-#[macro_export]
 macro_rules! group {
     ($options:expr, $($subelem:expr), *,) => {
         {
@@ -219,7 +212,7 @@ impl BlockParser {
     // note: FileMap から最終的な RuleMap を取得する
     pub fn get_rule_map(cons: Rc<RefCell<Console>>, fcpeg_file_map: &mut FCPEGFileMap, enable_memoization: bool) -> ConsoleResult<Arc<Box<RuleMap>>> {
         let block_map = FCPEGBlock::get_block_map();
-        let rule_map = Arc::new(Box::new(RuleMap::new(vec![block_map], ".Syntax.FCPEG".to_string())?));
+        let rule_map = Arc::new(Box::new(RuleMap::new(vec![block_map], ".Main.Main".to_string())?));
         let mut block_maps = Vec::<BlockMap>::new();
 
         let mut used_block_ids = Box::new(HashMap::<String, CharacterPosition>::new());
@@ -1486,7 +1479,6 @@ impl FCPEGBlock {
     pub fn get_block_map() -> BlockMap {
         return block_map!{
             "Main" => FCPEGBlock::get_main_block(),
-            "Syntax" => FCPEGBlock::get_syntax_block(),
             "Symbol" => FCPEGBlock::get_symbol_block(),
             "Misc" => FCPEGBlock::get_misc_block(),
             "Attr" => FCPEGBlock::get_attr_block(),
@@ -1496,14 +1488,9 @@ impl FCPEGBlock {
     }
 
     fn get_main_block() -> Block {
-        let start_cmd = start_cmd!("", "Syntax", "FCPEG");
-        return block!("Main", vec![start_cmd]);
-    }
-
-    fn get_syntax_block() -> Block {
-        // code: FCPEG <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* "\z"#,
+        // code: Main <- Symbol.Space*# Symbol.LineEnd*# (Block.Block Symbol.Div*#)* "\z"#,
         let fcpeg_rule = rule!{
-            ".Syntax.FCPEG",
+            ".Main.Main",
             group!{
                 vec![],
                 expr!(Id, ".Symbol.Space", "*", "#"),
