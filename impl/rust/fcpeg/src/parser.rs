@@ -52,15 +52,15 @@ impl ConsoleLogger for SyntaxParsingLog {
 }
 
 pub struct ArgumentMap {
-    generics_group: HashMap<String, Box<RuleGroup>>,
-    template_group: HashMap<String, Box<RuleGroup>>,
+    generics_group_map: HashMap<String, Box<RuleGroup>>,
+    template_group_map: HashMap<String, Box<RuleGroup>>,
 }
 
 impl ArgumentMap {
     pub fn new() -> ArgumentMap {
         return ArgumentMap {
-            generics_group: HashMap::new(),
-            template_group: HashMap::new(),
+            generics_group_map: HashMap::new(),
+            template_group_map: HashMap::new(),
         };
     }
 }
@@ -636,7 +636,7 @@ impl SyntaxParser {
                 let mut generics_group = Option::<Box<RuleGroup>>::None;
 
                 for each_arg_map in self.arg_maps.iter().rev() {
-                    match each_arg_map.generics_group.get(&expr.value) {
+                    match each_arg_map.generics_group_map.get(&expr.value) {
                         Some(v) => {
                             generics_group = Some(v.clone());
                             break;
@@ -826,7 +826,7 @@ impl SyntaxParser {
                         }
                     };
 
-                    new_arg_map.generics_group.insert(new_arg_id.clone(), new_arg_group.clone());
+                    new_arg_map.generics_group_map.insert(new_arg_id.clone(), new_arg_group.clone());
                 }
 
                 for i in 0..template_arg_ids.len() {
@@ -852,7 +852,7 @@ impl SyntaxParser {
                         }
                     };
 
-                    new_arg_map.template_group.insert(new_arg_id.clone(), new_arg_group.clone());
+                    new_arg_map.template_group_map.insert(new_arg_id.clone(), new_arg_group.clone());
                 }
 
                 self.arg_maps.push(new_arg_map);

@@ -317,7 +317,6 @@ impl ConfigurationParser {
         };
 
         let prop_map = config_parser.to_property_map(&tree)?;
-        for (key, each_item) in &*prop_map { each_item.print(0, key.clone()) }
         return Ok(prop_map);
     }
 
