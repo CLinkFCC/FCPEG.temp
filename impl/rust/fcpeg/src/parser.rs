@@ -635,7 +635,7 @@ impl SyntaxParser {
             RuleExpressionKind::ArgId => {
                 let mut generics_group = Option::<Box<RuleGroup>>::None;
 
-                for each_arg_map in &*self.arg_maps {
+                for each_arg_map in self.arg_maps.iter().rev() {
                     match each_arg_map.generics_group.get(&expr.value) {
                         Some(v) => {
                             generics_group = Some(v.clone());
