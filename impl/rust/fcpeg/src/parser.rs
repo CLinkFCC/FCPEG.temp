@@ -192,7 +192,7 @@ impl SyntaxParser {
 
     fn parse_rule(&mut self, rule_id: &String, pos: &CharacterPosition) -> ConsoleResult<SyntaxParsingResult<SyntaxNodeChild>> {
         let rule_group = match self.rule_map.rule_map.get(rule_id) {
-            Some(rule) => {println!("{} {:?}", rule_id, rule.skipping_tar_ids);rule.group.clone()},
+            Some(rule) => rule.group.clone(),
             None => {
                 self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
                     pos: pos.clone(),

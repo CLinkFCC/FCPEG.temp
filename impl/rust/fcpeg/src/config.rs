@@ -295,22 +295,7 @@ impl Configuration {
             reverse_ast_reflection_style: reverse_ast_reflection_style,
         };
 
-        config.print();
-
         return Ok(config);
-    }
-
-    pub fn print(&self) {
-        println!("-- Config Data --");
-        println!();
-        println!("regex mode: {}", self.regex_mode);
-        println!("file aliases:");
-
-        for (alias_name, alias_path) in self.file_alias_map.iter() {
-            println!("\t{}: {}", alias_name, alias_path);
-        }
-
-        println!();
     }
 }
 
@@ -325,7 +310,6 @@ impl ConfigurationParser {
         let block_map = ConfigurationBlock::get_block_map();
         let rule_map = Arc::new(Box::new(RuleMap::new(vec![block_map], DEFAULT_START_RULE_ID.to_string())?));
         let tree = SyntaxParser::parse(cons.clone(), rule_map, src_path, src_content, true)?;
-        tree.print(true);
 
         let mut config_parser = ConfigurationParser {
             cons: cons.clone(),
