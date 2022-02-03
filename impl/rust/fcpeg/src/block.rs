@@ -317,7 +317,7 @@ impl BlockParser {
             let each_block_node = each_block_elem.get_node(&self.cons)?;
 
             let attr_map = match each_block_node.find_first_child_node(vec![".Attr.AttrList"]) {
-                Some(attr_list_node) => self.to_attribution_map(attr_list_node)?,
+                Some(attr_list_node) => self.to_attribute_map(attr_list_node)?,
                 None => AttributeMap::new(),
             };
 
@@ -547,7 +547,7 @@ impl BlockParser {
         }
 
         let attr_map = match cmd_node.find_first_child_node(vec![".Attr.AttrList"]) {
-            Some(attr_list_node) => self.to_attribution_map(attr_list_node)?,
+            Some(attr_list_node) => self.to_attribute_map(attr_list_node)?,
             None => AttributeMap::new(),
         };
 
@@ -1349,11 +1349,11 @@ impl BlockParser {
         return Ok(ids.join("."));
     }
 
-    fn to_attribution_map(&mut self, attr_list_node: &SyntaxNode) -> ConsoleResult<AttributeMap> {
+    fn to_attribute_map(&mut self, attr_list_node: &SyntaxNode) -> ConsoleResult<AttributeMap> {
         let mut attr_map = AttributeMap::new();
 
         for each_attr_node in &attr_list_node.find_child_nodes(vec![".Attr.Attr"]) {
-            let new_attr = self.to_attribution(each_attr_node)?;
+            let new_attr = self.to_attribute(each_attr_node)?;
 
             // note: 属性名の重複チェック
             if attr_map.contains_key(&new_attr.name) {
@@ -1371,7 +1371,7 @@ impl BlockParser {
         return Ok(attr_map);
     }
 
-    fn to_attribution(&mut self, attr_node: &SyntaxNode) -> ConsoleResult<Attribute> {
+    fn to_attribute(&mut self, attr_node: &SyntaxNode) -> ConsoleResult<Attribute> {
         let pos = attr_node.get_position(&self.cons)?;
         let name = attr_node.get_node_child_at(&self.cons, 0)?.join_child_leaf_values();
         let mut values = Vec::<AttributeValue>::new();
