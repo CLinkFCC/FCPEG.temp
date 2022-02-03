@@ -183,40 +183,6 @@ impl Display for RuleMap {
     }
 }
 
-#[derive(Clone, PartialEq)]
-pub enum LookaheadKind {
-    None,
-    Positive,
-    Negative,
-}
-
-impl LookaheadKind {
-    // ret: 文字がマッチしなければ LookaheadKind::None
-    pub fn new(value: &str) -> LookaheadKind {
-        return match value {
-            "&" => LookaheadKind::Positive,
-            "!" => LookaheadKind::Negative,
-            _ => LookaheadKind::None,
-        }
-    }
-
-    pub fn is_none(&self) -> bool {
-        return *self == LookaheadKind::None;
-    }
-}
-
-impl Display for LookaheadKind {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        let s = match self {
-            LookaheadKind::None => "",
-            LookaheadKind::Positive => "&",
-            LookaheadKind::Negative => "!",
-        };
-
-        return write!(f, "{}", s);
-    }
-}
-
 #[derive(Clone)]
 pub struct Rule {
     pub pos: CharacterPosition,
@@ -251,6 +217,40 @@ impl Display for Rule {
         };
 
         return write!(f, "{}{} <- {}", self.name, generics_arg_id_text, self.group);
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum LookaheadKind {
+    None,
+    Positive,
+    Negative,
+}
+
+impl LookaheadKind {
+    // ret: 文字がマッチしなければ LookaheadKind::None
+    pub fn new(value: &str) -> LookaheadKind {
+        return match value {
+            "&" => LookaheadKind::Positive,
+            "!" => LookaheadKind::Negative,
+            _ => LookaheadKind::None,
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        return *self == LookaheadKind::None;
+    }
+}
+
+impl Display for LookaheadKind {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let s = match self {
+            LookaheadKind::None => "",
+            LookaheadKind::Positive => "&",
+            LookaheadKind::Negative => "!",
+        };
+
+        return write!(f, "{}", s);
     }
 }
 
