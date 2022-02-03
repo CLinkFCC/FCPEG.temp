@@ -140,6 +140,7 @@ pub enum BlockParsingLog {
     StartCommandOutsideMainBlock { pos: CharacterPosition },
     UnexpectedChildName { parent_uuid: Uuid, unexpected: String, expected: String },
     UnexpectedNodeName { uuid: Uuid, unexpected: String, expected: String },
+    UnknownAttributeName { pos: CharacterPosition, attr_name: String },
     UnknownEscapeSequenceCharacter { pos: CharacterPosition },
     UnknownBlockID { pos: CharacterPosition, block_id: String },
     UnknownRuleID { pos: CharacterPosition, rule_id: String },
@@ -168,6 +169,7 @@ impl ConsoleLogger for BlockParsingLog {
             BlockParsingLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
             BlockParsingLog::UnexpectedChildName { parent_uuid, unexpected, expected } => log!(Error, format!("unexpected node name {}, expected {}", unexpected, expected), format!("parent uuid:\t{}", parent_uuid)),
             BlockParsingLog::UnexpectedNodeName { uuid, unexpected, expected } => log!(Error, format!("unexpected node name {}, expected {}", unexpected, expected), format!("uuid:\t{}", uuid)),
+            BlockParsingLog::UnknownAttributeName { pos, attr_name } => log!(Error, format!("unknown attribute name '{}'", attr_name), format!("at:\t{}", pos)),
             BlockParsingLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
             BlockParsingLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at:\t{}", pos)),
             BlockParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
@@ -1399,27 +1401,38 @@ impl BlockParser {
     }
 
     fn analyze_attribute(cons: &Rc<RefCell<Console>>, config: &Rc<Configuration>, attr_map: &AttributeMap, skipping_tar_ids: &mut Vec<String>) -> ConsoleResult<()> {
-        let skipping_attr_name = "skip";
+        for (attr_name, attr) in attr_map {
+            let attr_kind = match AttributeKind::from(attr_name) {
+                Some(v) => v,
+                None => {
+                    cons.borrow_mut().append_log(BlockParsingLog::UnknownAttributeName {
+                        pos: attr.pos.clone(),
+                        attr_name: attr_name.clone(),
+                    }.get_log());
 
-        match attr_map.get(skipping_attr_name) {
-            Some(attr) => {
-                for each_attr_value in &attr.values {
-                    let tar_id = match config.skipping_map.get(&each_attr_value.value) {
-                        Some(v) => v.clone(),
-                        None => {
-                            cons.borrow_mut().append_log(BlockParsingLog::UnknownSkippingName {
-                                pos: each_attr_value.pos.clone(),
-                                skipping_name: each_attr_value.value.clone(),
-                            }.get_log());
-
-                            return Err(());
-                        }
-                    };
-
-                    skipping_tar_ids.push(tar_id);
+                    return Err(());
                 }
-            },
-            None => (),
+            };
+
+            match attr_kind {
+                AttributeKind::Skip => {
+                    for each_attr_value in &attr.values {
+                        let tar_id = match config.skipping_map.get(&each_attr_value.value) {
+                            Some(v) => v.clone(),
+                            None => {
+                                cons.borrow_mut().append_log(BlockParsingLog::UnknownSkippingName {
+                                    pos: each_attr_value.pos.clone(),
+                                    skipping_name: each_attr_value.value.clone(),
+                                }.get_log());
+
+                                return Err(());
+                            }
+                        };
+
+                        skipping_tar_ids.push(tar_id);
+                    }
+                },
+            }
         }
 
         return Ok(());

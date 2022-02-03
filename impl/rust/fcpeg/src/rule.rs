@@ -12,6 +12,22 @@ use uuid::Uuid;
 pub type AttributeMap = HashMap<String, Attribute>;
 
 #[derive(Clone, PartialEq)]
+pub enum AttributeKind {
+    Skip,
+}
+
+impl AttributeKind {
+    pub fn from(v: &str) -> Option<AttributeKind> {
+        let kind = match v {
+            "skip" => AttributeKind::Skip,
+            _ => return None,
+        };
+
+        return Some(kind);
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct Attribute {
     pub pos: CharacterPosition,
     pub name: String,
