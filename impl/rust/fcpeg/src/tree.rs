@@ -161,7 +161,7 @@ impl SyntaxNodeChild {
         return SyntaxNodeChild::Leaf(Box::new(SyntaxLeaf::new(Uuid::new_v4(), pos, value, ast_reflection)));
     }
 
-    pub fn get_node(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxNode> {
+    pub fn get_node(&self, cons: Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxNode> {
         return match self {
             SyntaxNodeChild::Node(node) => Ok(node),
             SyntaxNodeChild::Leaf(leaf) => {
@@ -174,7 +174,7 @@ impl SyntaxNodeChild {
         };
     }
 
-    pub fn get_leaf(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxLeaf> {
+    pub fn get_leaf(&self, cons: Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxLeaf> {
         return match self {
             SyntaxNodeChild::Node(node) => {
                 cons.borrow_mut().append_log(TreeLog::NodeExpectedToBeLeaf {
@@ -300,7 +300,7 @@ impl SyntaxNode {
     }
 
     // todo: 最初に出現したリーフの位置を返す; Unreflectable なリーフも対象にする
-    pub fn get_position(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<CharacterPosition> {
+    pub fn get_position(&self, cons: Rc<RefCell<Console>>) -> ConsoleResult<CharacterPosition> {
         for each_child in self.get_children() {
             match each_child {
                 SyntaxNodeChild::Leaf(each_leaf) => return Ok(each_leaf.pos.clone()),
@@ -319,7 +319,7 @@ impl SyntaxNode {
         return &self.subelems;
     }
 
-    pub fn get_child_at(&self, cons: &Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxNodeChild> {
+    pub fn get_child_at(&self, cons: Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxNodeChild> {
         let mut elem_i = 0;
         let mut reflectable_elem_i = 0;
 
@@ -353,12 +353,12 @@ impl SyntaxNode {
         return Err(());
     }
 
-    pub fn get_node_child_at(&self, cons: &Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxNode> {
-        return self.get_child_at(cons, index)?.get_node(cons);
+    pub fn get_node_child_at(&self, cons: Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxNode> {
+        return self.get_child_at(cons.clone(), index)?.get_node(cons);
     }
 
-    pub fn get_leaf_child_at(&self, cons: &Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxLeaf> {
-        return self.get_child_at(cons, index)?.get_leaf(cons);
+    pub fn get_leaf_child_at(&self, cons: Rc<RefCell<Console>>, index: usize) -> ConsoleResult<&SyntaxLeaf> {
+        return self.get_child_at(cons.clone(), index)?.get_leaf(cons);
     }
 
     pub fn is_reflectable(&self) -> bool {

@@ -309,7 +309,7 @@ impl BlockParser {
         let mut block_map = BlockMap::new();
         let root = tree.get_child_ref();
 
-        let block_nodes = match root.get_node(&self.cons)?.get_node_child_at(&self.cons, 0) {
+        let block_nodes = match root.get_node(self.cons.clone())?.get_node_child_at(self.cons.clone(), 0) {
             Ok(v) => v.get_reflectable_children(),
             Err(()) => {
                 self.cons.borrow_mut().pop_log();
@@ -318,7 +318,7 @@ impl BlockParser {
         };
 
         for each_block_elem in &block_nodes {
-            let each_block_node = each_block_elem.get_node(&self.cons)?;
+            let each_block_node = each_block_elem.get_node(self.cons.clone())?;
 
             let attr_map = match each_block_node.find_first_child_node(vec![".Attr.AttrList"]) {
                 Some(attr_list_node) => self.to_attribute_map(attr_list_node)?,
@@ -329,7 +329,7 @@ impl BlockParser {
                 let id_node_name = ".Misc.SingleID";
 
                 let (block_name, block_pos) = match each_block_node.find_first_child_node(vec![id_node_name]) {
-                    Some(id_node) => (id_node.join_child_leaf_values(), id_node.get_position(&self.cons)?),
+                    Some(id_node) => (id_node.join_child_leaf_values(), id_node.get_position(self.cons.clone())?),
                     None => {
                         self.cons.borrow_mut().append_log(BlockParsingLog::NodeExpectedToBeName {
                             node_uuid: each_block_node.uuid.clone(),
@@ -371,7 +371,7 @@ impl BlockParser {
 
                 // note: cmds に命令を追加
                 for each_cmd_node in &each_block_node.find_child_nodes(vec![".Block.Cmd"]) {
-                    let new_cmd = self.to_block_cmd(each_cmd_node.get_node_child_at(&self.cons, 0)?)?;
+                    let new_cmd = self.to_block_cmd(each_cmd_node.get_node_child_at(self.cons.clone(), 0)?)?;
 
                     // note: 規則名の重複チェック
                     match &new_cmd {
@@ -521,7 +521,7 @@ impl BlockParser {
     }
 
     fn to_comment_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
-        return Ok(BlockCommand::Comment { pos: cmd_node.get_position(&self.cons)?, value: cmd_node.join_child_leaf_values() });
+        return Ok(BlockCommand::Comment { pos: cmd_node.get_position(self.cons.clone())?, value: cmd_node.join_child_leaf_values() });
     }
 
     fn to_define_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
@@ -529,7 +529,7 @@ impl BlockParser {
 
         let (rule_name, rule_pos) = match cmd_node.find_first_child_node(vec![id_node_name]) {
             Some(id_node) => {
-                (id_node.join_child_leaf_values(), id_node.get_position(&self.cons)?)
+                (id_node.join_child_leaf_values(), id_node.get_position(self.cons.clone())?)
             },
             None => {
                 self.cons.borrow_mut().append_log(BlockParsingLog::NodeExpectedToBeName {
@@ -557,8 +557,8 @@ impl BlockParser {
         let skipping_tar_ids = {
             let mut skipping_tar_ids = Vec::<String>::new();
 
-            BlockParser::analyze_attribute(&self.cons, &self.config, &self.block_attr_map, &mut skipping_tar_ids)?;
-            BlockParser::analyze_attribute(&self.cons, &self.config, &attr_map, &mut skipping_tar_ids)?;
+            BlockParser::analyze_attribute(self.cons.clone(), &self.config, &self.block_attr_map, &mut skipping_tar_ids)?;
+            BlockParser::analyze_attribute(self.cons.clone(), &self.config, &attr_map, &mut skipping_tar_ids)?;
 
             skipping_tar_ids
         };
@@ -602,7 +602,7 @@ impl BlockParser {
 
                         if args.contains(&new_arg) {
                             self.cons.borrow_mut().append_log(BlockParsingLog::ArgumentIDIsDuplicate {
-                                pos: each_node.get_position(&self.cons)?,
+                                pos: each_node.get_position(self.cons.clone())?,
                                 arg_id: new_arg.clone(),
                             }.get_log());
                         }
@@ -618,7 +618,7 @@ impl BlockParser {
     }
 
     fn to_start_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
-        let raw_id_node = cmd_node.get_node_child_at(&self.cons, 0)?;
+        let raw_id_node = cmd_node.get_node_child_at(self.cons.clone(), 0)?;
         let raw_id = self.to_chain_id(raw_id_node)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
@@ -626,8 +626,10 @@ impl BlockParser {
             2 => (String::new(), divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
             3 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), divided_raw_id.get(2).unwrap().to_string()),
             _ => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::IDIsInvalid {
-                    pos: raw_id_node.get_position(&self.cons)?,
+                let pos = raw_id_node.get_position(self.cons.clone())?;
+
+                self.cons.clone().borrow_mut().append_log(BlockParsingLog::IDIsInvalid {
+                    pos: pos,
                     id: raw_id,
                 }.get_log());
 
@@ -638,12 +640,12 @@ impl BlockParser {
         // note: ブロック ID がデフォルトと同じであれば警告
         if DEFAULT_START_RULE_ID == BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &file_alias_name, &block_name, &rule_name) {
             self.cons.borrow_mut().append_log(BlockParsingLog::DeclaringStartOfMainRuleIsUnnecessary {
-                pos: cmd_node.get_position(&self.cons)?,
+                pos: cmd_node.get_position(self.cons.clone())?,
             }.get_log());
         }
 
         let cmd = BlockCommand::Start {
-            pos: cmd_node.get_position(&self.cons)?,
+            pos: cmd_node.get_position(self.cons.clone())?,
             file_alias_name: file_alias_name,
             block_name: block_name,
             rule_name: rule_name,
@@ -653,7 +655,7 @@ impl BlockParser {
     }
 
     fn to_use_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
-        let raw_id_node = cmd_node.get_node_child_at(&self.cons, 0)?;
+        let raw_id_node = cmd_node.get_node_child_at(self.cons.clone(), 0)?;
         let raw_id = self.to_chain_id(raw_id_node)?;
         let divided_raw_id = raw_id.split(".").collect::<Vec<&str>>();
 
@@ -662,7 +664,7 @@ impl BlockParser {
             2 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
             _ => {
                 self.cons.borrow_mut().append_log(BlockParsingLog::IDIsInvalid {
-                    pos: raw_id_node.get_position(&self.cons)?,
+                    pos: raw_id_node.get_position(self.cons.clone())?,
                     id: raw_id,
                 }.get_log());
 
@@ -672,12 +674,12 @@ impl BlockParser {
 
         let block_alias_name = match cmd_node.find_first_child_node(vec![".Block.UseCmdBlockAlias"]) {
             Some(block_alias_node) => {
-                let block_alias_name = block_alias_node.get_node_child_at(&self.cons, 0)?.join_child_leaf_values();
+                let block_alias_name = block_alias_node.get_node_child_at(self.cons.clone(), 0)?.join_child_leaf_values();
 
                 // note: ブロック名とエイリアス名が同じであれば警告
                 if block_name == block_alias_name {
                     self.cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNameIsUnnecessary {
-                        pos: block_alias_node.get_position(&self.cons)?,
+                        pos: block_alias_node.get_position(self.cons.clone())?,
                         alias_name: block_name.clone(),
                     }.get_log());
                 }
@@ -688,10 +690,10 @@ impl BlockParser {
         };
 
         return match divided_raw_id.len() {
-            1 | 2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
+            1 | 2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(self.cons.clone())?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
             _ => {
                 self.cons.borrow_mut().append_log(BlockParsingLog::IDIsInvalid {
-                    pos: raw_id_node.get_position(&self.cons)?,
+                    pos: raw_id_node.get_position(self.cons.clone())?,
                     id: raw_id,
                 }.get_log());
 
@@ -706,12 +708,12 @@ impl BlockParser {
 
         // note: SeqElem ノードをループ
         for each_seq_elem_elem in &seq_node.get_reflectable_children() {
-            let each_seq_elem_node = each_seq_elem_elem.get_node(&self.cons)?;
+            let each_seq_elem_node = each_seq_elem_elem.get_node(self.cons.clone())?;
 
             // note: Lookahead ノード
             let lookahead_kind = match each_seq_elem_node.find_first_child_node(vec![".Rule.Lookahead"]) {
                 Some(lookahead_node) => {
-                    let kind_str = lookahead_node.get_leaf_child_at(&self.cons, 0)?.value.as_str();
+                    let kind_str = lookahead_node.get_leaf_child_at(self.cons.clone(), 0)?.value.as_str();
                     let kind = LookaheadKind::new(kind_str);
 
                     match kind {
@@ -732,7 +734,7 @@ impl BlockParser {
             // note: Loop ノード
             let loop_range = match each_seq_elem_node.find_first_child_node(vec![".Rule.Loop"]) {
                 Some(loop_node) => {
-                    match loop_node.get_child_at(&self.cons, 0)? {
+                    match loop_node.get_child_at(self.cons.clone(), 0)? {
                         SyntaxNodeChild::Node(range_node) => {
                             let raw_range = self.to_raw_range(range_node)?;
 
@@ -861,7 +863,7 @@ impl BlockParser {
             // note: RandomOrder ノード
             let (elem_order, random_order_node_pos) = match each_seq_elem_node.find_first_child_node(vec![".Rule.RandomOrder"]) {
                 Some(random_order_node) => {
-                    let random_order_node_pos = random_order_node.get_position(&self.cons)?;
+                    let random_order_node_pos = random_order_node.get_position(self.cons.clone())?;
 
                     let (min_num, max_num) = match random_order_node.find_first_child_node(vec![".Rule.RandomOrderRange"]) {
                         Some(range_node) => {
@@ -969,7 +971,7 @@ impl BlockParser {
             // todo: 構成ファイルによって切り替える
             let ast_reflection_style = match each_seq_elem_node.find_first_child_node(vec![".Rule.ASTReflectionStyle"]) {
                 Some(style_node) => {
-                    match style_node.get_leaf_child_at(&self.cons, 0) {
+                    match style_node.get_leaf_child_at(self.cons.clone(), 0) {
                         Ok(leaf) => {
                             if leaf.value == "##" {
                                 ASTReflectionStyle::Expansion
@@ -1004,7 +1006,7 @@ impl BlockParser {
                 ASTReflectionStyle::Reflection(name) => {
                     let new_elem = match name.as_str() {
                         ".Rule.Choice" => {
-                            let mut new_choice = Box::new(self.to_rule_choice_elem(choice_or_expr_node.get_node_child_at(&self.cons, 0)?, generics_args)?);
+                            let mut new_choice = Box::new(self.to_rule_choice_elem(choice_or_expr_node.get_node_child_at(self.cons.clone(), 0)?, generics_args)?);
                             new_choice.ast_reflection_style = ast_reflection_style;
                             new_choice.lookahead_kind = lookahead_kind;
                             new_choice.loop_range = loop_range;
@@ -1057,18 +1059,18 @@ impl BlockParser {
     }
 
     fn to_raw_range(&mut self, range_node: &SyntaxNode) -> ConsoleResult<RawRange> {
-        let range_node_pos = range_node.get_position(&self.cons)?;
+        let range_node_pos = range_node.get_position(self.cons.clone())?;
 
         let (min_num, min_num_pos, is_min_num_specified) = match range_node.find_child_nodes(vec!["MinNum"]).get(0) {
             Some(min_num_node) => {
-                let min_num_pos = min_num_node.get_position(&self.cons)?;
+                let min_num_pos = min_num_node.get_position(self.cons.clone())?;
                 let min_str = min_num_node.join_child_leaf_values();
 
                 match min_str.parse::<usize>() {
                     Ok(v) => (v, Some(min_num_pos), true),
                     Err(_) => {
                         self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
-                            pos: min_num_node.get_position(&self.cons)?,
+                            pos: min_num_node.get_position(self.cons.clone())?,
                             loop_range: "<unparsed>".to_string(),
                             msg: format!("'{}' is too long or not a number", min_str),
                         }.get_log());
@@ -1085,7 +1087,7 @@ impl BlockParser {
                 match max_node_group.find_child_nodes(vec!["MaxNum"]).get(0) {
                     Some(max_num_node) => {
                         // note: {n,m} の場合 (#MaxNumGroup 内に #MaxNum が存在する)
-                        let max_num_pos = max_num_node.get_position(&self.cons)?;
+                        let max_num_pos = max_num_node.get_position(self.cons.clone())?;
                         let max_str = max_num_node.join_child_leaf_values();
 
                         match max_str.parse::<usize>() {
@@ -1170,16 +1172,16 @@ impl BlockParser {
     }
 
     fn to_rule_expr_elem(&mut self, expr_node: &SyntaxNode, generics_args: &Vec<String>) -> ConsoleResult<RuleExpression> {
-        let expr_child_node = expr_node.get_node_child_at(&self.cons, 0)?;
+        let expr_child_node = expr_node.get_node_child_at(self.cons.clone(), 0)?;
         let (pos, kind, value) = match &expr_child_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(name) => {
                 match name.as_str() {
-                    ".Rule.ArgID" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::ArgId, expr_child_node.join_child_leaf_values()),
-                    ".Rule.CharClass" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
+                    ".Rule.ArgID" => (expr_child_node.get_position(self.cons.clone())?, RuleExpressionKind::ArgId, expr_child_node.join_child_leaf_values()),
+                    ".Rule.CharClass" => (expr_child_node.get_position(self.cons.clone())?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
                     ".Rule.ID" => {
-                        let chain_id_node = expr_child_node.get_node_child_at(&self.cons, 0)?;
-                        let parent_node = chain_id_node.get_node_child_at(&self.cons, 0)?;
-                        let pos = parent_node.get_position(&self.cons)?;
+                        let chain_id_node = expr_child_node.get_node_child_at(self.cons.clone(), 0)?;
+                        let parent_node = chain_id_node.get_node_child_at(self.cons.clone(), 0)?;
+                        let pos = parent_node.get_position(self.cons.clone())?;
 
                         let new_generics_args = match expr_child_node.find_first_child_node(vec![".Rule.Generics"]) {
                             Some(generics_node) => {
@@ -1213,7 +1215,7 @@ impl BlockParser {
                             None => Vec::new(),
                         };
 
-                        let id = BlockParser::to_rule_id(&self.cons, &pos, &BlockParser::to_string_vec(&self.cons, chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_file_alias_names)?;
+                        let id = BlockParser::to_rule_id(self.cons.clone(), &pos, &BlockParser::to_string_vec(self.cons.clone(), chain_id_node)?, &self.block_alias_map, &self.file_alias_name, &self.block_name, &self.replaced_file_alias_names)?;
 
                         if !self.used_rule_ids.contains_key(&id) {
                             self.used_rule_ids.insert(id.clone(), pos.clone());
@@ -1226,8 +1228,8 @@ impl BlockParser {
 
                         (pos, id_expr_kind, id)
                     },
-                    ".Rule.Str" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
-                    ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
+                    ".Rule.Str" => (expr_child_node.get_position(self.cons.clone())?, RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
+                    ".Rule.Wildcard" => (expr_child_node.get_position(self.cons.clone())?, RuleExpressionKind::Wildcard, ".".to_string()),
                     _ => {
                         self.cons.borrow_mut().append_log(BlockParsingLog::ChildNodeInNodeUnexpectedExpected {
                             parent_node_uuid: expr_child_node.uuid.clone(),
@@ -1254,17 +1256,17 @@ impl BlockParser {
         return Ok(expr);
     }
 
-    fn to_string_vec(cons: &Rc<RefCell<Console>>, str_vec_node: &SyntaxNode) -> ConsoleResult<Vec<String>> {
+    fn to_string_vec(cons: Rc<RefCell<Console>>, str_vec_node: &SyntaxNode) -> ConsoleResult<Vec<String>> {
         let mut str_vec = Vec::<String>::new();
 
         for str_elem in str_vec_node.get_reflectable_children() {
-            str_vec.push(str_elem.get_node(cons)?.join_child_leaf_values());
+            str_vec.push(str_elem.get_node(cons.clone())?.join_child_leaf_values());
         }
 
         return Ok(str_vec);
     }
 
-    fn to_rule_id(cons: &Rc<RefCell<Console>>, pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String, replaced_file_alias_names: &Arc<HashMap<String, String>>) -> ConsoleResult<String> {
+    fn to_rule_id(cons: Rc<RefCell<Console>>, pos: &CharacterPosition, id_tokens: &Vec<String>, block_alias_map: &HashMap<String, String>, file_alias_name: &String, block_name: &String, replaced_file_alias_names: &Arc<HashMap<String, String>>) -> ConsoleResult<String> {
         let (new_id, id_block_name, id_rule_name) = match id_tokens.len() {
             1 => {
                 let id_rule_name = id_tokens.get(0).unwrap();
@@ -1331,7 +1333,7 @@ impl BlockParser {
                 SyntaxNodeChild::Node(node) => {
                     match node.ast_reflection_style {
                         ASTReflectionStyle::Reflection(_) => {
-                            let escseq_char = node.get_leaf_child_at(&self.cons, 0)?.value.as_str();
+                            let escseq_char = node.get_leaf_child_at(self.cons.clone(), 0)?.value.as_str();
 
                             s += match escseq_char {
                                 "\\" => "\\",
@@ -1341,7 +1343,7 @@ impl BlockParser {
                                 "z" => "\0",
                                 _ => {
                                     self.cons.borrow_mut().append_log(BlockParsingLog::EscapeSequenceCharacterIsUnknown {
-                                        pos: node.get_position(&self.cons)?,
+                                        pos: node.get_position(self.cons.clone())?,
                                         escseq_char: escseq_char.to_string(),
                                     }.get_log());
 
@@ -1368,7 +1370,7 @@ impl BlockParser {
         let mut ids = Vec::<String>::new();
 
         for chain_id_elem in &chain_id_node.get_reflectable_children() {
-            ids.push(chain_id_elem.get_node(&self.cons)?.join_child_leaf_values());
+            ids.push(chain_id_elem.get_node(self.cons.clone())?.join_child_leaf_values());
         }
 
         return Ok(ids.join("."));
@@ -1397,8 +1399,8 @@ impl BlockParser {
     }
 
     fn to_attribute(&mut self, attr_node: &SyntaxNode) -> ConsoleResult<Attribute> {
-        let pos = attr_node.get_position(&self.cons)?;
-        let name = attr_node.get_node_child_at(&self.cons, 0)?.join_child_leaf_values();
+        let pos = attr_node.get_position(self.cons.clone())?;
+        let name = attr_node.get_node_child_at(self.cons.clone(), 0)?.join_child_leaf_values();
         let mut values = Vec::<AttributeValue>::new();
 
         for each_attr_value_node in &attr_node.find_child_nodes(vec![".Attr.Value"]) {
@@ -1407,7 +1409,7 @@ impl BlockParser {
 
             match each_attr_value_node.find_first_child_node(vec![id_node_name]) {
                 Some(id_node) => {
-                    let new_value = AttributeValue::new(id_node.get_position(&self.cons)?, is_negative, id_node.join_child_leaf_values());
+                    let new_value = AttributeValue::new(id_node.get_position(self.cons.clone())?, is_negative, id_node.join_child_leaf_values());
                     values.push(new_value);
                 },
                 None => {
@@ -1425,7 +1427,7 @@ impl BlockParser {
         return Ok(attr);
     }
 
-    fn analyze_attribute(cons: &Rc<RefCell<Console>>, config: &Rc<Configuration>, attr_map: &AttributeMap, skipping_tar_ids: &mut Vec<String>) -> ConsoleResult<()> {
+    fn analyze_attribute(cons: Rc<RefCell<Console>>, config: &Rc<Configuration>, attr_map: &AttributeMap, skipping_tar_ids: &mut Vec<String>) -> ConsoleResult<()> {
         for (attr_name, attr) in attr_map {
             let attr_kind = match AttributeKind::from(attr_name) {
                 Some(v) => v,

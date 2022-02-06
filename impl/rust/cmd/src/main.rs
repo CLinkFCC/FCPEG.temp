@@ -125,9 +125,9 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: Console) {
 
     if is_monitored {
         cons_ptr.borrow_mut().append_log(log!(Note, Translator::QuitParsingWithCaretC));
-        let _ = parse_with_monitoring(&cons_ptr, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt);
+        let _ = parse_with_monitoring(cons_ptr.clone(), fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt);
     } else {
-        parse(&cons_ptr, fcpeg_file_path, input_file_path, output_tree, count_duration, disable_opt);
+        parse(cons_ptr.clone(), fcpeg_file_path, input_file_path, output_tree, count_duration, disable_opt);
     }
 }
 
@@ -153,7 +153,7 @@ fn proc_manual_subcommand(_: &ManualSubcommand, cons: Console) {
     cons_ptr.borrow().print_all();
 }
 
-fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool, disable_opt: bool) {
+fn parse(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool, disable_opt: bool) {
     let start_count = Instant::now();
     // let mut file_alias_map = HashMap::<String, String>::new();
     // file_alias_map.insert("A".to_string(), "src/a.fcpeg".to_string());
@@ -205,7 +205,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
     println!();
 }
 
-fn parse_with_monitoring(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool, disable_opt: bool) -> ConsoleResult<()> {
+fn parse_with_monitoring(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool, disable_opt: bool) -> ConsoleResult<()> {
     let cfg_file_path = FileMan::rename_ext(&fcpeg_file_path, "cfg");
 
     let detector_target_file_paths = vec![
@@ -217,7 +217,7 @@ fn parse_with_monitoring(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, i
     let mut detector = FileChangeDetector::load(cons.clone(), detector_target_file_paths)?;
     let mut loop_count = 0;
 
-    parse(cons, fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt);
+    parse(cons.clone(), fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt);
 
     loop {
         match quit_limit_sec {
@@ -230,7 +230,7 @@ fn parse_with_monitoring(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, i
         }
 
         if detector.is_changed()? {
-            parse(cons, fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt);
+            parse(cons.clone(), fcpeg_file_path.clone(), input_file_path.clone(), output_tree, count_duration, disable_opt);
         }
 
         loop_count += 1;

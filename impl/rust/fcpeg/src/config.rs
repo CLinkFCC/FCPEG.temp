@@ -59,7 +59,7 @@ impl PropertyItem {
         };
     }
 
-    pub fn add_values(&mut self, cons: &Rc<RefCell<Console>>, key_stack: Vec<String>, key_stack_offset: usize, key: String, values: Vec<String>) -> ConsoleResult<()> {
+    pub fn add_values(&mut self, cons: Rc<RefCell<Console>>, key_stack: Vec<String>, key_stack_offset: usize, key: String, values: Vec<String>) -> ConsoleResult<()> {
         if key_stack_offset >= key_stack.len() {
             if self.children.contains_key(&key) {
                 cons.borrow_mut().append_log(ConfigurationLog::PropertyNameIsDuplicate {
@@ -329,15 +329,15 @@ impl ConfigurationParser {
     fn to_property_map(&mut self, tree: &SyntaxTree) -> ConsoleResult<Box<PropertyMap>> {
         let mut root_item = PropertyItem::new(Vec::new());
 
-        for prop_item_node in tree.get_child_ref().get_node(&self.cons)?.find_child_nodes(vec![".Prop.Item"]) {
-            let subitem = prop_item_node.get_node_child_at(&self.cons, 0)?;
+        for prop_item_node in tree.get_child_ref().get_node(self.cons.clone())?.find_child_nodes(vec![".Prop.Item"]) {
+            let subitem = prop_item_node.get_node_child_at(self.cons.clone(), 0)?;
 
             match &subitem.ast_reflection_style {
                 ASTReflectionStyle::Reflection(name) => {
                     match name.as_str() {
                         ".Prop.ChildItem" => {
                             let (key_stack, key, values) = self.to_child_property(subitem)?;
-                            root_item.add_values(&self.cons, key_stack, 0, key, values)?;
+                            root_item.add_values(self.cons.clone(), key_stack, 0, key, values)?;
                         },
                         ".Prop.ParentItem" => self.to_parent_property(subitem)?,
                         _ => {
@@ -367,7 +367,7 @@ impl ConfigurationParser {
     }
 
     fn to_parent_property(&mut self, prop_item_node: &SyntaxNode) -> ConsoleResult<()> {
-        let (hierarchy_count, key) = self.to_property_key(prop_item_node.get_node_child_at(&self.cons, 0)?)?;
+        let (hierarchy_count, key) = self.to_property_key(prop_item_node.get_node_child_at(self.cons.clone(), 0)?)?;
         if self.key_stack.len() < hierarchy_count {
             self.cons.borrow_mut().append_log(ConfigurationLog::HierarchyStructureIsInvalid.get_log());
 
@@ -383,8 +383,8 @@ impl ConfigurationParser {
     }
 
     fn to_child_property(&mut self, prop_item_node: &SyntaxNode) -> ConsoleResult<(Vec<String>, String, Vec<String>)> {
-        let (hierarchy_count, key) = self.to_property_key(prop_item_node.get_node_child_at(&self.cons, 0)?)?;
-        let values = self.to_property_values(prop_item_node.get_node_child_at(&self.cons, 1)?)?;
+        let (hierarchy_count, key) = self.to_property_key(prop_item_node.get_node_child_at(self.cons.clone(), 0)?)?;
+        let values = self.to_property_values(prop_item_node.get_node_child_at(self.cons.clone(), 1)?)?;
 
         if self.key_stack.len() < hierarchy_count {
             self.cons.borrow_mut().append_log(ConfigurationLog::HierarchyStructureIsInvalid.get_log());
@@ -437,7 +437,7 @@ impl ConfigurationParser {
     }
 
     fn to_esc_seq_string(&mut self, esc_seq_node: &SyntaxNode) -> ConsoleResult<String> {
-        let esc_char = esc_seq_node.get_leaf_child_at(&self.cons, 0)?.value.as_str();
+        let esc_char = esc_seq_node.get_leaf_child_at(self.cons.clone(), 0)?.value.as_str();
 
         let value = match esc_char {
             "\\" => "\\",
