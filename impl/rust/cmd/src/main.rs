@@ -8,20 +8,55 @@ use std::time::*;
 use argh::FromArgs;
 
 use fcpeg::*;
+use fcpeg::cons::Language;
 
 use rustnutlib::*;
 use rustnutlib::console::*;
 use rustnutlib::file::*;
 
+#[derive(Clone, PartialEq)]
+enum Translator {
+    // note: log titles
+    CommandList,
+    QuitParsingWithCaretC,
+    // note: descriptions
+    RawDescription { msg: String },
+}
+
+impl ConsoleLogTranslator for Translator {
+    fn translate(&self, lang_name: &str) -> String {
+        let lang = match Language::from(lang_name) {
+            Some(v) => v,
+            None => return "{unknown language}".to_string(),
+        };
+
+        let s = translate!{
+            translator => self,
+            lang => lang,
+            // note: log titles
+            Translator::CommandList => {
+                Language::English => "command list",
+                Language::Japanese => "コマンドリスト",
+            },
+            Translator::QuitParsingWithCaretC => {
+                Language::English => "quit parsing with ^C",
+                Language::Japanese => "^C でパースを終了します",
+            },
+
+            // note: descriptions
+            Translator::RawDescription { msg } => {
+                Language::English => msg,
+                Language::Japanese => msg,
+            },
+        };
+
+        return s.to_string();
+    }
+}
+
 fn main() {
     let cmd: MainCommand = argh::from_env();
-    let cons = match Console::load(None, ConsoleLogLimit::NoLimit) {
-        Ok(v) => v,
-        Err(_) => {
-            println!("[err] failed to launch parser: failure on loading console data");
-            return;
-        },
-    };
+    let cons = Console::new("ja".to_string(), ConsoleLogLimit::NoLimit);
 
     match cmd.subcmd {
         Subcommand::Manual(subcmd) => spawn(move || proc_manual_subcommand(&subcmd, cons)).join().unwrap(),
@@ -89,7 +124,7 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: Console) {
     let cons_ptr = Rc::from(RefCell::new(cons));
 
     if is_monitored {
-        cons_ptr.borrow_mut().append_log(log!(Note, "command help", "You can quit parsing with '^C'."));
+        cons_ptr.borrow_mut().append_log(log!(Note, Translator::QuitParsingWithCaretC));
         let _ = parse_with_monitoring(&cons_ptr, fcpeg_file_path, input_file_path, 1, Some(600), output_tree, count_duration, disable_opt);
     } else {
         parse(&cons_ptr, fcpeg_file_path, input_file_path, output_tree, count_duration, disable_opt);
@@ -99,15 +134,19 @@ fn proc_parse_subcmd(subcmd: &ParseSubcommand, cons: Console) {
 fn proc_manual_subcommand(_: &ManualSubcommand, cons: Console) {
     let cons_ptr = Rc::from(RefCell::new(cons));
 
-    let log = log!(Note, "command help",
-        "parse:\tparse specified files",
-            "\t-f:\tspecify .fcpeg file",
-            "\t-i:\tspecify input files",
-            "\t-o:\toutput syntax trees",
-            "\t-t:\toutput processing time",
-            "\t--man:\tshow help",
-            "\t--mon:\tmonitor source files",
-            "\t--noopt:\tdisable optimization"
+    let log = log!(Note, Translator::CommandList,
+        Translator::RawDescription {
+            msg: vec![
+                "\tparse:\tparse specified files",
+                    "\t\t-f:\tspecify .fcpeg file",
+                    "\t\t-i:\tspecify input files",
+                    "\t\t-o:\toutput syntax trees",
+                    "\t\t-t:\toutput processing time",
+                    "\t\t--man:\tshow help",
+                    "\t\t--mon:\tmonitor source files",
+                    "\t\t--noopt:\tdisable optimization",
+            ].join("\n"),
+        }
     );
 
     cons_ptr.borrow_mut().append_log(log);
@@ -122,7 +161,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
         Ok(v) => v,
         Err(()) => {
             cons.borrow().print_all();
-            cons.borrow_mut().clear_log();
+            cons.borrow_mut().clear();
 
             println!("--- Error End ---");
             println!();
@@ -135,7 +174,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
         Ok(v) => v,
         Err(()) => {
             cons.borrow().print_all();
-            cons.borrow_mut().clear_log();
+            cons.borrow_mut().clear();
 
             println!("--- Error End ---");
             println!();
@@ -160,7 +199,7 @@ fn parse(cons: &Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: 
     }
 
     cons.borrow().print_all();
-    cons.borrow_mut().clear_log();
+    cons.borrow_mut().clear();
 
     println!("--- End ---");
     println!();

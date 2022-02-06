@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use crate::*;
 use crate::block::*;
+use crate::cons::*;
 use crate::parser::*;
 use crate::rule::*;
 
@@ -15,31 +16,29 @@ use rustnutlib::file::*;
 
 #[derive(Clone, PartialEq)]
 pub enum ConfigurationLog {
-    DuplicateFileAliasName { alias_name: String },
-    DuplicatePropertyName { prop_name: String },
-    InvalidHierarchy { hierarchy_count: usize },
-    InvalidPropertyValue { prop_name: String, prop_value: String },
-    InvalidPropertyValueLength { prop_name: String },
-    InvalidSyntax { line: usize, msg: String },
-    UnknownASTReflectionValue { id: String, value: String },
-    UnknownEscapeCharacter { esc_char: String },
-    UnknownPropertyName { prop_name: String },
-    UnknownRegexMode { input: String },
+    ASTReflectionStyleIsUnknown { value: String },
+    EscapeSequenceCharacterIsUnknown { escseq_char: String },
+    ExpectedValuesOfPropertyProvided { prop_name: String, unexpected_len: usize, expected_len: usize },
+    FileAliasNameIsDuplicate { alias_name: String },
+    HierarchyStructureIsInvalid,
+    PropertyNameIsDuplicate { prop_name: String },
+    PropertyNameNotFound { prop_name: String },
+    RegexModeIsUnknown { value: String },
+    ValueOfPropertyIsInvalid { prop_name: String, prop_value: String },
 }
 
 impl ConsoleLogger for ConfigurationLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            ConfigurationLog::DuplicateFileAliasName { alias_name } => log!(Error, "duplicate alias name", format!("alias name:\t{}", alias_name)),
-            ConfigurationLog::DuplicatePropertyName { prop_name } => log!(Error, "duplicate property name", format!("property name:\t{}", prop_name)),
-            ConfigurationLog::InvalidHierarchy { hierarchy_count } => log!(Error, "invalid hierarchy", format!("hierarchy count:\t{}", hierarchy_count)),
-            ConfigurationLog::InvalidPropertyValue { prop_name, prop_value } => log!(Error, "invalid property value", format!("property name:\t{}", prop_name), format!("property value:\t{}", prop_value)),
-            ConfigurationLog::InvalidPropertyValueLength { prop_name } => log!(Error, "invalid property value length", format!("property name:\t{}", prop_name)),
-            ConfigurationLog::InvalidSyntax { line, msg } => log!(Error, "invalid syntax", format!("{}", msg), format!("line:\t{}", line)),
-            ConfigurationLog::UnknownASTReflectionValue { id, value } => log!(Error, "unknown AST reflection value", format!("id:\t{}", id), format!("value:\t{}", value.replace("\n", "\\n"))),
-            ConfigurationLog::UnknownEscapeCharacter { esc_char } => log!(Error, "unknown escape character", format!("escape character:\t{}", esc_char)),
-            ConfigurationLog::UnknownPropertyName { prop_name } => log!(Error, format!("unknown property name '{}'", prop_name)),
-            ConfigurationLog::UnknownRegexMode { input } => log!(Error, format!("unknown regex mode '{}'", input)),
+            ConfigurationLog::ASTReflectionStyleIsUnknown { value } => log!(Error, Translator::ASTReflectionStyleIsUnknown { value: value.clone() }),
+            ConfigurationLog::EscapeSequenceCharacterIsUnknown { escseq_char } => log!(Error, Translator::EscapeSequenceCharacterIsUnknown { escseq_char: escseq_char.clone() }),
+            ConfigurationLog::ExpectedValuesOfPropertyProvided { prop_name, unexpected_len, expected_len } => log!(Error, Translator::ExpectedValuesOfPropertyProvided { prop_name: prop_name.clone(), unexpected_len: *unexpected_len, expected_len: *expected_len }),
+            ConfigurationLog::FileAliasNameIsDuplicate { alias_name } => log!(Error, Translator::FileAliasNameIsDuplicate { alias_name: alias_name.clone() }),
+            ConfigurationLog::HierarchyStructureIsInvalid => log!(Error, Translator::HierarchyStructureIsInvalid),
+            ConfigurationLog::PropertyNameIsDuplicate { prop_name } => log!(Error, Translator::PropertyNameIsDuplicate { prop_name: prop_name.clone() }),
+            ConfigurationLog::PropertyNameNotFound { prop_name } => log!(Error, Translator::PropertyNameNotFound { prop_name: prop_name.clone() }),
+            ConfigurationLog::RegexModeIsUnknown { value } => log!(Error, Translator::RegexModeIsUnknown { value: value.clone() }),
+            ConfigurationLog::ValueOfPropertyIsInvalid { prop_name, prop_value } => log!(Error, Translator::ValueOfPropertyIsInvalid { prop_name: prop_name.clone(), prop_value: prop_value.clone() }),
         };
     }
 }
@@ -63,7 +62,7 @@ impl PropertyItem {
     pub fn add_values(&mut self, cons: &Rc<RefCell<Console>>, key_stack: Vec<String>, key_stack_offset: usize, key: String, values: Vec<String>) -> ConsoleResult<()> {
         if key_stack_offset >= key_stack.len() {
             if self.children.contains_key(&key) {
-                cons.borrow_mut().append_log(ConfigurationLog::DuplicatePropertyName {
+                cons.borrow_mut().append_log(ConfigurationLog::PropertyNameIsDuplicate {
                     prop_name: {
                         let id_div = if key_stack.len() == 0 { "" } else { "." };
                         format!("{}{}{}", key_stack.join("."), id_div, key)
@@ -196,7 +195,7 @@ impl Configuration {
             let top_item_kind = match ConfigurationItemKind::from(top_item_name) {
                 Some(v) => v,
                 None => {
-                    cons.borrow_mut().append_log(ConfigurationLog::UnknownPropertyName {
+                    cons.borrow_mut().append_log(ConfigurationLog::PropertyNameNotFound {
                         prop_name: top_item_name.clone(),
                     }.get_log());
 
@@ -209,8 +208,10 @@ impl Configuration {
                     let style = match top_item.values.get(0) {
                         Some(v) => v,
                         None => {
-                            cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValueLength {
+                            cons.borrow_mut().append_log(ConfigurationLog::ExpectedValuesOfPropertyProvided {
                                 prop_name: top_item_name.to_string(),
+                                unexpected_len: top_item.values.len(),
+                                expected_len: 1,
                             }.get_log());
 
                             return Err(());
@@ -221,8 +222,7 @@ impl Configuration {
                         "normal" => false,
                         "reversed" => true,
                         _ => {
-                            cons.borrow_mut().append_log(ConfigurationLog::UnknownASTReflectionValue {
-                                id: top_item_name.clone(),
+                            cons.borrow_mut().append_log(ConfigurationLog::ASTReflectionStyleIsUnknown {
                                 value: style.clone(),
                             }.get_log());
 
@@ -235,8 +235,10 @@ impl Configuration {
                         let alias_path = match alias_path_item.values.get(0) {
                             Some(v) => v,
                             None => {
-                                cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValueLength {
-                                    prop_name: alias_name.clone()
+                                cons.borrow_mut().append_log(ConfigurationLog::ExpectedValuesOfPropertyProvided {
+                                    prop_name: alias_name.clone(),
+                                    unexpected_len: alias_path_item.values.len(),
+                                    expected_len: 1,
                                 }.get_log());
 
                                 return Err(());
@@ -250,8 +252,10 @@ impl Configuration {
                     let regex_mode_str = match top_item.values.get(0) {
                         Some(v) => v,
                         None => {
-                            cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValueLength {
+                            cons.borrow_mut().append_log(ConfigurationLog::ExpectedValuesOfPropertyProvided {
                                 prop_name: top_item_name.clone(),
+                                unexpected_len: top_item.values.len(),
+                                expected_len: 1,
                             }.get_log());
 
                             return Err(());
@@ -261,8 +265,8 @@ impl Configuration {
                     regex_mode = match RegexMode::from(regex_mode_str) {
                         Some(v) => v,
                         None => {
-                            cons.borrow_mut().append_log(ConfigurationLog::UnknownRegexMode {
-                                input: regex_mode_str.clone(),
+                            cons.borrow_mut().append_log(ConfigurationLog::RegexModeIsUnknown {
+                                value: regex_mode_str.clone(),
                             }.get_log());
 
                             return Err(());
@@ -274,8 +278,10 @@ impl Configuration {
                         let skipping_target_id = match skipping_target_id_item.values.get(0) {
                             Some(v) => v,
                             None => {
-                                cons.borrow_mut().append_log(ConfigurationLog::InvalidPropertyValueLength {
-                                    prop_name: skipping_name.clone()
+                                cons.borrow_mut().append_log(ConfigurationLog::ExpectedValuesOfPropertyProvided {
+                                    prop_name: skipping_name.clone(),
+                                    unexpected_len: skipping_target_id_item.values.len(),
+                                    expected_len: 1,
                                 }.get_log());
 
                                 return Err(());
@@ -335,10 +341,10 @@ impl ConfigurationParser {
                         },
                         ".Prop.ParentItem" => self.to_parent_property(subitem)?,
                         _ => {
-                            self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                                uuid: subitem.uuid.clone(),
-                                unexpected: format!("'{}'", name),
-                                expected: "parent or child item node name".to_string(),
+                            self.cons.borrow_mut().append_log(BlockParsingLog::NodeUnexpectedExpected {
+                                node_uuid: subitem.uuid.clone(),
+                                unexpected_name: format!("'{}'", name),
+                                expected_name: "parent or child item node name".to_string(),
                             }.get_log());
 
                             return Err(());
@@ -346,10 +352,10 @@ impl ConfigurationParser {
                     }
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                        uuid: subitem.uuid.clone(),
-                        unexpected: "no name".to_string(),
-                        expected: "parent or child item node name".to_string(),
+                    self.cons.borrow_mut().append_log(BlockParsingLog::NodeUnexpectedExpected {
+                        node_uuid: subitem.uuid.clone(),
+                        unexpected_name: "no name".to_string(),
+                        expected_name: "parent or child item node name".to_string(),
                     }.get_log());
 
                     return Err(());
@@ -363,9 +369,7 @@ impl ConfigurationParser {
     fn to_parent_property(&mut self, prop_item_node: &SyntaxNode) -> ConsoleResult<()> {
         let (hierarchy_count, key) = self.to_property_key(prop_item_node.get_node_child_at(&self.cons, 0)?)?;
         if self.key_stack.len() < hierarchy_count {
-            self.cons.borrow_mut().append_log(ConfigurationLog::InvalidHierarchy {
-                hierarchy_count: hierarchy_count,
-            }.get_log());
+            self.cons.borrow_mut().append_log(ConfigurationLog::HierarchyStructureIsInvalid.get_log());
 
             return Err(());
         }
@@ -383,9 +387,7 @@ impl ConfigurationParser {
         let values = self.to_property_values(prop_item_node.get_node_child_at(&self.cons, 1)?)?;
 
         if self.key_stack.len() < hierarchy_count {
-            self.cons.borrow_mut().append_log(ConfigurationLog::InvalidHierarchy {
-                hierarchy_count: hierarchy_count,
-            }.get_log());
+            self.cons.borrow_mut().append_log(ConfigurationLog::HierarchyStructureIsInvalid.get_log());
 
             return Err(());
         }
@@ -406,10 +408,10 @@ impl ConfigurationParser {
         let key = match key_node.find_first_child_node(vec![".Prop.Id"]) {
             Some(v) => v.join_child_leaf_values(),
             None => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                    uuid: key_node.uuid.clone(),
-                    unexpected: "no name".to_string(),
-                    expected: "parent or child item node name".to_string(),
+                self.cons.borrow_mut().append_log(BlockParsingLog::NodeUnexpectedExpected {
+                    node_uuid: key_node.uuid.clone(),
+                    unexpected_name: "no name".to_string(),
+                    expected_name: "parent or child item node name".to_string(),
                 }.get_log());
 
                 return Err(());
@@ -443,8 +445,8 @@ impl ConfigurationParser {
             "n" => "\n",
             "," => ",",
             _ => {
-                self.cons.borrow_mut().append_log(ConfigurationLog::UnknownEscapeCharacter {
-                    esc_char: esc_char.to_string(),
+                self.cons.borrow_mut().append_log(ConfigurationLog::EscapeSequenceCharacterIsUnknown {
+                    escseq_char: esc_char.to_string(),
                 }.get_log());
 
                 return Err(());

@@ -4,6 +4,8 @@ use std::io::*;
 use std::io::Write;
 use std::rc::Rc;
 
+use crate::cons::*;
+
 use rustnutlib::*;
 use rustnutlib::console::*;
 
@@ -11,23 +13,21 @@ use uuid::Uuid;
 
 #[derive(Clone, PartialEq)]
 pub enum TreeLog {
-    Unknown {},
-    CharacterPositionNotFound { uuid: Uuid },
-    ElementNotNode { uuid: Uuid },
-    ElementNotLeaf { uuid: Uuid },
-    NodeChildNotFound { parent_uuid: Uuid, index: usize },
-    ReflectableChildNotFound { parent_uuid: Uuid, index: usize },
+    CharacterPositionOfNodeNotFound { node_uuid: Uuid },
+    ChildElementAtInNodeNotFound { parent_node_uuid: Uuid, index: usize },
+    LeafExpectedToBeNode { leaf_uuid: Uuid },
+    NodeExpectedToBeLeaf { node_uuid: Uuid },
+    ReflectableChildAtInNodeNotFound { parent_node_uuid: Uuid, index: usize },
 }
 
 impl ConsoleLogger for TreeLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            TreeLog::Unknown {} => log!(Error, "unknown error"),
-            TreeLog::CharacterPositionNotFound { uuid } => log!(Error, "character position not found", format!("uuid:\t{}", uuid)),
-            TreeLog::ElementNotNode { uuid } => log!(Error, "element not node", format!("uuid:\t{}", uuid)),
-            TreeLog::ElementNotLeaf { uuid } => log!(Error, "element not leaf", format!("uuid:\t{}", uuid)),
-            TreeLog::NodeChildNotFound { parent_uuid, index } => log!(Error, "node child not found", format!("parent:\t{}", parent_uuid), format!("index:\t{}", index)),
-            TreeLog::ReflectableChildNotFound { parent_uuid, index } => log!(Error, "reflectable child not found", format!("parent:\t{}", parent_uuid), format!("index:\t{}", index)),
+            TreeLog::CharacterPositionOfNodeNotFound { node_uuid } => log!(Error, Translator::CharacterPositionOfNodeNotFound { node_uuid: node_uuid.clone() }),
+            TreeLog::ChildElementAtInNodeNotFound { parent_node_uuid, index } => log!(Error, Translator::ChildElementAtInNodeNotFound { parent_node_uuid: parent_node_uuid.clone(), index: *index }),
+            TreeLog::LeafExpectedToBeNode { leaf_uuid } => log!(Error, Translator::LeafExpectedToBeNode { leaf_uuid: leaf_uuid.clone() }),
+            TreeLog::NodeExpectedToBeLeaf { node_uuid } => log!(Error, Translator::NodeExpectedToBeLeaf { node_uuid: node_uuid.clone() }),
+            TreeLog::ReflectableChildAtInNodeNotFound { parent_node_uuid, index } => log!(Error, Translator::ReflectableChildAtInNodeNotFound { parent_node_uuid: parent_node_uuid.clone(), index: *index }),
         };
     }
 }
@@ -92,7 +92,7 @@ impl ASTReflectionStyle {
         } else {
             if reverse_ast_reflection {
                 ASTReflectionStyle::NoReflection
-            } else{
+            } else {
                 ASTReflectionStyle::Reflection(elem_name)
             }
         }
@@ -165,8 +165,8 @@ impl SyntaxNodeChild {
         return match self {
             SyntaxNodeChild::Node(node) => Ok(node),
             SyntaxNodeChild::Leaf(leaf) => {
-                cons.borrow_mut().append_log(TreeLog::ElementNotNode {
-                    uuid: leaf.uuid.clone(),
+                cons.borrow_mut().append_log(TreeLog::LeafExpectedToBeNode {
+                    leaf_uuid: leaf.uuid.clone(),
                 }.get_log());
 
                 return Err(());
@@ -177,8 +177,8 @@ impl SyntaxNodeChild {
     pub fn get_leaf(&self, cons: &Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxLeaf> {
         return match self {
             SyntaxNodeChild::Node(node) => {
-                cons.borrow_mut().append_log(TreeLog::ElementNotLeaf {
-                    uuid: node.uuid.clone(),
+                cons.borrow_mut().append_log(TreeLog::NodeExpectedToBeLeaf {
+                    node_uuid: node.uuid.clone(),
                 }.get_log());
 
                 return Err(());
@@ -308,8 +308,8 @@ impl SyntaxNode {
             }
         };
 
-        cons.borrow_mut().append_log(TreeLog::CharacterPositionNotFound {
-            uuid: self.uuid.clone(),
+        cons.borrow_mut().append_log(TreeLog::CharacterPositionOfNodeNotFound {
+            node_uuid: self.uuid.clone(),
         }.get_log());
 
         return Err(());
@@ -329,8 +329,8 @@ impl SyntaxNode {
                     return match self.subelems.get(elem_i) {
                         Some(v) => Ok(&v),
                         None => {
-                            cons.borrow_mut().append_log(TreeLog::NodeChildNotFound {
-                                parent_uuid: self.uuid.clone(),
+                            cons.borrow_mut().append_log(TreeLog::ChildElementAtInNodeNotFound {
+                                parent_node_uuid: self.uuid.clone(),
                                 index: index,
                             }.get_log());
 
@@ -345,8 +345,8 @@ impl SyntaxNode {
             elem_i += 1;
         }
 
-        cons.borrow_mut().append_log(TreeLog::ReflectableChildNotFound {
-            parent_uuid: self.uuid,
+        cons.borrow_mut().append_log(TreeLog::ReflectableChildAtInNodeNotFound {
+            parent_node_uuid: self.uuid,
             index: index,
         }.get_log());
 

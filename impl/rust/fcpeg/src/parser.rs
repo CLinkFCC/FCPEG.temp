@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::block::*;
+use crate::cons::*;
 use crate::rule::*;
 use crate::tree::*;
 
@@ -18,35 +19,33 @@ use uuid::Uuid;
 
 #[derive(Clone, PartialEq)]
 pub enum SyntaxParsingLog {
-    InvalidCharClassFormat { value: String },
-    InvalidGenericsArgumentLength { pos: CharacterPosition, expected_arg_len: usize },
-    InvalidTemplateArgumentLength { pos: CharacterPosition, expected_arg_len: usize },
-    InvalidLoopRange { msg: String },
-    InvalidRuleElementStructure { uuid: Uuid, msg: String },
-    NoSucceededRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
-    TooLongRepetition { loop_limit: usize },
-    UncoveredPrimitiveRule { pos: CharacterPosition, rule_name: String },
-    UnknownGenericsArgumentID { arg_id: String },
-    UnknownTemplateArgumentID { arg_id: String },
-    UnknownLookaheadKind { uuid: Uuid, kind: String },
-    UnknownRuleID { pos: CharacterPosition, rule_id: String },
+    CharacterClassFormatIsInvalid { value: String },
+    ExpectedGenericsArgumentsProvided { pos: CharacterPosition, unexpected_len: usize, expected_len: usize },
+    ExpectedTemplateArgumentsProvided { pos: CharacterPosition, unexpected_len: usize, expected_len: usize },
+    GenericsArgumentIDNotFound { arg_id: String },
+    LoopRangeIsInvalidOnParsing { loop_range: String },
+    ParsingFailedAtRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
+    PrimitiveRuleUncovered { pos: CharacterPosition, rule_name: String },
+    RepetitionExceededLoopLimit { loop_limit: usize },
+    RuleIDNotFoundOnParsing { pos: CharacterPosition, rule_id: String },
+    StructureOfRuleElementIsInvalid { elem_uuid: Uuid, msg: String },
+    TemplateArgumentIDNotFound { arg_id: String },
 }
 
 impl ConsoleLogger for SyntaxParsingLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            SyntaxParsingLog::InvalidCharClassFormat { value } => log!(Error, format!("invalid character class format '{}'", value)),
-            SyntaxParsingLog::InvalidGenericsArgumentLength { pos, expected_arg_len } => log!(Error, format!("invalid generics argument length; expected {} argument(s)", expected_arg_len), format!("pos:\t{}", pos)),
-            SyntaxParsingLog::InvalidTemplateArgumentLength { pos, expected_arg_len } => log!(Error, format!("invalid template argument length; expected {} argument(s)", expected_arg_len), format!("pos:\t{}", pos)),
-            SyntaxParsingLog::InvalidLoopRange { msg } => log!(Error, format!("invalid loop range"), format!("{}", msg.bright_black())),
-            SyntaxParsingLog::InvalidRuleElementStructure { uuid, msg } => log!(Error, format!("invalid rule element structure"), format!("uuid:\t{}", uuid), format!("{}", msg.bright_black())),
-            SyntaxParsingLog::NoSucceededRule { pos, rule_id, rule_stack } => log!(Error, format!("no succeeded rule '{}'", rule_id), format!("at:\t{}", pos), format!("rule stack:\t{}", rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join(""))),
-            SyntaxParsingLog::TooLongRepetition { loop_limit } => log!(Error, format!("too long repetition over {}", loop_limit)),
-            SyntaxParsingLog::UncoveredPrimitiveRule { pos, rule_name } => log!(Error, format!("uncovered primitive rule '{}'", rule_name), format!("pos:\t{}", pos)),
-            SyntaxParsingLog::UnknownGenericsArgumentID { arg_id } => log!(Error, format!("unknown generics argument id '{}'", arg_id)),
-            SyntaxParsingLog::UnknownTemplateArgumentID { arg_id } => log!(Error, format!("unknown template argument id '{}'", arg_id)),
-            SyntaxParsingLog::UnknownLookaheadKind { uuid, kind } => log!(Error, format!("unknown lookahead kind '{}'", kind), format!("uuid:\t{}", uuid)),
-            SyntaxParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
+            SyntaxParsingLog::CharacterClassFormatIsInvalid { value } => log!(Error, Translator::CharacterClassFormatIsInvalid { value: value.clone() }),
+            SyntaxParsingLog::ExpectedGenericsArgumentsProvided { pos, unexpected_len, expected_len } => log!(Error, Translator::ExpectedGenericsArgumentsProvided { unexpected_len: *unexpected_len, expected_len: *expected_len }, Translator::AtDescription { pos: pos.clone() }),
+            SyntaxParsingLog::ExpectedTemplateArgumentsProvided { pos, unexpected_len, expected_len } => log!(Error, Translator::ExpectedTemplateArgumentsProvided { unexpected_len: *unexpected_len, expected_len: *expected_len }, Translator::AtDescription { pos: pos.clone() }),
+            SyntaxParsingLog::GenericsArgumentIDNotFound { arg_id } => log!(Error, Translator::GenericsArgumentIDNotFound { arg_id: arg_id.clone() }),
+            SyntaxParsingLog::LoopRangeIsInvalidOnParsing { loop_range } => log!(Error, Translator::LoopRangeIsInvalidOnParsing { loop_range: loop_range.clone() }),
+            SyntaxParsingLog::ParsingFailedAtRule { pos, rule_id, rule_stack } => log!(Error, Translator::ParsingFailedAtRule { rule_id: rule_id.clone() }, Translator::AtDescription { pos: pos.clone() }, Translator::RawDescription { msg: rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join("") }),
+            SyntaxParsingLog::PrimitiveRuleUncovered { pos, rule_name } => log!(Error, Translator::PrimitiveRuleUncovered { rule_name: rule_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            SyntaxParsingLog::RepetitionExceededLoopLimit { loop_limit } => log!(Error, Translator::RepetitionExceededLoopLimit { loop_limit: *loop_limit }),
+            SyntaxParsingLog::RuleIDNotFoundOnParsing { pos, rule_id } => log!(Error, Translator::RuleIDNotFoundOnParsing { rule_id: rule_id.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            SyntaxParsingLog::StructureOfRuleElementIsInvalid { elem_uuid, msg } => log!(Error, Translator::StructureOfRuleElementIsInvalid { elem_uuid: elem_uuid.clone() }, Translator::RawDescription { msg: msg.bright_black().to_string() }),
+            SyntaxParsingLog::TemplateArgumentIDNotFound { arg_id } => log!(Error, Translator::TemplateArgumentIDNotFound { arg_id: arg_id.clone() }),
         };
     }
 }
@@ -168,9 +167,9 @@ impl SyntaxParser {
         let mut root_node = match parser.parse_rule(&start_rule_id, &start_rule_pos)? {
             SyntaxParsingResult::Success(v) => v,
             SyntaxParsingResult::Fail => {
-                parser.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
-                    rule_id: start_rule_id.clone(),
+                parser.cons.borrow_mut().append_log(SyntaxParsingLog::ParsingFailedAtRule {
                     pos: parser.get_char_position(),
+                    rule_id: start_rule_id.clone(),
                     rule_stack: *parser.rule_stack.clone(),
                 }.get_log());
 
@@ -183,9 +182,9 @@ impl SyntaxParser {
 
         // note: 入力位置が length を超えると失敗
         if parser.src_i < parser.src_content.chars().count() {
-            parser.cons.borrow_mut().append_log(SyntaxParsingLog::NoSucceededRule {
-                rule_id: start_rule_id.clone(),
+            parser.cons.borrow_mut().append_log(SyntaxParsingLog::ParsingFailedAtRule {
                 pos: parser.get_char_position(),
+                rule_id: start_rule_id.clone(),
                 rule_stack: *parser.rule_stack.clone(),
             }.get_log());
 
@@ -202,7 +201,7 @@ impl SyntaxParser {
                 rule.group.clone()
             },
             None => {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
+                self.cons.borrow_mut().append_log(SyntaxParsingLog::RuleIDNotFoundOnParsing {
                     pos: pos.clone(),
                     rule_id: rule_id.clone(),
                 }.get_log());
@@ -292,8 +291,8 @@ impl SyntaxParser {
         let (min_count, max_count) = group.loop_range.to_tuple();
 
         if max_count != -1 && min_count as isize > max_count {
-            self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidLoopRange {
-                msg: format!("invalid loop range {{{},{}}} was detected", min_count, max_count),
+            self.cons.borrow_mut().append_log(SyntaxParsingLog::LoopRangeIsInvalidOnParsing {
+                loop_range: format!("{{{},{}}}", min_count, max_count),
             }.get_log());
 
             return Err(());
@@ -304,7 +303,7 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.loop_limit as isize {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::TooLongRepetition {
+                self.cons.borrow_mut().append_log(SyntaxParsingLog::RepetitionExceededLoopLimit {
                     loop_limit: self.loop_limit as usize,
                 }.get_log());
 
@@ -357,8 +356,8 @@ impl SyntaxParser {
                         match tar_parent_elem {
                             RuleElement::Group(tar_parent_group) => &tar_parent_group.subelems,
                             _ => {
-                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidRuleElementStructure {
-                                    uuid: group.uuid.clone(),
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::StructureOfRuleElementIsInvalid {
+                                    elem_uuid: group.uuid.clone(),
                                     msg: "child element of random order group must be a group".to_string(),
                                 }.get_log());
 
@@ -367,8 +366,8 @@ impl SyntaxParser {
                         }
                     },
                     None => {
-                        self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidRuleElementStructure {
-                            uuid: group.uuid.clone(),
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::StructureOfRuleElementIsInvalid {
+                            elem_uuid: group.uuid.clone(),
                             msg: "random order group must have a child group".to_string(),
                         }.get_log());
 
@@ -564,8 +563,8 @@ impl SyntaxParser {
         let (min_count, max_count) = expr.loop_range.to_tuple();
 
         if max_count != -1 && min_count as isize > max_count {
-            self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidLoopRange {
-                msg: format!("invalid loop range {{{},{}}} was detected", min_count, max_count),
+            self.cons.borrow_mut().append_log(SyntaxParsingLog::LoopRangeIsInvalidOnParsing {
+                loop_range: format!("{{{},{}}}", min_count, max_count),
             }.get_log());
 
             return Err(());
@@ -576,7 +575,7 @@ impl SyntaxParser {
 
         while self.src_i < self.src_content.chars().count() {
             if loop_count > self.loop_limit {
-                self.cons.borrow_mut().append_log(SyntaxParsingLog::TooLongRepetition {
+                self.cons.borrow_mut().append_log(SyntaxParsingLog::RepetitionExceededLoopLimit {
                     loop_limit: self.loop_limit as usize
                 }.get_log());
 
@@ -648,7 +647,7 @@ impl SyntaxParser {
                 let result = match &generics_group {
                     Some(v) => self.parse_group(&ElementOrder::Sequential, &v),
                     None => {
-                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::GenericsArgumentIDNotFound {
                             arg_id: expr.value.clone(),
                         }.get_log());
 
@@ -691,7 +690,7 @@ impl SyntaxParser {
                         let pattern = match Regex::new(&expr.value.clone()) {
                             Ok(v) => v,
                             Err(_) => {
-                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidCharClassFormat {
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::CharacterClassFormatIsInvalid {
                                     value: expr.to_string(),
                                 }.get_log());
 
@@ -725,9 +724,10 @@ impl SyntaxParser {
                         match generics_args.get(0) {
                             Some(tar_arg) if generics_args.len() == 1 => {
                                 if template_args.len() != 0 {
-                                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidTemplateArgumentLength {
+                                    self.cons.borrow_mut().append_log(SyntaxParsingLog::ExpectedTemplateArgumentsProvided {
                                         pos: expr.pos.clone(),
-                                        expected_arg_len: 0,
+                                        unexpected_len: template_args.len(),
+                                        expected_len: 0,
                                     }.get_log());
 
                                     return Err(());
@@ -752,9 +752,10 @@ impl SyntaxParser {
                                 };
                             },
                             _ => {
-                                self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
+                                self.cons.borrow_mut().append_log(SyntaxParsingLog::ExpectedGenericsArgumentsProvided {
                                     pos: expr.pos.clone(),
-                                    expected_arg_len: 1,
+                                    unexpected_len: generics_args.len(),
+                                    expected_len: 1,
                                 }.get_log());
 
                                 return Err(());
@@ -763,7 +764,7 @@ impl SyntaxParser {
                     },
                     _ => {
                         if PRIMITIVE_RULE_NAMES.contains(&rule_id.as_str()) {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UncoveredPrimitiveRule {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::PrimitiveRuleUncovered {
                                 pos: expr.pos.clone(),
                                 rule_name: rule_id.clone(),
                             }.get_log());
@@ -776,7 +777,7 @@ impl SyntaxParser {
                 let (generics_arg_ids, template_arg_ids) = match self.rule_map.rule_map.get(rule_id) {
                     Some(rule) => (&rule.generics_arg_ids, &rule.template_arg_ids),
                     None => {
-                        self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownRuleID {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::RuleIDNotFoundOnParsing {
                             pos: expr.pos.clone(),
                             rule_id: rule_id.clone(),
                         }.get_log());
@@ -786,18 +787,20 @@ impl SyntaxParser {
                 };
 
                 if generics_args.len() != generics_arg_ids.len() {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidGenericsArgumentLength {
+                    self.cons.borrow_mut().append_log(SyntaxParsingLog::ExpectedGenericsArgumentsProvided {
                         pos: expr.pos.clone(),
-                        expected_arg_len: generics_arg_ids.len(),
+                        unexpected_len: generics_args.len(),
+                        expected_len: generics_arg_ids.len(),
                     }.get_log());
 
                     return Err(());
                 }
 
                 if template_args.len() != template_arg_ids.len() {
-                    self.cons.borrow_mut().append_log(SyntaxParsingLog::InvalidTemplateArgumentLength {
+                    self.cons.borrow_mut().append_log(SyntaxParsingLog::ExpectedTemplateArgumentsProvided {
                         pos: expr.pos.clone(),
-                        expected_arg_len: template_arg_ids.len(),
+                        unexpected_len: template_args.len(),
+                        expected_len: template_arg_ids.len(),
                     }.get_log());
 
                     return Err(());
@@ -807,7 +810,7 @@ impl SyntaxParser {
                     let new_arg_id = match generics_arg_ids.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::GenericsArgumentIDNotFound {
                                 arg_id: format!("[{}]", i),
                             }.get_log());
 
@@ -818,7 +821,7 @@ impl SyntaxParser {
                     let new_arg_group = match generics_args.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownGenericsArgumentID {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::GenericsArgumentIDNotFound {
                                 arg_id: format!("[{}]", i),
                             }.get_log());
 
@@ -833,7 +836,7 @@ impl SyntaxParser {
                     let new_arg_id = match template_arg_ids.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownTemplateArgumentID {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::TemplateArgumentIDNotFound {
                                 arg_id: format!("[{}]", i),
                             }.get_log());
 
@@ -844,7 +847,7 @@ impl SyntaxParser {
                     let new_arg_group = match template_args.get(i) {
                         Some(v) => v,
                         None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownTemplateArgumentID {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::TemplateArgumentIDNotFound {
                                 arg_id: format!("[{}]", i),
                             }.get_log());
 

@@ -1,5 +1,6 @@
 pub mod block;
 pub mod config;
+pub mod cons;
 pub mod file;
 pub mod parser;
 pub mod rule;

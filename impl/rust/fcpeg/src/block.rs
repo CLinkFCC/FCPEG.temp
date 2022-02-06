@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::*;
 use crate::config::*;
+use crate::cons::*;
 use crate::parser::*;
 use crate::rule::*;
 use crate::tree::*;
@@ -118,59 +119,69 @@ macro_rules! expr {
 
 #[derive(Clone, PartialEq)]
 pub enum BlockParsingLog {
+    ArgumentIDIsDuplicate { pos: CharacterPosition, arg_id: String },
     AttemptToAccessPrivateItem { pos: CharacterPosition, item_id: String },
-    BlockAliasNotFoundOrUsed { pos: CharacterPosition, block_alias_name: String },
-    DuplicateAttributeName { pos: CharacterPosition, attr_name: String },
-    DuplicateBlockName { pos: CharacterPosition, block_name: String },
-    DuplicateArgumentID { pos: CharacterPosition, arg_id: String },
-    DuplicateRuleName { pos: CharacterPosition, rule_name: String },
-    DuplicateStartCommand { pos: CharacterPosition },
-    ExpectedNodeName { uuid: Uuid, expected: String },
-    InvalidID { pos: CharacterPosition, id: String },
-    InvalidLoopRange { pos: CharacterPosition, msg: String },
-    NamingRuleViolation { pos: CharacterPosition, id: String },
-    RandomOrderInExpression { pos: CharacterPosition },
-    StartCommandOutsideMainBlock { pos: CharacterPosition },
-    UnexpectedChildName { parent_uuid: Uuid, unexpected: String, expected: String },
-    UnexpectedNodeName { uuid: Uuid, unexpected: String, expected: String },
-    UnknownAttributeName { pos: CharacterPosition, attr_name: String },
-    UnknownEscapeSequenceCharacter { pos: CharacterPosition },
-    UnknownBlockID { pos: CharacterPosition, block_id: String },
-    UnknownRuleID { pos: CharacterPosition, rule_id: String },
-    UnknownSkippingName { pos: CharacterPosition, skipping_name: String },
-    UnnecessaryBlockAliasName { pos: CharacterPosition, alias_name: String, },
-    UnnecessaryStartCommand { pos: CharacterPosition, msg: String },
-    UnnecessaryUseCommand { pos: CharacterPosition, msg: String },
-    UnrecommendedLoopRange { pos: CharacterPosition, msg: String },
+    AttributeNameIsDuplicate { pos: CharacterPosition, attr_name: String },
+    AttributeNameNotFound { pos: CharacterPosition, attr_name: String },
+    BlockAliasNameIsDuplicate { pos: CharacterPosition, alias_name: String },
+    BlockAliasNameIsUnnecessary { pos: CharacterPosition, alias_name: String },
+    BlockAliasNotFoundOrDeclaredUse { pos: CharacterPosition, alias_name: String },
+    BlockAlreadyDeclaredUse { pos: CharacterPosition, block_name: String },
+    BlockIDNotFound { pos: CharacterPosition, block_id: String },
+    BlockNameIsDuplicate { pos: CharacterPosition, block_name: String },
+    BlockNameIsViolatingNamingRule { pos: CharacterPosition, block_name: String },
+    CannotSpecifyRandomOrderToExpression { pos: CharacterPosition },
+    ChildNodeInNodeUnexpectedExpected { parent_node_uuid: Uuid, unexpected_name: String, expected_name: String },
+    DeclaringStartOfMainRuleIsUnnecessary { pos: CharacterPosition },
+    DeclaringUseOfSelfBlockIsUnnecessary { pos: CharacterPosition },
+    EscapeSequenceCharacterIsUnknown { pos: CharacterPosition, escseq_char: String },
+    IDIsInvalid { pos: CharacterPosition, id: String },
+    LookaheadSymbolAtNodeIsUnknown { node_uuid: Uuid, symbol: String },
+    LoopRangeIsInvalid { pos: CharacterPosition, loop_range: String, msg: String },
+    LoopRangeIsUnrecommended { pos: CharacterPosition, loop_range: String, msg: String },
+    LoopSymbolAtLeafIsUnknown { leaf_uuid: Uuid, symbol: String },
+    NodeExpectedToBeName { node_uuid: Uuid, expected_name: String },
+    NodeUnexpectedExpected { node_uuid: Uuid, unexpected_name: String, expected_name: String },
+    RuleIDNotFound { pos: CharacterPosition, rule_id: String },
+    RuleNameIsDuplicate { pos: CharacterPosition, rule_name: String },
+    RuleNameIsViolatingNamingRule { pos: CharacterPosition, rule_name: String },
+    SkippingNameNotFound { pos: CharacterPosition, skipping_name: String },
+    StartCommandAlreadyDeclared { pos: CharacterPosition },
+    StartCommandDeclaredOutsideMainBlock { pos: CharacterPosition },
 }
 
 impl ConsoleLogger for BlockParsingLog {
     fn get_log(&self) -> ConsoleLog {
         match self {
-            BlockParsingLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, "attempt to access private item", format!("at:\t{}", pos), format!("id:\t{}", item_id)),
-            BlockParsingLog::BlockAliasNotFoundOrUsed { pos, block_alias_name } => log!(Error, format!("block alias '{}' not found or used", block_alias_name), format!("at:\t{}", pos)),
-            BlockParsingLog::DuplicateAttributeName { pos, attr_name } => log!(Error, format!("duplicate attribute name '{}'", attr_name), format!("at:\t{}", pos)),
-            BlockParsingLog::DuplicateBlockName { pos, block_name } => log!(Error, format!("duplicate block name '{}'", block_name), format!("at:\t{}", pos)),
-            BlockParsingLog::DuplicateArgumentID { pos, arg_id } => log!(Error, format!("duplicate argument id '{}'", arg_id), format!("at:\t{}", pos)),
-            BlockParsingLog::DuplicateRuleName { pos, rule_name } => log!(Error, format!("duplicate rule name '{}'", rule_name), format!("at:\t{}", pos)),
-            BlockParsingLog::DuplicateStartCommand { pos } => log!(Error, "duplicate start command", format!("at:\t{}", pos)),
-            BlockParsingLog::ExpectedNodeName { uuid, expected } => log!(Error, format!("expected node name {}", expected), format!("uuid:\t{}", uuid)),
-            BlockParsingLog::InvalidID { pos, id } => log!(Error, format!("invalid id '{}'", id), format!("at:\t{}", pos)),
-            BlockParsingLog::InvalidLoopRange { pos, msg } => log!(Error, format!("invalid loop range"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
-            BlockParsingLog::NamingRuleViolation { pos, id } => log!(Warning, "naming rule violation", format!("at:\t{}", pos), format!("id:\t{}", id)),
-            BlockParsingLog::RandomOrderInExpression { pos } => log!(Error, "random order in expression", format!("at:\t{}", pos), format!("{}", "cannot specify random order symbol to expression".bright_black())),
-            BlockParsingLog::StartCommandOutsideMainBlock { pos } => log!(Error, "start command outside main block", format!("at:\t{}", pos)),
-            BlockParsingLog::UnexpectedChildName { parent_uuid, unexpected, expected } => log!(Error, format!("unexpected node name {}, expected {}", unexpected, expected), format!("parent uuid:\t{}", parent_uuid)),
-            BlockParsingLog::UnexpectedNodeName { uuid, unexpected, expected } => log!(Error, format!("unexpected node name {}, expected {}", unexpected, expected), format!("uuid:\t{}", uuid)),
-            BlockParsingLog::UnknownAttributeName { pos, attr_name } => log!(Error, format!("unknown attribute name '{}'", attr_name), format!("at:\t{}", pos)),
-            BlockParsingLog::UnknownEscapeSequenceCharacter { pos } => log!(Error, "unknown escape sequence character", format!("at:\t{}", pos)),
-            BlockParsingLog::UnknownBlockID { pos, block_id } => log!(Error, format!("unknown block id '{}'", block_id), format!("at:\t{}", pos)),
-            BlockParsingLog::UnknownRuleID { pos, rule_id } => log!(Error, format!("unknown rule id '{}'", rule_id), format!("at:\t{}", pos)),
-            BlockParsingLog::UnknownSkippingName { pos, skipping_name } => log!(Error, format!("unknown skipping name '{}'", skipping_name), format!("at:\t{}", pos)),
-            BlockParsingLog::UnnecessaryBlockAliasName { pos, alias_name } => log!(Warning, format!("unnecessary block alias name"), format!("at:\t{}", pos), format!("alias name:\t{}", alias_name)),
-            BlockParsingLog::UnnecessaryStartCommand { pos, msg } => log!(Warning, format!("unnecessary start command"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
-            BlockParsingLog::UnnecessaryUseCommand { pos, msg } => log!(Warning, format!("unnecessary use command"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
-            BlockParsingLog::UnrecommendedLoopRange { pos, msg } => log!(Warning, format!("unrecommended loop range"), format!("at:\t{}", pos), format!("{}", msg.bright_black())),
+            BlockParsingLog::ArgumentIDIsDuplicate { pos, arg_id } => log!(Error, Translator::ArgumentIDIsDuplicate { arg_id: arg_id.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::AttemptToAccessPrivateItem { pos, item_id } => log!(Warning, Translator::AttemptToAccessPrivateItem { item_id: item_id.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::AttributeNameIsDuplicate { pos, attr_name } => log!(Error, Translator::AttributeNameIsDuplicate { attr_name: attr_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::AttributeNameNotFound { pos, attr_name } => log!(Error, Translator::AttributeNameNotFound { attr_name: attr_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::BlockAliasNameIsDuplicate { pos, alias_name } => log!(Error, Translator::BlockAliasNameIsDuplicate { alias_name: alias_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::BlockAliasNameIsUnnecessary { pos, alias_name } => log!(Warning, Translator::BlockAliasNameIsUnnecessary { alias_name: alias_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::BlockAliasNotFoundOrDeclaredUse { pos, alias_name } => log!(Error, Translator::BlockAliasNotFoundOrDeclaredUse { alias_name: alias_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::BlockAlreadyDeclaredUse { pos, block_name } => log!(Error, Translator::BlockAlreadyDeclaredUse { block_name: block_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::BlockIDNotFound { pos, block_id } => log!(Error, Translator::BlockIDNotFound { block_id: block_id.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::BlockNameIsDuplicate { pos, block_name } => log!(Error, Translator::BlockNameIsDuplicate { block_name: block_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::BlockNameIsViolatingNamingRule { pos, block_name } => log!(Warning, Translator::BlockNameIsViolatingNamingRule { block_name: block_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::CannotSpecifyRandomOrderToExpression { pos } => log!(Error, Translator::CannotSpecifyRandomOrderToExpression, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::ChildNodeInNodeUnexpectedExpected { parent_node_uuid, unexpected_name, expected_name } => log!(Error, Translator::ChildNodeInNodeUnexpectedExpected { parent_node_uuid: parent_node_uuid.clone(), unexpected_name: unexpected_name.clone(), expected_name: expected_name.clone() }),
+            BlockParsingLog::DeclaringStartOfMainRuleIsUnnecessary { pos } => log!(Warning, Translator::DeclaringStartOfMainRuleIsUnnecessary, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::DeclaringUseOfSelfBlockIsUnnecessary { pos } => log!(Warning, Translator::DeclaringUseOfSelfBlockIsUnnecessary, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::EscapeSequenceCharacterIsUnknown { pos, escseq_char } => log!(Error, Translator::EscapeSequenceCharacterIsUnknown { escseq_char: escseq_char.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::IDIsInvalid { pos, id } => log!(Error, Translator::IDIsInvalid { id: id.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::LookaheadSymbolAtNodeIsUnknown { node_uuid, symbol } => log!(Error, Translator::LookaheadSymbolAtNodeIsUnknown { node_uuid: node_uuid.clone(), symbol: symbol.clone() }),
+            BlockParsingLog::LoopRangeIsInvalid { pos, loop_range, msg } => log!(Error, Translator::LoopRangeIsInvalid { loop_range: loop_range.clone() }, Translator::AtDescription { pos: pos.clone() }, Translator::RawDescription { msg: msg.bright_black().to_string() }),
+            BlockParsingLog::LoopRangeIsUnrecommended { pos, loop_range, msg } => log!(Warning, Translator::LoopRangeIsUnrecommended { loop_range: loop_range.clone() }, Translator::AtDescription { pos: pos.clone() }, Translator::RawDescription { msg: msg.bright_black().to_string() }),
+            BlockParsingLog::LoopSymbolAtLeafIsUnknown { leaf_uuid, symbol } => log!(Error, Translator::LoopSymbolAtLeafIsUnknown { leaf_uuid: leaf_uuid.clone(), symbol: symbol.clone() }),
+            BlockParsingLog::NodeExpectedToBeName { node_uuid, expected_name } => log!(Error, Translator::NodeExpectedToBeName { node_uuid: node_uuid.clone(), expected_name: expected_name.clone() }),
+            BlockParsingLog::NodeUnexpectedExpected { node_uuid, unexpected_name, expected_name } => log!(Error, Translator::NodeUnexpectedExpected { node_uuid: node_uuid.clone(), unexpected_name: unexpected_name.clone(), expected_name: expected_name.clone() }),
+            BlockParsingLog::RuleIDNotFound { pos, rule_id } => log!(Error, Translator::RuleIDNotFound { rule_id: rule_id.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::RuleNameIsDuplicate { pos, rule_name } => log!(Error, Translator::RuleNameIsDuplicate { rule_name: rule_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::RuleNameIsViolatingNamingRule { pos, rule_name } => log!(Warning, Translator::RuleNameIsViolatingNamingRule { rule_name: rule_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::SkippingNameNotFound { pos, skipping_name } => log!(Error, Translator::SkippingNameNotFound { skipping_name: skipping_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::StartCommandAlreadyDeclared { pos } => log!(Warning, Translator::StartCommandAlreadyDeclared, Translator::AtDescription { pos: pos.clone() }),
+            BlockParsingLog::StartCommandDeclaredOutsideMainBlock { pos } => log!(Error, Translator::StartCommandDeclaredOutsideMainBlock, Translator::AtDescription { pos: pos.clone() }),
         }
     }
 }
@@ -261,7 +272,7 @@ impl BlockParser {
 
         for (each_block_id, each_pos) in *used_block_ids {
             if !block_id_map.contains(&each_block_id) {
-                cons.borrow_mut().append_log(BlockParsingLog::UnknownBlockID {
+                cons.borrow_mut().append_log(BlockParsingLog::BlockIDNotFound {
                     pos: each_pos,
                     block_id: each_block_id,
                 }.get_log());
@@ -272,7 +283,7 @@ impl BlockParser {
 
         for (each_rule_id, each_pos) in *used_rule_ids {
             if !rule_map.rule_map.contains_key(&each_rule_id) && !PRIMITIVE_RULE_NAMES.contains(&each_rule_id.as_str()) {
-                cons.borrow_mut().append_log(BlockParsingLog::UnknownRuleID {
+                cons.borrow_mut().append_log(BlockParsingLog::RuleIDNotFound {
                     pos: each_pos,
                     rule_id: each_rule_id,
                 }.get_log());
@@ -320,9 +331,9 @@ impl BlockParser {
                 let (block_name, block_pos) = match each_block_node.find_first_child_node(vec![id_node_name]) {
                     Some(id_node) => (id_node.join_child_leaf_values(), id_node.get_position(&self.cons)?),
                     None => {
-                        self.cons.borrow_mut().append_log(BlockParsingLog::ExpectedNodeName {
-                            uuid: each_block_node.uuid.clone(),
-                            expected: format!("'{}'", id_node_name),
+                        self.cons.borrow_mut().append_log(BlockParsingLog::NodeExpectedToBeName {
+                            node_uuid: each_block_node.uuid.clone(),
+                            expected_name: format!("'{}'", id_node_name),
                         }.get_log());
 
                         return Err(());
@@ -331,15 +342,15 @@ impl BlockParser {
 
                 // note: 命名規則チェック
                 if !BlockParser::is_pascal_case(&block_name) {
-                    self.cons.borrow_mut().append_log(BlockParsingLog::NamingRuleViolation {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::BlockNameIsViolatingNamingRule {
                         pos: block_pos.clone(),
-                        id: block_name.clone(),
+                        block_name: block_name.clone(),
                     }.get_log());
                 }
 
                 // note: ブロック名重複チェック
                 if block_map.contains_key(&block_name) {
-                    self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateBlockName {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::BlockNameIsDuplicate {
                         pos: block_pos.clone(),
                         block_name: block_name.clone(),
                     }.get_log());
@@ -366,7 +377,7 @@ impl BlockParser {
                     match &new_cmd {
                         BlockCommand::Define { pos: _, rule, attr_map: _ } => {
                             if rule_names.contains(&rule.name) {
-                                self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateRuleName {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::RuleNameIsDuplicate {
                                     pos: rule.pos.clone(),
                                     rule_name: rule.name.clone(),
                                 }.get_log());
@@ -407,7 +418,7 @@ impl BlockParser {
                     match start_cmd.clone() {
                         BlockCommand::Start { pos, file_alias_name, block_name, rule_name } => {
                             if self.block_name != "Main" {
-                                self.cons.borrow_mut().append_log(BlockParsingLog::StartCommandOutsideMainBlock {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::StartCommandDeclaredOutsideMainBlock {
                                     pos: pos,
                                 }.get_log());
 
@@ -416,7 +427,7 @@ impl BlockParser {
 
                             if self.file_alias_name == "" {
                                 if self.start_rule_id.is_some() {
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateStartCommand {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::StartCommandAlreadyDeclared {
                                         pos: pos,
                                     }.get_log());
 
@@ -447,9 +458,8 @@ impl BlockParser {
 
                             // note: ブロック ID が自身のブロックと同じであれば警告
                             if block_id == used_from {
-                                self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::DeclaringUseOfSelfBlockIsUnnecessary {
                                     pos: pos.clone(),
-                                    msg: format!("block '{}' is the self block", block_id),
                                 }.get_log());
                             }
 
@@ -458,16 +468,16 @@ impl BlockParser {
                             // note: ブロック ID / ブロックエイリアスがすでに use されていれば警告
                             for (each_alias_name, each_id) in &self.block_alias_map {
                                 if *each_id == block_id {
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::BlockAlreadyDeclaredUse {
                                         pos: pos.clone(),
-                                        msg: format!("block '{}' is already used", block_id),
+                                        block_name: block_name.clone(),
                                     }.get_log());
 
                                     disable_map_insert = true;
                                 } else if each_alias_name == block_alias_name {
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryUseCommand {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNameIsDuplicate {
                                         pos: pos.clone(),
-                                        msg: format!("block alias '{}' is already used", block_alias_name),
+                                        alias_name: block_alias_name.clone(),
                                     }.get_log());
 
                                     disable_map_insert = true;
@@ -489,20 +499,20 @@ impl BlockParser {
                     Ok(use_cmd)
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                        uuid: cmd_node.uuid.clone(),
-                        unexpected: format!("'{}'", node_name),
-                        expected: "block command node name".to_string(),
+                    self.cons.borrow_mut().append_log(BlockParsingLog::NodeUnexpectedExpected {
+                        node_uuid: cmd_node.uuid.clone(),
+                        unexpected_name: format!("'{}'", node_name),
+                        expected_name: "block command node name".to_string(),
                     }.get_log());
 
                     return Err(());
                 },
             },
             _ => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                    uuid: cmd_node.uuid.clone(),
-                    unexpected: "no name".to_string(),
-                    expected: "block command node name".to_string(),
+                self.cons.borrow_mut().append_log(BlockParsingLog::NodeUnexpectedExpected {
+                    node_uuid: cmd_node.uuid.clone(),
+                    unexpected_name: "no name".to_string(),
+                    expected_name: "block command node name".to_string(),
                 }.get_log());
 
                 return Err(());
@@ -522,9 +532,9 @@ impl BlockParser {
                 (id_node.join_child_leaf_values(), id_node.get_position(&self.cons)?)
             },
             None => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::ExpectedNodeName {
-                    uuid: cmd_node.uuid.clone(),
-                    expected: format!("'{}'", id_node_name),
+                self.cons.borrow_mut().append_log(BlockParsingLog::NodeExpectedToBeName {
+                    node_uuid: cmd_node.uuid.clone(),
+                    expected_name: format!("'{}'", id_node_name),
                 }.get_log());
 
                 return Err(());
@@ -533,9 +543,9 @@ impl BlockParser {
 
         // note: 規則名の命名規則チェック
         if !BlockParser::is_pascal_case(&rule_name) {
-            self.cons.borrow_mut().append_log(BlockParsingLog::NamingRuleViolation {
+            self.cons.borrow_mut().append_log(BlockParsingLog::RuleNameIsViolatingNamingRule {
                 pos: rule_pos.clone(),
-                id: rule_name.clone(),
+                rule_name: rule_name.clone(),
             }.get_log());
         }
 
@@ -566,10 +576,10 @@ impl BlockParser {
         let new_choice = match cmd_node.find_first_child_node(vec![".Rule.PureChoice"]) {
             Some(choice_node) => Box::new(self.to_rule_choice_elem(choice_node, &generics_args)?),
             None => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
-                    parent_uuid: cmd_node.uuid.clone(),
-                    unexpected: "unknown".to_string(),
-                    expected: "pure choice node".to_string(),
+                self.cons.borrow_mut().append_log(BlockParsingLog::ChildNodeInNodeUnexpectedExpected {
+                    parent_node_uuid: cmd_node.uuid.clone(),
+                    unexpected_name: "unknown".to_string(),
+                    expected_name: "pure choice node".to_string(),
                 }.get_log());
 
                 return Err(());
@@ -591,7 +601,7 @@ impl BlockParser {
                         let new_arg = each_node.join_child_leaf_values();
 
                         if args.contains(&new_arg) {
-                            self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateArgumentID {
+                            self.cons.borrow_mut().append_log(BlockParsingLog::ArgumentIDIsDuplicate {
                                 pos: each_node.get_position(&self.cons)?,
                                 arg_id: new_arg.clone(),
                             }.get_log());
@@ -616,7 +626,7 @@ impl BlockParser {
             2 => (String::new(), divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
             3 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string(), divided_raw_id.get(2).unwrap().to_string()),
             _ => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::InvalidID {
+                self.cons.borrow_mut().append_log(BlockParsingLog::IDIsInvalid {
                     pos: raw_id_node.get_position(&self.cons)?,
                     id: raw_id,
                 }.get_log());
@@ -627,9 +637,8 @@ impl BlockParser {
 
         // note: ブロック ID がデフォルトと同じであれば警告
         if DEFAULT_START_RULE_ID == BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &file_alias_name, &block_name, &rule_name) {
-            self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryStartCommand {
+            self.cons.borrow_mut().append_log(BlockParsingLog::DeclaringStartOfMainRuleIsUnnecessary {
                 pos: cmd_node.get_position(&self.cons)?,
-                msg: format!("rule '{}' is the same as the default", DEFAULT_START_RULE_ID),
             }.get_log());
         }
 
@@ -652,7 +661,7 @@ impl BlockParser {
             1 => (self.file_alias_name.clone(), divided_raw_id.get(0).unwrap().to_string()),
             2 => (divided_raw_id.get(0).unwrap().to_string(), divided_raw_id.get(1).unwrap().to_string()),
             _ => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::InvalidID {
+                self.cons.borrow_mut().append_log(BlockParsingLog::IDIsInvalid {
                     pos: raw_id_node.get_position(&self.cons)?,
                     id: raw_id,
                 }.get_log());
@@ -667,7 +676,7 @@ impl BlockParser {
 
                 // note: ブロック名とエイリアス名が同じであれば警告
                 if block_name == block_alias_name {
-                    self.cons.borrow_mut().append_log(BlockParsingLog::UnnecessaryBlockAliasName {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNameIsUnnecessary {
                         pos: block_alias_node.get_position(&self.cons)?,
                         alias_name: block_name.clone(),
                     }.get_log());
@@ -681,7 +690,7 @@ impl BlockParser {
         return match divided_raw_id.len() {
             1 | 2 => Ok(BlockCommand::Use { pos: cmd_node.get_position(&self.cons)?, file_alias_name: file_alias_name, block_name: block_name, block_alias_name: block_alias_name }),
             _ => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::InvalidID {
+                self.cons.borrow_mut().append_log(BlockParsingLog::IDIsInvalid {
                     pos: raw_id_node.get_position(&self.cons)?,
                     id: raw_id,
                 }.get_log());
@@ -707,9 +716,9 @@ impl BlockParser {
 
                     match kind {
                         LookaheadKind::None => {
-                            self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownLookaheadKind {
-                                uuid: lookahead_node.uuid,
-                                kind: kind_str.to_string(),
+                            self.cons.borrow_mut().append_log(BlockParsingLog::LookaheadSymbolAtNodeIsUnknown {
+                                node_uuid: lookahead_node.uuid.clone(),
+                                symbol: kind_str.to_string(),
                             }.get_log());
 
                             return Err(());
@@ -744,8 +753,9 @@ impl BlockParser {
                                 Infinitable::Finite(max_v) => {
                                     if raw_range.min_num > *max_v {
                                         // note: 最小回数が最大回数より大きかった場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                                             pos: raw_range.range_node_pos.clone(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("min value '{}' is bigger than max value '{}'", raw_range.min_num, max_v),
                                         }.get_log());
 
@@ -754,8 +764,9 @@ impl BlockParser {
 
                                     if raw_range.is_min_num_specified && !raw_range.is_max_num_specified && raw_range.min_num == 0 && *max_v == 0 {
                                         // note: {0} の場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                                             pos: raw_range.range_node_pos.clone(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("loop range '{{0}}' is invalid"),
                                         }.get_log());
 
@@ -763,43 +774,49 @@ impl BlockParser {
                                     } else if raw_range.min_num == 1 && *max_v == 1 {
                                         if raw_range.is_min_num_specified && !raw_range.is_max_num_specified {
                                             // note: {1} の場合
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                                 pos: raw_range.range_node_pos.clone(),
+                                                loop_range: raw_loop_range_txt.clone(),
                                                 msg: format!("loop range '{{1}}' is unnecessary"),
                                             }.get_log());
                                         } else {
                                             // note: {1,1} の場合
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                                 pos: raw_range.range_node_pos.clone(),
+                                                loop_range: raw_loop_range_txt.clone(),
                                                 msg: format!("loop range '{{1,1}}' is unnecessary"),
                                             }.get_log());
                                         }
                                     } else if *max_v == 0 {
                                         // note: 最大回数に 0 が指定された場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                                             pos: raw_range.max_num_pos.unwrap(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("max number '{}' is invalid", raw_range.min_num),
                                         }.get_log());
 
                                         return Err(());
                                     } else if raw_range.is_max_num_specified && raw_range.min_num == *max_v {
                                         // note: 最小回数と最大回数が同じだった場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                             pos: raw_range.range_node_pos.clone(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("modify '{}' to '{{{}}}'", raw_loop_range_txt, raw_range.min_num),
                                         }.get_log());
                                     } else if raw_range.is_min_num_specified && raw_range.min_num == 0 {
                                         // note: 最小回数に 0 が指定された場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                             pos: raw_range.range_node_pos.clone(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("modify '{}' to '{{,{}}}'", raw_loop_range_txt, max_v),
                                         }.get_log());
                                     }
                                 },
                                 Infinitable::Infinite if raw_range.is_min_num_specified && raw_range.min_num == 0 => {
                                     // note: {0,} の場合
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                         pos: raw_range.range_node_pos.clone(),
+                                        loop_range: raw_loop_range_txt.clone(),
                                         msg: format!("modify '{}' to '{{,}}'", raw_loop_range_txt),
                                     }.get_log());
                                 },
@@ -810,8 +827,9 @@ impl BlockParser {
 
                             match loop_range.to_symbol_string() {
                                 Some(symbol_str) => {
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                         pos: raw_range.range_node_pos.clone(),
+                                        loop_range: raw_loop_range_txt.clone(),
                                         msg: format!("prefer {} to {}", raw_loop_range_txt, symbol_str),
                                     }.get_log());
                                 },
@@ -826,9 +844,9 @@ impl BlockParser {
                             match kind_str {
                                 "?" | "*" | "+" => LoopRange::from(&leaf.value),
                                 _ => {
-                                    self.cons.borrow_mut().append_log(SyntaxParsingLog::UnknownLookaheadKind {
-                                        uuid: leaf.uuid.clone(),
-                                        kind: kind_str.to_string(),
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::LoopSymbolAtLeafIsUnknown {
+                                        leaf_uuid: leaf.uuid.clone(),
+                                        symbol: kind_str.to_string(),
                                     }.get_log());
 
                                     return Err(());
@@ -866,8 +884,9 @@ impl BlockParser {
                                 Infinitable::Finite(max_v) => {
                                     if raw_range.min_num > *max_v {
                                         // note: 最小回数が最大回数より大きかった場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                                             pos: raw_range.range_node_pos.clone(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("min value '{}' is bigger than max value '{}'", raw_range.min_num, max_v),
                                         }.get_log());
 
@@ -876,8 +895,9 @@ impl BlockParser {
 
                                     if raw_range.is_min_num_specified && !raw_range.is_max_num_specified && raw_range.min_num == 0 && *max_v == 0 {
                                         // note: [0] の場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                                             pos: raw_range.range_node_pos.clone(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("loop range '[0]' is invalid"),
                                         }.get_log());
 
@@ -885,43 +905,49 @@ impl BlockParser {
                                     } else if raw_range.min_num == 1 && *max_v == 1 {
                                         if raw_range.is_min_num_specified && !raw_range.is_max_num_specified {
                                             // note: [1] の場合
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                                 pos: raw_range.range_node_pos.clone(),
+                                                loop_range: raw_loop_range_txt.clone(),
                                                 msg: format!("loop range '[1]' is unnecessary"),
                                             }.get_log());
                                         } else {
                                             // note: [1,1] の場合
-                                            self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                            self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                                 pos: raw_range.range_node_pos.clone(),
+                                                loop_range: raw_loop_range_txt.clone(),
                                                 msg: format!("loop range [1-1]' is unnecessary"),
                                             }.get_log());
                                         }
                                     } else if *max_v == 0 {
                                         // note: 最大回数に 0 が指定された場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                                             pos: raw_range.max_num_pos.unwrap(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("max number '{}' is invalid", raw_range.min_num),
                                         }.get_log());
 
                                         return Err(());
                                     } else if raw_range.is_max_num_specified && raw_range.min_num == *max_v {
                                         // note: 最小回数と最大回数が同じだった場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                             pos: raw_range.range_node_pos.clone(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("modify '{}' to '[{}]'", raw_loop_range_txt, raw_range.min_num),
                                         }.get_log());
                                     } else if raw_range.is_min_num_specified && raw_range.min_num == 0 {
                                         // note: 最小回数に 0 が指定された場合
-                                        self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                             pos: raw_range.range_node_pos.clone(),
+                                            loop_range: raw_loop_range_txt.clone(),
                                             msg: format!("modify '{}' to '[-{}]'", raw_loop_range_txt, max_v),
                                         }.get_log());
                                     }
                                 },
                                 Infinitable::Infinite if raw_range.is_min_num_specified && raw_range.min_num == 0 => {
                                     // note: [0-] の場合
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnrecommendedLoopRange {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsUnrecommended {
                                         pos: raw_range.range_node_pos.clone(),
+                                        loop_range: raw_loop_range_txt.clone(),
                                         msg: format!("modify '{}' to '[,]'", raw_loop_range_txt),
                                     }.get_log());
                                 },
@@ -964,10 +990,10 @@ impl BlockParser {
             let choice_or_expr_node = match each_seq_elem_node.find_first_child_node(vec![".Rule.Choice", ".Rule.Expr"]) {
                 Some(v) => v,
                 None => {
-                    self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
-                        parent_uuid: each_seq_elem_node.uuid.clone(),
-                        unexpected: "unknown".to_string(),
-                        expected: "choice or expression node".to_string(),
+                    self.cons.borrow_mut().append_log(BlockParsingLog::ChildNodeInNodeUnexpectedExpected {
+                        parent_node_uuid: each_seq_elem_node.uuid.clone(),
+                        unexpected_name: "unknown".to_string(),
+                        expected_name: "choice or expression node".to_string(),
                     }.get_log());
 
                     return Err(());
@@ -987,7 +1013,7 @@ impl BlockParser {
                         },
                         ".Rule.Expr" => {
                             if elem_order.is_random() {
-                                self.cons.borrow_mut().append_log(BlockParsingLog::RandomOrderInExpression {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::CannotSpecifyRandomOrderToExpression {
                                     pos: random_order_node_pos,
                                 }.get_log());
 
@@ -1001,10 +1027,10 @@ impl BlockParser {
                             RuleElement::Expression(new_expr)
                         },
                         _ => {
-                            self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                                uuid: choice_or_expr_node.uuid.clone(),
-                                unexpected: format!("'{}'", name),
-                                expected: "choice or expression node".to_string(),
+                            self.cons.borrow_mut().append_log(BlockParsingLog::NodeUnexpectedExpected {
+                                node_uuid: choice_or_expr_node.uuid.clone(),
+                                unexpected_name: format!("'{}'", name),
+                                expected_name: "choice or expression node".to_string(),
                             }.get_log());
 
                             return Err(());
@@ -1014,10 +1040,10 @@ impl BlockParser {
                     children.push(new_elem);
                 },
                 _ => {
-                    self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedNodeName {
-                        uuid: choice_or_expr_node.uuid.clone(),
-                        unexpected: "no name".to_string(),
-                        expected: "choice or expression node".to_string(),
+                    self.cons.borrow_mut().append_log(BlockParsingLog::NodeUnexpectedExpected {
+                        node_uuid: choice_or_expr_node.uuid.clone(),
+                        unexpected_name: "no name".to_string(),
+                        expected_name: "choice or expression node".to_string(),
                     }.get_log());
 
                     return Err(());
@@ -1041,8 +1067,9 @@ impl BlockParser {
                 match min_str.parse::<usize>() {
                     Ok(v) => (v, Some(min_num_pos), true),
                     Err(_) => {
-                        self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                        self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                             pos: min_num_node.get_position(&self.cons)?,
+                            loop_range: "<unparsed>".to_string(),
                             msg: format!("'{}' is too long or not a number", min_str),
                         }.get_log());
 
@@ -1064,9 +1091,10 @@ impl BlockParser {
                         match max_str.parse::<usize>() {
                             Ok(v) => (Infinitable::Finite(v), Some(max_num_pos), true),
                             Err(_) => {
-                                self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                                self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                                     pos: max_num_pos,
-                                    msg: format!("'{}' is too long or not a number", max_str),
+                                loop_range: "<unparsed>".to_string(),
+                                msg: format!("'{}' is too long or not a number", max_str),
                                 }.get_log());
 
                                 return Err(());
@@ -1080,8 +1108,9 @@ impl BlockParser {
             None => {
                 if !is_min_num_specified {
                     // note: 最小, 最大回数どちらも指定されていない場合
-                    self.cons.borrow_mut().append_log(BlockParsingLog::InvalidLoopRange {
+                    self.cons.borrow_mut().append_log(BlockParsingLog::LoopRangeIsInvalid {
                         pos: range_node_pos,
+                        loop_range: "{{,}}".to_string(),
                         msg: format!("no number specified"),
                     }.get_log());
 
@@ -1200,10 +1229,10 @@ impl BlockParser {
                     ".Rule.Str" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::String, self.to_string_value(expr_child_node)?),
                     ".Rule.Wildcard" => (expr_child_node.get_position(&self.cons)?, RuleExpressionKind::Wildcard, ".".to_string()),
                     _ => {
-                        self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
-                            parent_uuid: expr_child_node.uuid.clone(),
-                            unexpected: format!("'{}'", name),
-                            expected: "rule expression node".to_string(),
+                        self.cons.borrow_mut().append_log(BlockParsingLog::ChildNodeInNodeUnexpectedExpected {
+                            parent_node_uuid: expr_child_node.uuid.clone(),
+                            unexpected_name: format!("'{}'", name),
+                            expected_name: "rule expression node".to_string(),
                         }.get_log());
 
                         return Err(());
@@ -1211,10 +1240,10 @@ impl BlockParser {
                 }
             },
             _ => {
-                self.cons.borrow_mut().append_log(BlockParsingLog::UnexpectedChildName {
-                    parent_uuid: expr_child_node.uuid.clone(),
-                    unexpected: "no name".to_string(),
-                    expected: "rule expression node".to_string(),
+                self.cons.borrow_mut().append_log(BlockParsingLog::ChildNodeInNodeUnexpectedExpected {
+                    parent_node_uuid: expr_child_node.uuid.clone(),
+                    unexpected_name: "no name".to_string(),
+                    expected_name: "rule expression node".to_string(),
                 }.get_log());
 
                 return Err(());
@@ -1254,10 +1283,10 @@ impl BlockParser {
 
                     (new_id, block_name, rule_name.clone())
                 } else {
-                    // note: ブロック名がエイリアスでない場合
-                    cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNotFoundOrUsed {
+                    // note: ブロック名がエイリアスでない場合; ブロックが存在しない判定になる
+                    cons.borrow_mut().append_log(BlockParsingLog::BlockAliasNotFoundOrDeclaredUse {
                         pos: pos.clone(),
-                        block_alias_name: block_name.to_string(),
+                        alias_name: block_name.to_string(),
                     }.get_log());
 
                     return Err(());
@@ -1272,7 +1301,7 @@ impl BlockParser {
                 (new_id, block_name, rule_name.to_string())
             },
             _ => {
-                cons.borrow_mut().append_log(BlockParsingLog::InvalidID {
+                cons.borrow_mut().append_log(BlockParsingLog::IDIsInvalid {
                     pos: pos.clone(),
                     id: id_tokens.join("."),
                 }.get_log());
@@ -1302,15 +1331,18 @@ impl BlockParser {
                 SyntaxNodeChild::Node(node) => {
                     match node.ast_reflection_style {
                         ASTReflectionStyle::Reflection(_) => {
-                            s += match node.get_leaf_child_at(&self.cons, 0)?.value.as_str() {
+                            let escseq_char = node.get_leaf_child_at(&self.cons, 0)?.value.as_str();
+
+                            s += match escseq_char {
                                 "\\" => "\\",
                                 "\"" => "\"",
                                 "n" => "\n",
                                 "t" => "\t",
                                 "z" => "\0",
                                 _ => {
-                                    self.cons.borrow_mut().append_log(BlockParsingLog::UnknownEscapeSequenceCharacter {
+                                    self.cons.borrow_mut().append_log(BlockParsingLog::EscapeSequenceCharacterIsUnknown {
                                         pos: node.get_position(&self.cons)?,
+                                        escseq_char: escseq_char.to_string(),
                                     }.get_log());
 
                                     return Err(());
@@ -1350,7 +1382,7 @@ impl BlockParser {
 
             // note: 属性名の重複チェック
             if attr_map.contains_key(&new_attr.name) {
-                self.cons.borrow_mut().append_log(BlockParsingLog::DuplicateAttributeName {
+                self.cons.borrow_mut().append_log(BlockParsingLog::AttributeNameIsDuplicate {
                     pos: new_attr.pos.clone(),
                     attr_name: new_attr.name.clone(),
                 }.get_log());
@@ -1379,9 +1411,9 @@ impl BlockParser {
                     values.push(new_value);
                 },
                 None => {
-                    self.cons.borrow_mut().append_log(BlockParsingLog::ExpectedNodeName {
-                        uuid: each_attr_value_node.uuid.clone(),
-                        expected: format!("'{}'", id_node_name),
+                    self.cons.borrow_mut().append_log(BlockParsingLog::NodeExpectedToBeName {
+                        node_uuid: each_attr_value_node.uuid.clone(),
+                        expected_name: format!("'{}'", id_node_name),
                     }.get_log());
 
                     return Err(());
@@ -1398,7 +1430,7 @@ impl BlockParser {
             let attr_kind = match AttributeKind::from(attr_name) {
                 Some(v) => v,
                 None => {
-                    cons.borrow_mut().append_log(BlockParsingLog::UnknownAttributeName {
+                    cons.borrow_mut().append_log(BlockParsingLog::AttributeNameNotFound {
                         pos: attr.pos.clone(),
                         attr_name: attr_name.clone(),
                     }.get_log());
@@ -1413,7 +1445,7 @@ impl BlockParser {
                         let tar_id = match config.skipping_map.get(&each_attr_value.value) {
                             Some(v) => v.clone(),
                             None => {
-                                cons.borrow_mut().append_log(BlockParsingLog::UnknownSkippingName {
+                                cons.borrow_mut().append_log(BlockParsingLog::SkippingNameNotFound {
                                     pos: each_attr_value.pos.clone(),
                                     skipping_name: each_attr_value.value.clone(),
                                 }.get_log());

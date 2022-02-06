@@ -98,7 +98,7 @@ impl FCPEGFileLoader {
         'map_loop: for (subalias_name, subfile_path) in subfile_alias_map {
             // note: エイリアス名の重複チェック
             if self.loaded_fcpeg_files.contains_key(&subalias_name) || self.replaced_file_alias_names.contains_key(&subalias_name) {
-                self.cons.borrow_mut().append_log(ConfigurationLog::DuplicateFileAliasName {
+                self.cons.borrow_mut().append_log(ConfigurationLog::FileAliasNameIsDuplicate {
                     alias_name: subalias_name.clone(),
                 }.get_log());
 
