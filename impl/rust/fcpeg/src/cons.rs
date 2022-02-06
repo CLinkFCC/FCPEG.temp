@@ -93,6 +93,13 @@ pub enum Translator {
     RawDescription { msg: String },
 }
 
+impl Translator {
+    // spec: 最初の 4 バイトのみを変換
+    pub fn uuid_to_string(uuid: &Uuid) -> String {
+        return uuid.to_string()[..8].to_string();
+    }
+}
+
 impl ConsoleLogTranslator for Translator {
     fn translate(&self, lang_name: &str) -> String {
         let lang = match Language::from(lang_name) {
@@ -153,8 +160,8 @@ impl ConsoleLogTranslator for Translator {
                 Language::Japanese => "順不同は表現字句に指定できません",
             },
             Translator::ChildNodeInNodeUnexpectedExpected { parent_node_uuid, unexpected_name, expected_name } => {
-                Language::English => format!("child node `{}` in node `{}` unexpected, expected `{}`", unexpected_name, parent_node_uuid, expected_name),
-                Language::Japanese => format!("`{}` 内の子ノード `{}` を予期していません; `{}` が必要です", unexpected_name, parent_node_uuid, expected_name),
+                Language::English => format!("child node `{}` in node `{}` unexpected, expected `{}`", unexpected_name, Translator::uuid_to_string(parent_node_uuid), expected_name),
+                Language::Japanese => format!("`{}` 内の子ノード `{}` を予期していません; `{}` が必要です", unexpected_name, Translator::uuid_to_string(parent_node_uuid), expected_name),
             },
             Translator::DeclaringStartOfMainRuleIsUnnecessary => {
                 Language::English => "declaring start of main rule is unnecessary",
@@ -173,8 +180,8 @@ impl ConsoleLogTranslator for Translator {
                 Language::Japanese => format!("id `{}` が無効です", id),
             },
             Translator::LookaheadSymbolAtNodeIsUnknown { node_uuid, symbol } => {
-                Language::English => format!("lookahead symbol `{}` at node `{}` is unknown", symbol, node_uuid),
-                Language::Japanese => format!("ノード `{}` の先読み記号 `{}` が不明です", node_uuid, symbol),
+                Language::English => format!("lookahead symbol `{}` at node `{}` is unknown", symbol, Translator::uuid_to_string(node_uuid)),
+                Language::Japanese => format!("ノード `{}` の先読み記号 `{}` が不明です", Translator::uuid_to_string(node_uuid), symbol),
             },
             Translator::LoopRangeIsInvalid { loop_range } => {
                 Language::English => format!("loop range `{}` is invalid", loop_range),
@@ -185,16 +192,16 @@ impl ConsoleLogTranslator for Translator {
                 Language::Japanese => format!("繰り返し範囲 `{}` は非推奨です", loop_range),
             },
             Translator::LoopSymbolAtLeafIsUnknown { leaf_uuid, symbol } => {
-                Language::English => format!("loop symbol `{}` at leaf `{}` is unknown", symbol, leaf_uuid),
-                Language::Japanese => format!("リーフ `{}` の繰り返し記号 `{}` が不明です", leaf_uuid, symbol),
+                Language::English => format!("loop symbol `{}` at leaf `{}` is unknown", symbol, Translator::uuid_to_string(leaf_uuid)),
+                Language::Japanese => format!("リーフ `{}` の繰り返し記号 `{}` が不明です", Translator::uuid_to_string(leaf_uuid), symbol),
             },
             Translator::NodeExpectedToBeName { node_uuid, expected_name } => {
-                Language::English => format!("node `{}` expected to be name `{}`", node_uuid, expected_name),
-                Language::Japanese => format!("ノード `{}` の名前が `{}` である必要があります", node_uuid, expected_name),
+                Language::English => format!("node `{}` expected to be name `{}`", Translator::uuid_to_string(node_uuid), expected_name),
+                Language::Japanese => format!("ノード `{}` の名前が `{}` である必要があります", Translator::uuid_to_string(node_uuid), expected_name),
             },
             Translator::NodeUnexpectedExpected { node_uuid, unexpected_name, expected_name } => {
-                Language::English => format!("node `{}` (`{}`) unexpected, expected `{}`", unexpected_name, node_uuid, expected_name),
-                Language::Japanese => format!("ノード `{}` (`{}`) を予期していません; `{}` が必要です", unexpected_name, node_uuid, expected_name),
+                Language::English => format!("node `{}` (`{}`) unexpected, expected `{}`", unexpected_name, Translator::uuid_to_string(node_uuid), expected_name),
+                Language::Japanese => format!("ノード `{}` (`{}`) を予期していません; `{}` が必要です", unexpected_name, Translator::uuid_to_string(node_uuid), expected_name),
             },
             Translator::RuleIDNotFound { rule_id } => {
                 Language::English => format!("rule id `{}` not found", rule_id),
@@ -259,8 +266,8 @@ impl ConsoleLogTranslator for Translator {
                 Language::Japanese => format!("パース時に規則 ID `{}` が見つかりません", rule_id),
             },
             Translator::StructureOfRuleElementIsInvalid { elem_uuid } => {
-                Language::English => format!("structure of rule element `{}` is invalid", elem_uuid),
-                Language::Japanese => format!("規則要素 `{}` の構造が無効です", elem_uuid),
+                Language::English => format!("structure of rule element `{}` is invalid", Translator::uuid_to_string(elem_uuid)),
+                Language::Japanese => format!("規則要素 `{}` の構造が無効です", Translator::uuid_to_string(elem_uuid)),
             },
             Translator::TemplateArgumentIDNotFound { arg_id } => {
                 Language::English => format!("template argument id `{}` not found", arg_id),
@@ -269,24 +276,24 @@ impl ConsoleLogTranslator for Translator {
 
             // note: tree logs
             Translator::CharacterPositionOfNodeNotFound { node_uuid } => {
-                Language::English => format!("character position of node `{}` not found", node_uuid),
-                Language::Japanese => format!("ノード `{}` の文字位置が見つかりません", node_uuid),
+                Language::English => format!("character position of node `{}` not found", Translator::uuid_to_string(node_uuid)),
+                Language::Japanese => format!("ノード `{}` の文字位置が見つかりません", Translator::uuid_to_string(node_uuid)),
             },
             Translator::ChildElementAtInNodeNotFound { parent_node_uuid, index } => {
-                Language::English => format!("child element at {} in node `{}` not found", index, parent_node_uuid),
-                Language::Japanese => format!("ノード `{}` 内の {} 番目の子要素が見つかりません", parent_node_uuid, index),
+                Language::English => format!("child element at {} in node `{}` not found", index, Translator::uuid_to_string(parent_node_uuid)),
+                Language::Japanese => format!("ノード `{}` 内の {} 番目の子要素が見つかりません", Translator::uuid_to_string(parent_node_uuid), index),
             },
             Translator::LeafExpectedToBeNode { leaf_uuid } => {
-                Language::English => format!("leaf `{}` expected to be node", leaf_uuid),
-                Language::Japanese => format!("リーフ `{}` がノードである必要があります", leaf_uuid),
+                Language::English => format!("leaf `{}` expected to be node", Translator::uuid_to_string(leaf_uuid)),
+                Language::Japanese => format!("リーフ `{}` がノードである必要があります", Translator::uuid_to_string(leaf_uuid)),
             },
             Translator::NodeExpectedToBeLeaf { node_uuid } => {
-                Language::English => format!("node `{}` expected to be leaf", node_uuid),
-                Language::Japanese => format!("ノード `{}` がリーフである必要があります", node_uuid),
+                Language::English => format!("node `{}` expected to be leaf", Translator::uuid_to_string(node_uuid)),
+                Language::Japanese => format!("ノード `{}` がリーフである必要があります", Translator::uuid_to_string(node_uuid)),
             },
             Translator::ReflectableChildAtInNodeNotFound { parent_node_uuid, index } => {
-                Language::English => format!("reflectable child element at {} in node `{}` not found", index, parent_node_uuid),
-                Language::Japanese => format!("ノード `{}` 内の {} 番目の反映的な子要素が見つかりません", parent_node_uuid, index),
+                Language::English => format!("reflectable child element at {} in node `{}` not found", index, Translator::uuid_to_string(parent_node_uuid)),
+                Language::Japanese => format!("ノード `{}` 内の {} 番目の反映的な子要素が見つかりません", Translator::uuid_to_string(parent_node_uuid), index),
             },
 
             // note: config logs
