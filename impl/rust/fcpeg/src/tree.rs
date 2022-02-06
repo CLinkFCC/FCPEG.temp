@@ -301,12 +301,25 @@ impl SyntaxNode {
 
     // todo: 最初に出現したリーフの位置を返す; Unreflectable なリーフも対象にする
     pub fn get_position(&self, cons: Rc<RefCell<Console>>) -> ConsoleResult<CharacterPosition> {
+        cons.borrow_mut().ignore_logs = true;
+
         for each_child in self.get_children() {
             match each_child {
-                SyntaxNodeChild::Leaf(each_leaf) => return Ok(each_leaf.pos.clone()),
-                _ => (),
+                SyntaxNodeChild::Node(each_node) => match each_node.get_position(cons.clone()) {
+                    Ok(v) => {
+                        cons.borrow_mut().ignore_logs = false;
+                        return Ok(v);
+                    },
+                    Err(_) => (),
+                },
+                SyntaxNodeChild::Leaf(each_leaf) => {
+                    cons.borrow_mut().ignore_logs = false;
+                    return Ok(each_leaf.pos.clone());
+                },
             }
         };
+
+        cons.borrow_mut().ignore_logs = false;
 
         cons.borrow_mut().append_log(TreeLog::CharacterPositionOfNodeNotFound {
             node_uuid: self.uuid.clone(),
