@@ -1,7 +1,7 @@
 use crate::tree::CharacterPosition;
 
-use rustnutlib::*;
-use rustnutlib::console::*;
+use cons_util::*;
+use cons_util::cons::*;
 
 use uuid::Uuid;
 
@@ -101,10 +101,10 @@ impl Translator {
 }
 
 impl ConsoleLogTranslator for Translator {
-    fn translate(&self, lang_name: &str) -> String {
+    fn translate(&self, lang_name: &str) -> TranslationResult {
         let lang = match Language::from(lang_name) {
             Some(v) => v,
-            None => return "{unknown language}".to_string(),
+            None => return TranslationResult::UnknownLanguage,
         };
 
         let s = translate!{
@@ -341,6 +341,6 @@ impl ConsoleLogTranslator for Translator {
             },
         };
 
-        return s.to_string();
+        return TranslationResult::Success(s.to_string());
     }
 }

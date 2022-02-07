@@ -5,7 +5,7 @@ use crate::tree::*;
 
 use num_traits::Num;
 
-use rustnutlib::console::ConsoleResult;
+use cons_util::cons::ConsoleResult;
 
 use uuid::Uuid;
 

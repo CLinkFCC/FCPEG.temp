@@ -10,9 +10,9 @@ use crate::cons::*;
 use crate::parser::*;
 use crate::rule::*;
 
-use rustnutlib::*;
-use rustnutlib::console::*;
-use rustnutlib::file::*;
+use cons_util::*;
+use cons_util::cons::*;
+use cons_util::file::*;
 
 #[derive(Clone, PartialEq)]
 pub enum ConfigurationLog {

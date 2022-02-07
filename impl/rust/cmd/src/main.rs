@@ -10,9 +10,9 @@ use argh::FromArgs;
 use fcpeg::*;
 use fcpeg::cons::Language;
 
-use rustnutlib::*;
-use rustnutlib::console::*;
-use rustnutlib::file::*;
+use cons_util::*;
+use cons_util::cons::*;
+use cons_util::file::*;
 
 #[derive(Clone, PartialEq)]
 enum Translator {
@@ -24,10 +24,10 @@ enum Translator {
 }
 
 impl ConsoleLogTranslator for Translator {
-    fn translate(&self, lang_name: &str) -> String {
+    fn translate(&self, lang_name: &str) -> TranslationResult {
         let lang = match Language::from(lang_name) {
             Some(v) => v,
-            None => return "{unknown language}".to_string(),
+            None => return TranslationResult::UnknownLanguage,
         };
 
         let s = translate!{
@@ -50,13 +50,13 @@ impl ConsoleLogTranslator for Translator {
             },
         };
 
-        return s.to_string();
+        return TranslationResult::Success(s.to_string());
     }
 }
 
 fn main() {
     let cmd: MainCommand = argh::from_env();
-    let cons = Console::new("ja".to_string(), ConsoleLogLimit::NoLimit);
+    let cons = Console::new("jaa".to_string(), ConsoleLogLimit::NoLimit);
 
     match cmd.subcmd {
         Subcommand::Manual(subcmd) => spawn(move || proc_manual_subcommand(&subcmd, cons)).join().unwrap(),
@@ -206,7 +206,7 @@ fn parse(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: S
 }
 
 fn parse_with_monitoring(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, interval_sec: usize, quit_limit_sec: Option<usize>, output_tree: bool, count_duration: bool, disable_opt: bool) -> ConsoleResult<()> {
-    let cfg_file_path = FileMan::rename_ext(&fcpeg_file_path, "cfg");
+    let cfg_file_path = FileMan::reext(&fcpeg_file_path, "cfg");
 
     let detector_target_file_paths = vec![
         &fcpeg_file_path,
@@ -251,7 +251,7 @@ impl FileChangeDetector {
         let mut file_map = HashMap::<String, SystemTime>::new();
 
         for each_path in target_file_paths {
-            let last_modified = match FileMan::get_last_modified(each_path) {
+            let last_modified = match FileMan::last_modified(each_path) {
                 Ok(v) => v,
                 Err(e) => {
                     cons.borrow_mut().append_log(e.get_log());
@@ -272,7 +272,7 @@ impl FileChangeDetector {
 
     pub fn is_changed(&mut self) -> ConsoleResult<bool> {
         for (each_path, each_time) in self.file_map.clone() {
-            let new_time = match FileMan::get_last_modified(&each_path) {
+            let new_time = match FileMan::last_modified(&each_path) {
                 Ok(v) => v,
                 Err(e) => {
                     self.cons.borrow_mut().append_log(e.get_log());

@@ -17,8 +17,8 @@ use crate::parser::*;
 use crate::rule::*;
 use crate::tree::*;
 
-use rustnutlib::console::*;
-use rustnutlib::file::*;
+use cons_util::cons::*;
+use cons_util::file::*;
 
 pub struct FCPEGParser {
     cons: Rc<RefCell<Console>>,

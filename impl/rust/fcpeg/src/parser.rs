@@ -12,8 +12,8 @@ use colored::*;
 
 use regex::*;
 
-use rustnutlib::*;
-use rustnutlib::console::*;
+use cons_util::*;
+use cons_util::cons::*;
 
 use uuid::Uuid;
 

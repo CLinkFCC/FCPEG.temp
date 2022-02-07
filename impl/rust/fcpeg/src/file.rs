@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use crate::config::*;
 
-use rustnutlib::console::*;
-use rustnutlib::file::*;
+use cons_util::cons::*;
+use cons_util::file::*;
 
 pub struct FCPEGFileMap {
     pub file_map: HashMap<String, FCPEGFile>,
@@ -80,7 +80,7 @@ impl FCPEGFileLoader {
             },
         };
 
-        let config_file_path = FileMan::rename_ext(&fcpeg_file_path, "cfg");
+        let config_file_path = FileMan::reext(&fcpeg_file_path, "cfg");
         let config = Configuration::load(self.cons.clone(), &config_file_path)?;
         let subfile_alias_map = config.file_alias_map.clone();
 

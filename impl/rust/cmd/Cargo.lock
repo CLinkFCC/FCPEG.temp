@@ -75,14 +75,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cons-util"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "same-file",
+]
+
+[[package]]
 name = "fcpeg"
 version = "0.1.0"
 dependencies = [
  "colored",
+ "cons-util",
  "num-traits",
  "once_cell",
  "regex",
- "rustnutlib",
  "uuid",
 ]
 
@@ -188,16 +196,8 @@ name = "rust_cmd"
 version = "0.1.0"
 dependencies = [
  "argh",
+ "cons-util",
  "fcpeg",
- "rustnutlib",
-]
-
-[[package]]
-name = "rustnutlib"
-version = "0.1.0"
-dependencies = [
- "regex",
- "same-file",
 ]
 
 [[package]]

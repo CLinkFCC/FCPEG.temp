@@ -6,8 +6,8 @@ use std::rc::Rc;
 
 use crate::cons::*;
 
-use rustnutlib::*;
-use rustnutlib::console::*;
+use cons_util::*;
+use cons_util::cons::*;
 
 use uuid::Uuid;
 
