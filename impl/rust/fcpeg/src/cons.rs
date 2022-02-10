@@ -236,11 +236,11 @@ impl ConsoleLogTranslator for Translator {
             },
             Translator::ExpectedGenericsArgumentsProvided { unexpected_len, expected_len } => {
                 Language::English => format!("expected {} generics argument(s), provided {}", unexpected_len, expected_len),
-                Language::Japanese => format!("{} 個のジェネリクス引数が必要ですが {} 個が渡されました", unexpected_len, expected_len),
+                Language::Japanese => format!("{} 個のジェネリクス引数が必要ですが {} 個が渡されました", expected_len, unexpected_len),
             },
             Translator::ExpectedTemplateArgumentsProvided { unexpected_len, expected_len } => {
                 Language::English => format!("expected {} template argument(s), provided {}", unexpected_len, expected_len),
-                Language::Japanese => format!("{} 個のテンプレート引数が必要ですが {} 個が渡されました", unexpected_len, expected_len),
+                Language::Japanese => format!("{} 個のテンプレート引数が必要ですが {} 個が渡されました", expected_len, unexpected_len),
             },
             Translator::GenericsArgumentIDNotFound { arg_id } => {
                 Language::English => format!("generics argument id `{}` not found", arg_id),
