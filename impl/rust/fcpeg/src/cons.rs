@@ -63,6 +63,7 @@ pub enum Translator {
     GenericsArgumentIDNotFound { arg_id: String },
     LoopRangeIsInvalidOnParsing { loop_range: String },
     ParsingFailedAtRule { rule_id: String },
+    PrimitiveRuleNoskipSpecifiedWithoutSkipingRules,
     PrimitiveRuleUncovered { rule_name: String },
     RepetitionExceededLoopLimit { loop_limit: usize },
     RuleIDNotFoundOnParsing { rule_id: String },
@@ -252,6 +253,10 @@ impl ConsoleLogTranslator for Translator {
             Translator::ParsingFailedAtRule { rule_id } => {
                 Language::English => format!("parsing failed at rule `{}`", rule_id),
                 Language::Japanese => format!("規則 `{}` でパースが失敗しました", rule_id),
+            },
+            Translator::PrimitiveRuleNoskipSpecifiedWithoutSkipingRules => {
+                Language::English => "primitive rule `NOSKIP` specified without skipping rules",
+                Language::Japanese => "プリミティブ規則 `NOSKIP` がスキッピング規則なしに指定されました",
             },
             Translator::PrimitiveRuleUncovered { rule_name } => {
                 Language::English => format!("primitive rule `{}` uncovered", rule_name),

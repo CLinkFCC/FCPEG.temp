@@ -198,7 +198,7 @@ pub struct RawRange {
 }
 
 // note: プリミティブ規則名の一覧
-pub const PRIMITIVE_RULE_NAMES: &[&'static str] = &["JOIN"];
+pub const PRIMITIVE_RULE_NAMES: &[&'static str] = &["JOIN", "NOSKIP"];
 // note: デフォルトの開始規則 ID
 pub const DEFAULT_START_RULE_ID: &'static str = ".Main.Main";
 

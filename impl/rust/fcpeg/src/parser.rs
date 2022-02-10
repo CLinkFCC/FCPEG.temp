@@ -25,6 +25,7 @@ pub enum SyntaxParsingLog {
     GenericsArgumentIDNotFound { arg_id: String },
     LoopRangeIsInvalidOnParsing { loop_range: String },
     ParsingFailedAtRule { pos: CharacterPosition, rule_id: String, rule_stack: Vec<(CharacterPosition, String)> },
+    PrimitiveRuleNoskipSpecifiedWithoutSkipingRules { pos: CharacterPosition },
     PrimitiveRuleUncovered { pos: CharacterPosition, rule_name: String },
     RepetitionExceededLoopLimit { loop_limit: usize },
     RuleIDNotFoundOnParsing { pos: CharacterPosition, rule_id: String },
@@ -41,6 +42,7 @@ impl ConsoleLogger for SyntaxParsingLog {
             SyntaxParsingLog::GenericsArgumentIDNotFound { arg_id } => log!(Error, Translator::GenericsArgumentIDNotFound { arg_id: arg_id.clone() }),
             SyntaxParsingLog::LoopRangeIsInvalidOnParsing { loop_range } => log!(Error, Translator::LoopRangeIsInvalidOnParsing { loop_range: loop_range.clone() }),
             SyntaxParsingLog::ParsingFailedAtRule { pos, rule_id, rule_stack } => log!(Error, Translator::ParsingFailedAtRule { rule_id: rule_id.clone() }, Translator::AtDescription { pos: pos.clone() }, Translator::RawDescription { msg: rule_stack.iter().map(|(each_pos, each_rule_id)| format!("\n\t\t{} at {}", each_rule_id, each_pos)).collect::<Vec<String>>().join("") }),
+            SyntaxParsingLog::PrimitiveRuleNoskipSpecifiedWithoutSkipingRules { pos } => log!(Error, Translator::PrimitiveRuleNoskipSpecifiedWithoutSkipingRules, Translator::AtDescription { pos: pos.clone() }),
             SyntaxParsingLog::PrimitiveRuleUncovered { pos, rule_name } => log!(Error, Translator::PrimitiveRuleUncovered { rule_name: rule_name.clone() }, Translator::AtDescription { pos: pos.clone() }),
             SyntaxParsingLog::RepetitionExceededLoopLimit { loop_limit } => log!(Error, Translator::RepetitionExceededLoopLimit { loop_limit: *loop_limit }),
             SyntaxParsingLog::RuleIDNotFoundOnParsing { pos, rule_id } => log!(Error, Translator::RuleIDNotFoundOnParsing { rule_id: rule_id.clone() }, Translator::AtDescription { pos: pos.clone() }),
@@ -121,6 +123,8 @@ pub struct SyntaxParser {
     enable_memoization: bool,
     // spec: スキッピング規則のパースをしているかどうか
     is_skipping_now: bool,
+    // spec: NOSKIP プリミティブ規則の後ろ側のスキッピングを防止するフラグ
+    is_skipped_by_noskip_once: bool,
     skipping_stack: Vec<Vec<String>>,
 }
 
@@ -141,6 +145,7 @@ impl SyntaxParser {
             memoized_map: Box::new(MemoizationMap::new()),
             enable_memoization: enable_memoization,
             is_skipping_now: false,
+            is_skipped_by_noskip_once: false,
             skipping_stack: Vec::new(),
         };
 
@@ -624,8 +629,51 @@ impl SyntaxParser {
             return Ok(SyntaxParsingResult::Fail);
         }
 
+        // note: NOSKIP プリミティブ規則
+        let is_no_skipping_specified = match &expr.kind {
+            RuleExpressionKind::IdWithArgs { generics_args, template_args } => {
+                if expr.value == "NOSKIP" {
+                    if generics_args.len() != 0 {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::ExpectedGenericsArgumentsProvided {
+                            pos: expr.pos.clone(),
+                            unexpected_len: generics_args.len(),
+                            expected_len: 0,
+                        }.get_log());
+
+                        return Err(());
+                    }
+
+                    if template_args.len() != 0 {
+                        self.cons.borrow_mut().append_log(SyntaxParsingLog::ExpectedTemplateArgumentsProvided {
+                            pos: expr.pos.clone(),
+                            unexpected_len: template_args.len(),
+                            expected_len: 0,
+                        }.get_log());
+
+                        return Err(());
+                    }
+
+                    for each_tar_id in &self.skipping_stack {
+                        if each_tar_id.len() == 0 {
+                            self.cons.borrow_mut().append_log(SyntaxParsingLog::PrimitiveRuleNoskipSpecifiedWithoutSkipingRules {
+                                pos: expr.pos.clone(),
+                            }.get_log());
+
+                            return Err(());
+                        }
+                    }
+
+                    self.is_skipped_by_noskip_once = true;
+                    true
+                } else {
+                    false
+                }
+            },
+            _ => false,
+        };
+
         // note: 無限再帰防止のためスキッピング時は無視
-        if !self.is_skipping_now {
+        if !self.is_skipping_now && !is_no_skipping_specified && !self.is_skipped_by_noskip_once {
             self.is_skipping_now = true;
 
             for each_tar_id in self.skipping_stack[self.skipping_stack.len() - 1].clone() {
@@ -633,6 +681,10 @@ impl SyntaxParser {
             }
 
             self.is_skipping_now = false;
+        }
+
+        if !self.is_skipping_now && !is_no_skipping_specified && self.is_skipped_by_noskip_once {
+            self.is_skipped_by_noskip_once = false;
         }
 
         match &expr.kind {
@@ -767,6 +819,8 @@ impl SyntaxParser {
                             },
                         }
                     },
+                    // note: スキッピング省略時に処理済み
+                    "NOSKIP" => return Ok(SyntaxParsingResult::Success(Vec::new())),
                     _ => {
                         if PRIMITIVE_RULE_NAMES.contains(&rule_id.as_str()) {
                             self.cons.borrow_mut().append_log(SyntaxParsingLog::PrimitiveRuleUncovered {
