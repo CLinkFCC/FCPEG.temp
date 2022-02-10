@@ -56,7 +56,7 @@ impl ConsoleLogTranslator for Translator {
 
 fn main() {
     let cmd: MainCommand = argh::from_env();
-    let cons = Console::new("jaa".to_string(), ConsoleLogLimit::NoLimit);
+    let cons = Console::new("ja".to_string(), ConsoleLogLimit::NoLimit);
 
     match cmd.subcmd {
         Subcommand::Manual(subcmd) => spawn(move || proc_manual_subcommand(&subcmd, cons)).join().unwrap(),

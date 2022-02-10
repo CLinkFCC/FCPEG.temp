@@ -210,7 +210,9 @@ impl SyntaxParser {
             },
         };
 
-        self.rule_stack.push((self.get_char_position(), rule_id.clone()));
+        if !self.is_skipping_now {
+            self.rule_stack.push((self.get_char_position(), rule_id.clone()));
+        }
 
         return match self.parse_group(&rule_group.elem_order, &rule_group)? {
             SyntaxParsingResult::Success(v) => {
@@ -232,7 +234,10 @@ impl SyntaxParser {
                     _ => (),
                 };
 
-                self.rule_stack.pop().unwrap();
+                if !self.is_skipping_now {
+                    self.rule_stack.pop().unwrap();
+                }
+
                 self.skipping_stack.pop();
 
                 let new_node = SyntaxNodeChild::from_node_args(v, ast_reflection_style);
