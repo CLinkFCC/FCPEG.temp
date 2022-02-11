@@ -1,6 +1,6 @@
 [package]
 name = "rust_cmd"
-version = "0.1.0"
+version = "1.2.0-alpha+0"
 authors = ["Garnet3106 <manage@gant.work>"]
 edition = "2018"
 
