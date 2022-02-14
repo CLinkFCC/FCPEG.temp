@@ -516,7 +516,7 @@ impl Display for RuleExpression {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let loop_text = self.loop_range.to_string(true, "", "{", ",", "}");
         let value_text = match self.kind.clone() {
-            RuleExpressionKind::ArgId => format!("${}", self.value),
+            RuleExpressionKind::ArgId => self.value.clone(),
             RuleExpressionKind::CharClass => self.value.clone(),
             RuleExpressionKind::Id => self.value.clone(),
             RuleExpressionKind::IdWithArgs { generics_args, template_args } => {

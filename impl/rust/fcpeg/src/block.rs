@@ -215,6 +215,7 @@ pub struct BlockParser {
     // note: <ブロックエイリアス名, ブロック ID>
     block_alias_map: HashMap<String, String>,
     block_id_map: Vec::<String>,
+    rule_name: String,
     file_path: String,
     file_content: Box<String>,
 }
@@ -245,6 +246,7 @@ impl BlockParser {
                 block_attr_map: AttributeMap::new(),
                 block_alias_map: HashMap::new(),
                 block_id_map: block_id_map,
+                rule_name: String::new(),
                 file_path: fcpeg_file.file_path.clone(),
                 file_content: fcpeg_file.file_content.clone(),
             };
@@ -529,7 +531,9 @@ impl BlockParser {
 
         let (rule_name, rule_pos) = match cmd_node.find_first_child_node(vec![id_node_name]) {
             Some(id_node) => {
-                (id_node.join_child_leaf_values(), id_node.get_position(Some(self.cons.clone()))?)
+                let rule_name = id_node.join_child_leaf_values();
+                self.rule_name = rule_name.clone();
+                (rule_name, id_node.get_position(Some(self.cons.clone()))?)
             },
             None => {
                 self.cons.borrow_mut().append_log(BlockParsingLog::NodeExpectedToBeName {
@@ -563,18 +567,18 @@ impl BlockParser {
             skipping_tar_ids
         };
 
-        let generics_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenerics"]) {
-            Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
+        let generics_arg_ids = match cmd_node.find_first_child_node(vec![".Block.DefineCmdGenerics"]) {
+            Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node, rule_name.clone())?,
             None => Vec::new(),
         };
 
-        let template_args = match cmd_node.find_first_child_node(vec![".Block.DefineCmdTemplate"]) {
-            Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node)?,
+        let template_arg_ids = match cmd_node.find_first_child_node(vec![".Block.DefineCmdTemplate"]) {
+            Some(generics_ids_node) => self.to_define_cmd_arg_ids(generics_ids_node, rule_name.clone())?,
             None => Vec::new(),
         };
 
         let new_choice = match cmd_node.find_first_child_node(vec![".Rule.PureChoice"]) {
-            Some(choice_node) => Box::new(self.to_rule_choice_elem(choice_node, &generics_args)?),
+            Some(choice_node) => Box::new(self.to_rule_choice_elem(choice_node, &generics_arg_ids)?),
             None => {
                 self.cons.borrow_mut().append_log(BlockParsingLog::ChildNodeInNodeUnexpectedExpected {
                     parent_node_uuid: cmd_node.uuid.clone(),
@@ -587,27 +591,27 @@ impl BlockParser {
         };
 
         let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name, &rule_name);
-        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_args, template_args, skipping_tar_ids, new_choice);
+        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_arg_ids, template_arg_ids, skipping_tar_ids, new_choice);
         return Ok(BlockCommand::Define { pos: rule_pos, rule: rule, attr_map: attr_map });
     }
 
-    fn to_define_cmd_arg_ids(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<Vec<String>> {
+    fn to_define_cmd_arg_ids(&mut self, cmd_node: &SyntaxNode, rule_name: String) -> ConsoleResult<Vec<String>> {
         let mut args = Vec::<String>::new();
 
         for each_elem in &cmd_node.subelems {
             match each_elem {
                 SyntaxNodeChild::Node(each_node) => {
                     if each_node.ast_reflection_style == ASTReflectionStyle::Reflection(".Rule.ArgID".to_string()) {
-                        let new_arg = each_node.join_child_leaf_values();
+                        let new_arg_id = each_node.join_child_leaf_values();
 
-                        if args.contains(&new_arg) {
+                        if args.contains(&new_arg_id) {
                             self.cons.borrow_mut().append_log(BlockParsingLog::ArgumentIDIsDuplicate {
                                 pos: each_node.get_position(Some(self.cons.clone()))?,
-                                arg_id: new_arg.clone(),
+                                arg_id: new_arg_id.clone(),
                             }.get_log());
                         }
 
-                        args.push(new_arg);
+                        args.push(self.to_argument_id(rule_name.clone(), new_arg_id));
                     }
                 },
                 _ => (),
@@ -1176,7 +1180,7 @@ impl BlockParser {
         let (pos, kind, value) = match &expr_child_node.ast_reflection_style {
             ASTReflectionStyle::Reflection(name) => {
                 match name.as_str() {
-                    ".Rule.ArgID" => (expr_child_node.get_position(Some(self.cons.clone()))?, RuleExpressionKind::ArgId, expr_child_node.join_child_leaf_values()),
+                    ".Rule.ArgID" => (expr_child_node.get_position(Some(self.cons.clone()))?, RuleExpressionKind::ArgId, self.to_argument_id(self.rule_name.clone(), expr_child_node.join_child_leaf_values())),
                     ".Rule.CharClass" => (expr_child_node.get_position(Some(self.cons.clone()))?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
                     ".Rule.ID" => {
                         let chain_id_node = expr_child_node.get_node_child_at(self.cons.clone(), 0)?;
@@ -1254,6 +1258,10 @@ impl BlockParser {
 
         let expr = RuleExpression::new(pos, kind, value);
         return Ok(expr);
+    }
+
+    fn to_argument_id(&self, rule_name: String, arg_name: String) -> String {
+        return format!("{}.{}.{}.${}", self.file_alias_name, self.block_name, rule_name, arg_name);
     }
 
     fn to_string_vec(cons: Rc<RefCell<Console>>, str_vec_node: &SyntaxNode) -> ConsoleResult<Vec<String>> {
