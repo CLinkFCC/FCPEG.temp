@@ -150,7 +150,7 @@ fn proc_manual_subcommand(_: &ManualSubcommand, cons: Console) {
     );
 
     cons_ptr.borrow_mut().append_log(log);
-    cons_ptr.borrow().print_all();
+    output_console(&mut cons_ptr.borrow_mut());
 }
 
 fn parse(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, output_tree: bool, count_duration: bool, disable_opt: bool) {
@@ -160,8 +160,7 @@ fn parse(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: S
     let mut parser = match FCPEGParser::load(cons.clone(), fcpeg_file_path, HashMap::<String, String>::new(), !disable_opt) {
         Ok(v) => v,
         Err(()) => {
-            cons.borrow().print_all();
-            cons.borrow_mut().clear();
+            output_console(&mut cons.borrow_mut());
 
             println!("--- Error End ---");
             println!();
@@ -173,8 +172,7 @@ fn parse(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: S
     let tree = match parser.parse(input_file_path.clone()) {
         Ok(v) => v,
         Err(()) => {
-            cons.borrow().print_all();
-            cons.borrow_mut().clear();
+            output_console(&mut cons.borrow_mut());
 
             println!("--- Error End ---");
             println!();
@@ -198,8 +196,7 @@ fn parse(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: S
         println!();
     }
 
-    cons.borrow().print_all();
-    cons.borrow_mut().clear();
+    output_console(&mut cons.borrow_mut());
 
     println!("--- End ---");
     println!();
@@ -238,6 +235,15 @@ fn parse_with_monitoring(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, in
     }
 
     return Ok(());
+}
+
+fn output_console(cons: &mut Console) {
+    cons.output(vec![
+        LogFile::new(LogFileKind::ConsoleLogs, "consout.log".to_string()),
+        LogFile::new(LogFileKind::TextLines(vec!["a".to_string(), "b".to_string()]), "out.log".to_string()),
+    ]);
+
+    cons.clear();
 }
 
 struct FileChangeDetector {
