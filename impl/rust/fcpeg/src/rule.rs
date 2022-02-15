@@ -376,7 +376,7 @@ impl Display for ElementOrder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum RuleElement {
     Group(Box<RuleGroup>),
     Expression(Box<RuleExpression>),
@@ -408,7 +408,7 @@ impl Display for RuleGroupKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct RuleGroup {
     pub uuid: Uuid,
     pub kind: RuleGroupKind,
@@ -464,7 +464,7 @@ impl Display for RuleGroup {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum RuleExpressionKind {
     ArgId,
     CharClass,
@@ -489,7 +489,7 @@ impl Display for RuleExpressionKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct RuleExpression {
     pub pos: CharacterPosition,
     pub kind: RuleExpressionKind,

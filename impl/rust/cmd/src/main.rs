@@ -162,8 +162,7 @@ fn proc_manual_subcommand(_: &ManualSubcommand, cons: Console) {
 
 fn parse(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, input_file_path: String, output_tree: bool, output_log_files: bool, count_duration: bool, disable_opt: bool) {
     let start_count = Instant::now();
-    // let mut file_alias_map = HashMap::<String, String>::new();
-    // file_alias_map.insert("A".to_string(), "src/a.fcpeg".to_string());
+
     let mut parser = match FCPEGParser::load(cons.clone(), fcpeg_file_path, HashMap::<String, String>::new(), !disable_opt) {
         Ok(v) => v,
         Err(()) => {

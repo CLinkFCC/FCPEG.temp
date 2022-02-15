@@ -52,6 +52,7 @@ impl ConsoleLogger for SyntaxParsingLog {
     }
 }
 
+#[derive(Clone)]
 pub struct ArgumentMap {
     generics_group_map: HashMap<String, Box<RuleGroup>>,
     template_group_map: HashMap<String, Box<RuleGroup>>,
@@ -317,7 +318,13 @@ impl SyntaxParser {
             match self.memoized_map.find(&group.uuid, self.src_i) {
                 Some((src_len, result)) => {
                     self.src_i += src_len;
-                    return Ok(result);
+
+                    let new_result = match &result.kind {
+                        SyntaxParsingResultKind::Success(node_children) => SyntaxParsingResult::success(node_children.clone(), "[memoized]".to_string(), vec![result]),
+                        SyntaxParsingResultKind::Failure => SyntaxParsingResult::failure("[memoized]".to_string(), vec![result]),
+                    };
+
+                    return Ok(new_result);
                 },
                 None => (),
             }
@@ -327,7 +334,9 @@ impl SyntaxParser {
         let result = self.parse_lookahead_group(parent_elem_order, group)?;
 
         if self.enable_memoization {
-            if self.src_i != tmp_i {
+            // note: 実引数をメモ化から除外する
+            // fix: 実引数のメモ化手法
+            if self.src_i != tmp_i && !SyntaxParser::has_argument_in_group(group) {
                 self.memoized_map.push(group.uuid.clone(), tmp_i, self.src_i - tmp_i, result.clone());
             }
         }
@@ -509,7 +518,7 @@ impl SyntaxParser {
         };
     }
 
-    // fix: parse_sequential_group に解明
+    // fix: parse_sequential_group に改名?
     fn parse_raw_group(&mut self, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult> {
         let mut parsing_results = Vec::<SyntaxParsingResult>::new();
         let mut children = Vec::<SyntaxNodeChild>::new();
@@ -594,6 +603,7 @@ impl SyntaxParser {
                                 },
                                 SyntaxParsingResultKind::Failure => {
                                     self.src_i = start_src_i;
+                                    parsing_results.push(SyntaxParsingResult::failure(each_group.to_string(), vec![result]));
                                     return Ok(SyntaxParsingResult::failure(group.to_string(), parsing_results));
                                 },
                             }
@@ -617,7 +627,8 @@ impl SyntaxParser {
                         },
                         SyntaxParsingResultKind::Failure => {
                             self.src_i = start_src_i;
-                            return Ok(SyntaxParsingResult::failure(each_expr.to_string(), parsing_results));
+                            parsing_results.push(SyntaxParsingResult::failure(each_expr.to_string(), vec![result]));
+                            return Ok(SyntaxParsingResult::failure(group.to_string(), parsing_results));
                         },
                     }
                 }
@@ -693,6 +704,8 @@ impl SyntaxParser {
                     }
                 },
                 SyntaxParsingResultKind::Failure => {
+                    parsing_results.push(SyntaxParsingResult::failure(expr.to_string(), vec![result]));
+
                     return if loop_count >= min_count && (max_count == -1 || loop_count as isize <= max_count) {
                         Ok(SyntaxParsingResult::success(children, expr.to_string(), parsing_results))
                     } else {
@@ -1055,7 +1068,7 @@ impl SyntaxParser {
     fn parse_id_expr(&mut self, expr: &Box<RuleExpression>) -> ConsoleResult<SyntaxParsingResult> {
         let result = self.parse_rule(&expr.value, &expr.pos)?;
 
-        match &result.kind {
+        return match &result.kind {
             SyntaxParsingResultKind::Success(node_children) => {
                 let conv_node_children = match &node_children.get(0).unwrap() {
                     SyntaxNodeChild::Node(node) => {
@@ -1086,12 +1099,27 @@ impl SyntaxParser {
                     SyntaxNodeChild::Leaf(_) => node_children.clone(),
                 };
 
-                return Ok(SyntaxParsingResult::success(conv_node_children, expr.to_string(), vec![result]));
+                Ok(SyntaxParsingResult::success(conv_node_children, expr.to_string(), vec![result]))
             },
             SyntaxParsingResultKind::Failure => {
-                return Ok(SyntaxParsingResult::failure(expr.to_string(), vec![result]));
+                Ok(SyntaxParsingResult::failure(expr.to_string(), vec![result]))
             },
         };
+    }
+
+    fn has_argument_in_group(group: &Box<RuleGroup>) -> bool {
+        for each_child in &group.subelems {
+            let has_arg = match each_child {
+                RuleElement::Group(each_group) => SyntaxParser::has_argument_in_group(each_group),
+                RuleElement::Expression(each_expr) => each_expr.kind == RuleExpressionKind::ArgId,
+            };
+
+            if has_arg {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     fn substring_src_content(&self, start_i: usize, len: usize) -> String {
