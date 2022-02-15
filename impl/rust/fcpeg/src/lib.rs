@@ -40,16 +40,20 @@ impl FCPEGParser {
         return Ok(parser);
     }
 
-    pub fn parse(&mut self, input_file_path: String) -> ConsoleResult<SyntaxTree> {
+    pub fn parse(&mut self, input_file_path: String) -> (ConsoleResult<SyntaxTree>, Option<SyntaxParsingResult>) {
         let input_file_content = match FileMan::read_all(&input_file_path) {
             Ok(v) => Box::new(v),
             Err(e) => {
                 self.cons.borrow_mut().append_log(e.get_log());
-                return Err(());
+                return (Err(()), None);
             },
         };
 
-        let tree = SyntaxParser::parse(self.cons.clone(), self.rule_map.clone(), input_file_path, input_file_content, self.enable_memoization)?;
-        return Ok(tree);
+        let result = SyntaxParser::parse(self.cons.clone(), self.rule_map.clone(), input_file_path, input_file_content, self.enable_memoization);
+
+        return match result.0 {
+            Ok(v) => (Ok(v), result.1),
+            Err(()) => (Err(()), result.1),
+        };
     }
 }

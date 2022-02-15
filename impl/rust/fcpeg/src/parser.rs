@@ -133,19 +133,18 @@ impl SyntaxParsingResult {
         return self.kind.is_successful();
     }
 
-    pub fn print(&self) {
-        let lines = self.to_string_lines(0);
-        println!("{}", lines.join("\n"));
+    pub fn to_string_lines(&self) -> Box<Vec<String>> {
+        return self.to_string_lines_with_indent(0);
     }
 
-    fn to_string_lines(&self, indent_count: usize) -> Box<Vec<String>> {
+    fn to_string_lines_with_indent(&self, indent_count: usize) -> Box<Vec<String>> {
         let mut lines = Box::new(Vec::<String>::new());
         let result_txt = if self.kind.is_successful() { "ok" } else { "no" };
         let txt = format!("{}[{}] {}", "  ".repeat(indent_count), result_txt, self.parsed_elem);
         lines.push(txt.to_string());
 
         for each_child in &*self.children {
-            let mut child_lines = each_child.to_string_lines(indent_count + 1);
+            let mut child_lines = each_child.to_string_lines_with_indent(indent_count + 1);
             lines.append(&mut child_lines);
         }
 
@@ -177,7 +176,7 @@ pub struct SyntaxParser {
 }
 
 impl SyntaxParser {
-    pub fn parse(cons: Rc<RefCell<Console>>, rule_map: Arc<Box<RuleMap>>, src_path: String, src_content: Box<String>, enable_memoization: bool) -> ConsoleResult<SyntaxTree> {
+    pub fn parse(cons: Rc<RefCell<Console>>, rule_map: Arc<Box<RuleMap>>, src_path: String, src_content: Box<String>, enable_memoization: bool) -> (ConsoleResult<SyntaxTree>, Option<SyntaxParsingResult>) {
         let mut parser = SyntaxParser {
             cons: cons,
             rule_map: rule_map,
@@ -213,13 +212,18 @@ impl SyntaxParser {
         let start_rule_id = parser.rule_map.start_rule_id.clone();
 
         if parser.src_content.chars().count() == 0 {
-            return Ok(SyntaxTree::from_node_child_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
+            let result = Ok(SyntaxTree::from_node_child_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
+            return (result, None);
         }
 
         let start_rule_pos = parser.rule_map.start_rule_pos.clone();
-        let parsing_result = parser.parse_rule(&start_rule_id, &start_rule_pos)?;
 
-        let mut root_node = match parsing_result.kind {
+        let parsing_result = match parser.parse_rule(&start_rule_id, &start_rule_pos) {
+            Ok(v) => v,
+            Err(()) => return (Err(()), None),
+        };
+
+        let mut root_node = match &parsing_result.kind {
             SyntaxParsingResultKind::Success(children) => children.get(0).unwrap().clone(),
             SyntaxParsingResultKind::Failure => {
                 parser.cons.borrow_mut().append_log(SyntaxParsingLog::ParsingFailedAtRule {
@@ -228,7 +232,7 @@ impl SyntaxParser {
                     rule_stack: *parser.rule_stack.clone(),
                 }.get_log());
 
-                return Err(());
+                return (Err(()), Some(parsing_result));
             },
         };
 
@@ -243,10 +247,11 @@ impl SyntaxParser {
                 rule_stack: *parser.rule_stack.clone(),
             }.get_log());
 
-            return Err(());
+            return (Err(()), Some(parsing_result));
         }
 
-        return Ok(SyntaxTree::from_node_child(root_node));
+        let result = Ok(SyntaxTree::from_node_child(root_node));
+        return (result, Some(parsing_result));
     }
 
     fn parse_rule(&mut self, rule_id: &String, pos: &CharacterPosition) -> ConsoleResult<SyntaxParsingResult> {
