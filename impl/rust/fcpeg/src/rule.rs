@@ -1,5 +1,6 @@
 use std::collections::*;
 use std::fmt::*;
+use std::rc::Rc;
 
 use crate::tree::*;
 
@@ -191,11 +192,11 @@ pub struct Rule {
     pub generics_arg_ids: Vec<String>,
     pub template_arg_ids: Vec<String>,
     pub skipping_tar_ids: Vec<RuleId>,
-    pub group: Box<RuleGroup>,
+    pub group: Rc<Box<RuleGroup>>,
 }
 
 impl Rule {
-    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, template_arg_ids: Vec<String>, skipping_tar_ids: Vec<RuleId>, group: Box<RuleGroup>) -> Rule {
+    pub fn new(pos: CharacterPosition, id: String, name: String, generics_arg_ids: Vec<String>, template_arg_ids: Vec<String>, skipping_tar_ids: Vec<RuleId>, group: Rc<Box<RuleGroup>>) -> Rule {
         return Rule {
             pos: pos,
             id: id,
@@ -378,7 +379,7 @@ impl Display for ElementOrder {
 
 #[derive(Clone, PartialEq)]
 pub enum RuleElement {
-    Group(Box<RuleGroup>),
+    Group(Rc<Box<RuleGroup>>),
     Expression(Box<RuleExpression>),
 }
 
@@ -469,7 +470,7 @@ pub enum RuleExpressionKind {
     ArgId,
     CharClass,
     Id,
-    IdWithArgs { generics_args: Vec<Box<RuleGroup>>, template_args: Vec<Box<RuleGroup>> },
+    IdWithArgs { generics_args: Vec<Rc<Box<RuleGroup>>>, template_args: Vec<Rc<Box<RuleGroup>>> },
     String,
     Wildcard,
 }

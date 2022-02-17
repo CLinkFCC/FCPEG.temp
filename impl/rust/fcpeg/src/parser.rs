@@ -54,8 +54,8 @@ impl ConsoleLogger for SyntaxParsingLog {
 
 #[derive(Clone)]
 pub struct ArgumentMap {
-    generics_group_map: HashMap<String, Box<RuleGroup>>,
-    template_group_map: HashMap<String, Box<RuleGroup>>,
+    generics_group_map: HashMap<String, Rc<Box<RuleGroup>>>,
+    template_group_map: HashMap<String, Rc<Box<RuleGroup>>>,
 }
 
 impl ArgumentMap {
@@ -313,7 +313,7 @@ impl SyntaxParser {
         }
     }
 
-    fn parse_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult> {
+    fn parse_group(&mut self, parent_elem_order: &ElementOrder, group: &Rc<Box<RuleGroup>>) -> ConsoleResult<SyntaxParsingResult> {
         if self.enable_memoization {
             match self.memoized_map.find(&group.uuid, self.src_i) {
                 Some((src_len, result)) => {
@@ -344,7 +344,7 @@ impl SyntaxParser {
         return Ok(result);
     }
 
-    fn parse_lookahead_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult> {
+    fn parse_lookahead_group(&mut self, parent_elem_order: &ElementOrder, group: &Rc<Box<RuleGroup>>) -> ConsoleResult<SyntaxParsingResult> {
         return if group.lookahead_kind.is_none() {
             self.parse_loop_group(parent_elem_order, group)
         } else {
@@ -362,7 +362,7 @@ impl SyntaxParser {
         };
     }
 
-    fn parse_loop_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult> {
+    fn parse_loop_group(&mut self, parent_elem_order: &ElementOrder, group: &Rc<Box<RuleGroup>>) -> ConsoleResult<SyntaxParsingResult> {
         let (min_count, max_count) = group.loop_range.to_tuple();
 
         if max_count != -1 && min_count as isize > max_count {
@@ -427,7 +427,7 @@ impl SyntaxParser {
         }
     }
 
-    fn parse_element_order_group(&mut self, parent_elem_order: &ElementOrder, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult> {
+    fn parse_element_order_group(&mut self, parent_elem_order: &ElementOrder, group: &Rc<Box<RuleGroup>>) -> ConsoleResult<SyntaxParsingResult> {
         let mut parsing_results = Vec::<SyntaxParsingResult>::new();
         let mut children = Vec::<SyntaxNodeChild>::new();
 
@@ -466,9 +466,11 @@ impl SyntaxParser {
                     for subelem in tar_elems {
                         match subelem {
                             RuleElement::Group(subgroup) => {
-                                let mut conved_subgroup = subgroup.clone();
+                                // fix: クローンを除去
+                                let mut conved_subgroup = (**subgroup).clone();
                                 conved_subgroup.loop_range = random_order_loop_range.clone();
-                                let result = self.parse_group(&ElementOrder::Sequential, &conved_subgroup)?;
+                                let conved_subgroup_txt = conved_subgroup.to_string();
+                                let result = self.parse_group(&ElementOrder::Sequential, &Rc::new(conved_subgroup))?;
 
                                 match &result.kind {
                                     SyntaxParsingResultKind::Success(node_children) => {
@@ -489,12 +491,12 @@ impl SyntaxParser {
                                         }
 
                                         subgroup_matching_list[subgroup_i] = true;
-                                        parsing_results.push(SyntaxParsingResult::success(Vec::new(), conved_subgroup.to_string(), vec![result]));
+                                        parsing_results.push(SyntaxParsingResult::success(Vec::new(), conved_subgroup_txt, vec![result]));
                                         break;
                                     },
                                     SyntaxParsingResultKind::Failure => {
                                         self.src_i = elem_start_src_i;
-                                        parsing_results.push(SyntaxParsingResult::failure(conved_subgroup.to_string(), vec![result]));
+                                        parsing_results.push(SyntaxParsingResult::failure(conved_subgroup_txt, vec![result]));
                                     },
                                 }
                             },
@@ -519,7 +521,7 @@ impl SyntaxParser {
     }
 
     // fix: parse_sequential_group に改名?
-    fn parse_raw_group(&mut self, group: &Box<RuleGroup>) -> ConsoleResult<SyntaxParsingResult> {
+    fn parse_raw_group(&mut self, group: &Rc<Box<RuleGroup>>) -> ConsoleResult<SyntaxParsingResult> {
         let mut parsing_results = Vec::<SyntaxParsingResult>::new();
         let mut children = Vec::<SyntaxNodeChild>::new();
 
@@ -801,7 +803,7 @@ impl SyntaxParser {
 
         match &expr.kind {
             RuleExpressionKind::ArgId => {
-                let mut generics_group = Option::<Box<RuleGroup>>::None;
+                let mut generics_group = Option::<Rc<Box<RuleGroup>>>::None;
 
                 for each_arg_map in self.arg_maps.iter().rev() {
                     match each_arg_map.generics_group_map.get(&expr.value) {
@@ -1107,7 +1109,7 @@ impl SyntaxParser {
         };
     }
 
-    fn has_argument_in_group(group: &Box<RuleGroup>) -> bool {
+    fn has_argument_in_group(group: &Rc<Box<RuleGroup>>) -> bool {
         for each_child in &group.subelems {
             let has_arg = match each_child {
                 RuleElement::Group(each_group) => SyntaxParser::has_argument_in_group(each_group),

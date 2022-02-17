@@ -50,7 +50,7 @@ macro_rules! rule {
             root_group.subelems = subelems;
             root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
 
-            let rule = Rule::new(CharacterPosition::get_empty(), $rule_id.to_string(), String::new(), Vec::new(), Vec::new(), Vec::new(), root_group);
+            let rule = Rule::new(CharacterPosition::get_empty(), $rule_id.to_string(), String::new(), Vec::new(), Vec::new(), Vec::new(), Rc::new(root_group));
             BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule, attr_map: AttributeMap::new() }
         }
     };
@@ -77,7 +77,7 @@ macro_rules! group {
                 }
             }
 
-            RuleElement::Group(Box::new(group))
+            RuleElement::Group(Rc::new(Box::new(group)))
         }
     };
 }
@@ -591,7 +591,7 @@ impl BlockParser {
         };
 
         let rule_id = BlockParser::to_rule_id_from_elements(&self.replaced_file_alias_names, &self.file_alias_name, &self.block_name, &rule_name);
-        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_arg_ids, template_arg_ids, skipping_tar_ids, new_choice);
+        let rule = Rule::new(rule_pos.clone(), rule_id, rule_name, generics_arg_ids, template_arg_ids, skipping_tar_ids, Rc::new(new_choice));
         return Ok(BlockCommand::Define { pos: rule_pos, rule: rule, attr_map: attr_map });
     }
 
@@ -1015,7 +1015,7 @@ impl BlockParser {
                             new_choice.lookahead_kind = lookahead_kind;
                             new_choice.loop_range = loop_range;
                             new_choice.elem_order = elem_order;
-                            RuleElement::Group(new_choice)
+                            RuleElement::Group(Rc::new(new_choice))
                         },
                         ".Rule.Expr" => {
                             if elem_order.is_random() {
@@ -1059,7 +1059,7 @@ impl BlockParser {
 
         let mut seq = Box::new(RuleGroup::new(RuleGroupKind::Sequence));
         seq.subelems = children;
-        return Ok(RuleElement::Group(seq));
+        return Ok(RuleElement::Group(Rc::new(seq)));
     }
 
     fn to_raw_range(&mut self, range_node: &SyntaxNode) -> ConsoleResult<RawRange> {
@@ -1170,7 +1170,7 @@ impl BlockParser {
         group.subelems = children;
 
         let mut tmp_root_group = RuleGroup::new(RuleGroupKind::Sequence);
-        tmp_root_group.subelems = vec![RuleElement::Group(group)];
+        tmp_root_group.subelems = vec![RuleElement::Group(Rc::new(group))];
 
         return Ok(tmp_root_group);
     }
@@ -1189,7 +1189,7 @@ impl BlockParser {
 
                         let new_generics_args = match expr_child_node.find_first_child_node(vec![".Rule.Generics"]) {
                             Some(generics_node) => {
-                                let mut args = Vec::<Box<RuleGroup>>::new();
+                                let mut args = Vec::<Rc<Box<RuleGroup>>>::new();
 
                                 for seq_node in generics_node.find_child_nodes(vec![".Rule.Seq"]) {
                                     match self.to_seq_elem(seq_node, generics_args)? {
@@ -1205,7 +1205,7 @@ impl BlockParser {
 
                         let new_template_args = match expr_child_node.find_first_child_node(vec![".Rule.Template"]) {
                             Some(template_node) => {
-                                let mut args = Vec::<Box<RuleGroup>>::new();
+                                let mut args = Vec::<Rc<Box<RuleGroup>>>::new();
 
                                 for seq_node in template_node.find_child_nodes(vec![".Rule.Seq"]) {
                                     match self.to_seq_elem(seq_node, generics_args)? {
