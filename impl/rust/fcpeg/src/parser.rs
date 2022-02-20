@@ -213,7 +213,7 @@ impl SyntaxParser {
         let start_rule_id = parser.rule_map.start_rule_id.clone();
 
         if parser.src_content.chars().count() == 0 {
-            let result = Ok(SyntaxTree::from_node_child_args(Vec::new(), ASTReflectionStyle::Reflection(String::new())));
+            let result = Ok(SyntaxTree::from_node_child_args(Vec::new(), AstReflectionStyle::Reflection(String::new())));
             return (result, None);
         }
 
@@ -238,7 +238,7 @@ impl SyntaxParser {
         };
 
         // note: ルートは常に Reflectable
-        root_node.set_ast_reflection_style(ASTReflectionStyle::Reflection(start_rule_id.clone()));
+        root_node.set_ast_reflection_style(AstReflectionStyle::Reflection(start_rule_id.clone()));
 
         // note: 入力位置が length を超えると失敗
         if parser.src_i < parser.src_content.chars().count() {
@@ -290,9 +290,9 @@ impl SyntaxParser {
                 };
 
                 match &ast_reflection_style {
-                    ASTReflectionStyle::Reflection(elem_name) if *elem_name == String::new() => {
+                    AstReflectionStyle::Reflection(elem_name) if *elem_name == String::new() => {
                         // todo: 構成ファイルを ASTReflection に反映
-                        ast_reflection_style = ASTReflectionStyle::from_config(false, true, rule_id.clone());
+                        ast_reflection_style = AstReflectionStyle::from_config(false, true, rule_id.clone());
                     },
                     _ => (),
                 };
@@ -1075,14 +1075,14 @@ impl SyntaxParser {
                 let conv_node_children = match &node_children.get(0).unwrap() {
                     SyntaxNodeChild::Node(node) => {
                         let sub_ast_reflection_style = match &expr.ast_reflection_style {
-                            ASTReflectionStyle::Reflection(elem_name) => {
+                            AstReflectionStyle::Reflection(elem_name) => {
                                 let conv_elem_name = if elem_name == "" {
                                     expr.value.clone()
                                 } else {
                                     elem_name.clone()
                                 };
 
-                                ASTReflectionStyle::Reflection(conv_elem_name)
+                                AstReflectionStyle::Reflection(conv_elem_name)
                             },
                             _ => expr.ast_reflection_style.clone(),
                         };

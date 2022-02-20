@@ -414,7 +414,7 @@ pub struct RuleGroup {
     pub uuid: Uuid,
     pub kind: RuleGroupKind,
     pub subelems: Vec<RuleElement>,
-    pub ast_reflection_style: ASTReflectionStyle,
+    pub ast_reflection_style: AstReflectionStyle,
     pub lookahead_kind: LookaheadKind,
     pub loop_range: LoopRange,
     pub elem_order: ElementOrder,
@@ -428,7 +428,7 @@ impl RuleGroup {
             subelems: Vec::new(),
             lookahead_kind: LookaheadKind::None,
             loop_range: LoopRange::get_single_loop(),
-            ast_reflection_style: ASTReflectionStyle::Reflection(String::new()),
+            ast_reflection_style: AstReflectionStyle::Reflection(String::new()),
             elem_order: ElementOrder::Sequential,
         };
     }
@@ -495,7 +495,7 @@ pub struct RuleExpression {
     pub pos: CharacterPosition,
     pub kind: RuleExpressionKind,
     pub value: String,
-    pub ast_reflection_style: ASTReflectionStyle,
+    pub ast_reflection_style: AstReflectionStyle,
     pub lookahead_kind: LookaheadKind,
     pub loop_range: LoopRange,
 }
@@ -506,7 +506,7 @@ impl RuleExpression {
             pos: pos,
             kind: kind,
             value: value,
-            ast_reflection_style: ASTReflectionStyle::NoReflection,
+            ast_reflection_style: AstReflectionStyle::NoReflection,
             lookahead_kind: LookaheadKind::None,
             loop_range: LoopRange::get_single_loop(),
         }

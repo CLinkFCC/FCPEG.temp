@@ -16,7 +16,7 @@ use cons_util::file::*;
 
 #[derive(Clone, PartialEq)]
 pub enum ConfigurationLog {
-    ASTReflectionStyleIsUnknown { value: String },
+    AstReflectionStyleIsUnknown { value: String },
     EscapeSequenceCharacterIsUnknown { escseq_char: String },
     ExpectedValuesOfPropertyProvided { prop_name: String, unexpected_len: usize, expected_len: usize },
     FileAliasNameIsDuplicate { alias_name: String },
@@ -30,7 +30,7 @@ pub enum ConfigurationLog {
 impl ConsoleLogger for ConfigurationLog {
     fn get_log(&self) -> ConsoleLog {
         return match self {
-            ConfigurationLog::ASTReflectionStyleIsUnknown { value } => log!(Error, Translator::ASTReflectionStyleIsUnknown { value: value.clone() }),
+            ConfigurationLog::AstReflectionStyleIsUnknown { value } => log!(Error, Translator::AstReflectionStyleIsUnknown { value: value.clone() }),
             ConfigurationLog::EscapeSequenceCharacterIsUnknown { escseq_char } => log!(Error, Translator::EscapeSequenceCharacterIsUnknown { escseq_char: escseq_char.clone() }),
             ConfigurationLog::ExpectedValuesOfPropertyProvided { prop_name, unexpected_len, expected_len } => log!(Error, Translator::ExpectedValuesOfPropertyProvided { prop_name: prop_name.clone(), unexpected_len: *unexpected_len, expected_len: *expected_len }),
             ConfigurationLog::FileAliasNameIsDuplicate { alias_name } => log!(Error, Translator::FileAliasNameIsDuplicate { alias_name: alias_name.clone() }),
@@ -222,7 +222,7 @@ impl Configuration {
                         "normal" => false,
                         "reversed" => true,
                         _ => {
-                            cons.borrow_mut().append_log(ConfigurationLog::ASTReflectionStyleIsUnknown {
+                            cons.borrow_mut().append_log(ConfigurationLog::AstReflectionStyleIsUnknown {
                                 value: style.clone(),
                             }.get_log());
 
@@ -333,7 +333,7 @@ impl ConfigurationParser {
             let subitem = prop_item_node.get_node_child_at(self.cons.clone(), 0)?;
 
             match &subitem.ast_reflection_style {
-                ASTReflectionStyle::Reflection(name) => {
+                AstReflectionStyle::Reflection(name) => {
                     match name.as_str() {
                         ".Prop.ChildItem" => {
                             let (key_stack, key, values) = self.to_child_property(subitem)?;

@@ -78,7 +78,7 @@ pub enum Translator {
     ReflectableChildAtInNodeNotFound { parent_node_uuid: Uuid, index: usize },
 
     // note: config logs
-    ASTReflectionStyleIsUnknown { value: String },
+    AstReflectionStyleIsUnknown { value: String },
     // note: ブロックパースログの項目と重複
     // EscapeSequenceCharacterIsUnknown { escseq_char: String },
     ExpectedValuesOfPropertyProvided { prop_name: String, unexpected_len: usize, expected_len: usize },
@@ -302,7 +302,7 @@ impl ConsoleLogTranslator for Translator {
             },
 
             // note: config logs
-            Translator::ASTReflectionStyleIsUnknown { value } => {
+            Translator::AstReflectionStyleIsUnknown { value } => {
                 Language::English => format!("AST reflection style `{}` is unknown", value),
                 Language::Japanese => format!("AST 反映方式 `{}` が不明です", value),
             },

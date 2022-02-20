@@ -72,7 +72,7 @@ impl Display for CharacterPosition {
 }
 
 #[derive(Clone, PartialEq)]
-pub enum ASTReflectionStyle {
+pub enum AstReflectionStyle {
     // note: AST に反映される
     Reflection(String),
     // note: AST に反映されない
@@ -80,39 +80,39 @@ pub enum ASTReflectionStyle {
     Expansion,
 }
 
-impl ASTReflectionStyle {
+impl AstReflectionStyle {
     // todo: config データの扱いを修正
-    pub fn from_config(reverse_ast_reflection: bool, is_reflectable: bool, elem_name: String) -> ASTReflectionStyle {
+    pub fn from_config(reverse_ast_reflection: bool, is_reflectable: bool, elem_name: String) -> AstReflectionStyle {
         return if is_reflectable {
             if reverse_ast_reflection {
-                ASTReflectionStyle::Reflection(elem_name)
+                AstReflectionStyle::Reflection(elem_name)
             } else {
-                ASTReflectionStyle::NoReflection
+                AstReflectionStyle::NoReflection
             }
         } else {
             if reverse_ast_reflection {
-                ASTReflectionStyle::NoReflection
+                AstReflectionStyle::NoReflection
             } else {
-                ASTReflectionStyle::Reflection(elem_name)
+                AstReflectionStyle::Reflection(elem_name)
             }
         }
     }
 
     pub fn is_reflectable(&self) -> bool {
-        return *self != ASTReflectionStyle::NoReflection;
+        return *self != AstReflectionStyle::NoReflection;
     }
 
     pub fn is_expandable(&self) -> bool {
-        return *self == ASTReflectionStyle::Expansion;
+        return *self == AstReflectionStyle::Expansion;
     }
 }
 
-impl Display for ASTReflectionStyle {
+impl Display for AstReflectionStyle {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         let s = match self {
-            ASTReflectionStyle::Reflection(elem_name) => format!("#{}", elem_name.clone()),
-            ASTReflectionStyle::NoReflection => String::new(),
-            ASTReflectionStyle::Expansion => "##".to_string(),
+            AstReflectionStyle::Reflection(elem_name) => format!("#{}", elem_name.clone()),
+            AstReflectionStyle::NoReflection => String::new(),
+            AstReflectionStyle::Expansion => "##".to_string(),
         };
 
         return write!(f, "{}", s);
@@ -131,7 +131,7 @@ impl SyntaxTree {
         };
     }
 
-    pub fn from_node_child_args(subelems: Vec<SyntaxNodeChild>, ast_reflection_style: ASTReflectionStyle) -> SyntaxTree {
+    pub fn from_node_child_args(subelems: Vec<SyntaxNodeChild>, ast_reflection_style: AstReflectionStyle) -> SyntaxTree {
         return SyntaxTree {
             child: SyntaxNodeChild::Node(Box::new(SyntaxNode::new(Uuid::new_v4(), subelems, ast_reflection_style))),
         };
@@ -153,11 +153,11 @@ pub enum SyntaxNodeChild {
 }
 
 impl SyntaxNodeChild {
-    pub fn from_node_args(subelems: Vec<SyntaxNodeChild>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNodeChild {
+    pub fn from_node_args(subelems: Vec<SyntaxNodeChild>, ast_reflection_style: AstReflectionStyle) -> SyntaxNodeChild {
         return SyntaxNodeChild::Node(Box::new(SyntaxNode::new(Uuid::new_v4(), subelems, ast_reflection_style)));
     }
 
-    pub fn from_leaf_args(pos: CharacterPosition, value: String, ast_reflection: ASTReflectionStyle) -> SyntaxNodeChild {
+    pub fn from_leaf_args(pos: CharacterPosition, value: String, ast_reflection: AstReflectionStyle) -> SyntaxNodeChild {
         return SyntaxNodeChild::Leaf(Box::new(SyntaxLeaf::new(Uuid::new_v4(), pos, value, ast_reflection)));
     }
 
@@ -201,14 +201,14 @@ impl SyntaxNodeChild {
         };
     }
 
-    pub fn get_ast_reflection_style(&self) -> ASTReflectionStyle {
+    pub fn get_ast_reflection_style(&self) -> AstReflectionStyle {
         return match self {
             SyntaxNodeChild::Node(node) => node.ast_reflection_style.clone(),
             SyntaxNodeChild::Leaf(leaf) => leaf.ast_reflection_style.clone(),
         };
     }
 
-    pub fn set_ast_reflection_style(&mut self, ast_reflection_style: ASTReflectionStyle) {
+    pub fn set_ast_reflection_style(&mut self, ast_reflection_style: AstReflectionStyle) {
         match self {
             SyntaxNodeChild::Node(node) => node.ast_reflection_style = ast_reflection_style,
             SyntaxNodeChild::Leaf(leaf) => leaf.ast_reflection_style = ast_reflection_style,
@@ -231,11 +231,11 @@ impl SyntaxNodeChild {
 pub struct SyntaxNode {
     pub uuid: Uuid,
     pub subelems: Vec<SyntaxNodeChild>,
-    pub ast_reflection_style: ASTReflectionStyle,
+    pub ast_reflection_style: AstReflectionStyle,
 }
 
 impl SyntaxNode {
-    pub fn new(uuid: Uuid, subelems: Vec<SyntaxNodeChild>, ast_reflection_style: ASTReflectionStyle) -> SyntaxNode {
+    pub fn new(uuid: Uuid, subelems: Vec<SyntaxNodeChild>, ast_reflection_style: AstReflectionStyle) -> SyntaxNode {
         return SyntaxNode {
             uuid: uuid,
             subelems: subelems,
@@ -269,7 +269,7 @@ impl SyntaxNode {
             match each_elem {
                 SyntaxNodeChild::Node(node) => {
                     match &node.ast_reflection_style {
-                        ASTReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => return Some(node),
+                        AstReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => return Some(node),
                         _ => (),
                     }
                 },
@@ -288,7 +288,7 @@ impl SyntaxNode {
             match each_elem {
                 SyntaxNodeChild::Node(node) => {
                     match &node.ast_reflection_style {
-                        ASTReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => nodes.push(node),
+                        AstReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => nodes.push(node),
                         _ => (),
                     }
                 },
@@ -384,7 +384,7 @@ impl SyntaxNode {
                 },
                 SyntaxNodeChild::Leaf(leaf) => {
                     match leaf.ast_reflection_style {
-                        ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
+                        AstReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
                         _ => (),
                     }
                 },
@@ -404,15 +404,15 @@ impl SyntaxNode {
         }
 
         let display_name = match &self.ast_reflection_style {
-            ASTReflectionStyle::Reflection(elem_name) => {
+            AstReflectionStyle::Reflection(elem_name) => {
                 if elem_name == "" {
                     "[noname]".to_string()
                 } else {
                     elem_name.clone()
                 }
             },
-            ASTReflectionStyle::NoReflection => "[hidden]".to_string(),
-            ASTReflectionStyle::Expansion => "[expandable]".to_string(),
+            AstReflectionStyle::NoReflection => "[hidden]".to_string(),
+            AstReflectionStyle::Expansion => "[expandable]".to_string(),
         };
 
         let uuid_str = self.uuid.to_string()[..8].to_string();
@@ -430,11 +430,11 @@ pub struct SyntaxLeaf {
     pub uuid: Uuid,
     pub pos: CharacterPosition,
     pub value: String,
-    pub ast_reflection_style: ASTReflectionStyle,
+    pub ast_reflection_style: AstReflectionStyle,
 }
 
 impl SyntaxLeaf {
-    pub fn new(uuid: Uuid, pos: CharacterPosition, value: String, ast_reflection_style: ASTReflectionStyle) -> SyntaxLeaf {
+    pub fn new(uuid: Uuid, pos: CharacterPosition, value: String, ast_reflection_style: AstReflectionStyle) -> SyntaxLeaf {
         return SyntaxLeaf {
             pos: pos,
             value: value,
@@ -462,9 +462,9 @@ impl SyntaxLeaf {
             .replace("\t", "\\t");
 
         let ast_reflection_str = match &self.ast_reflection_style {
-            ASTReflectionStyle::Reflection(elem_name) => format!("({})", elem_name.clone()),
-            ASTReflectionStyle::NoReflection => "[hidden]".to_string(),
-            ASTReflectionStyle::Expansion => "[expandable]".to_string(),
+            AstReflectionStyle::Reflection(elem_name) => format!("({})", elem_name.clone()),
+            AstReflectionStyle::NoReflection => "[hidden]".to_string(),
+            AstReflectionStyle::Expansion => "[expandable]".to_string(),
         };
 
         let pos_str = format!("{}:{}", self.pos.line + 1, self.pos.column + 1);

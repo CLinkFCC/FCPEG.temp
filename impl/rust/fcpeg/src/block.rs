@@ -48,7 +48,7 @@ macro_rules! rule {
 
             let mut root_group = Box::new(RuleGroup::new(RuleGroupKind::Choice));
             root_group.subelems = subelems;
-            root_group.ast_reflection_style = ASTReflectionStyle::Expansion;
+            root_group.ast_reflection_style = AstReflectionStyle::Expansion;
 
             let rule = Rule::new(CharacterPosition::get_empty(), $rule_id.to_string(), String::new(), Vec::new(), Vec::new(), Vec::new(), Rc::new(root_group));
             BlockCommand::Define { pos: CharacterPosition::get_empty(), rule: rule, attr_map: AttributeMap::new() }
@@ -62,17 +62,17 @@ macro_rules! group {
         {
             let mut group = RuleGroup::new(RuleGroupKind::Sequence);
             group.subelems = vec![$($subelem,)*];
-            group.ast_reflection_style = ASTReflectionStyle::Reflection(String::new());
+            group.ast_reflection_style = AstReflectionStyle::Reflection(String::new());
 
             for opt in $options {
                 match opt {
                     "&" | "!" => group.lookahead_kind = LookaheadKind::new(opt),
                     "?" | "*" | "+" => group.loop_range = LoopRange::from(opt),
-                    "#" => group.ast_reflection_style = ASTReflectionStyle::NoReflection,
-                    "##" => group.ast_reflection_style = ASTReflectionStyle::Expansion,
+                    "#" => group.ast_reflection_style = AstReflectionStyle::NoReflection,
+                    "##" => group.ast_reflection_style = AstReflectionStyle::Expansion,
                     ":" => group.kind = RuleGroupKind::Choice,
                     _ if opt.len() >= 2 && opt.starts_with("#") =>
-                        group.ast_reflection_style = ASTReflectionStyle::Reflection(opt[1..].to_string()),
+                        group.ast_reflection_style = AstReflectionStyle::Reflection(opt[1..].to_string()),
                     _ => panic!(),
                 }
             }
@@ -98,16 +98,16 @@ macro_rules! expr {
                 _ => String::new(),
             };
 
-            expr.ast_reflection_style = ASTReflectionStyle::Reflection(leaf_name);
+            expr.ast_reflection_style = AstReflectionStyle::Reflection(leaf_name);
 
             $(
                 match $option {
                     "&" | "!" => expr.lookahead_kind = LookaheadKind::new($option),
                     "?" | "*" | "+" => expr.loop_range = LoopRange::from($option),
-                    "#" => expr.ast_reflection_style = ASTReflectionStyle::NoReflection,
-                    "##" => expr.ast_reflection_style = ASTReflectionStyle::Expansion,
+                    "#" => expr.ast_reflection_style = AstReflectionStyle::NoReflection,
+                    "##" => expr.ast_reflection_style = AstReflectionStyle::Expansion,
                     _ if $option.len() >= 2 && $option.starts_with("#") =>
-                        expr.ast_reflection_style = ASTReflectionStyle::Reflection($option[1..].to_string()),
+                        expr.ast_reflection_style = AstReflectionStyle::Reflection($option[1..].to_string()),
                     _ => panic!(),
                 }
             )*
@@ -411,7 +411,7 @@ impl BlockParser {
 
     fn to_block_cmd(&mut self, cmd_node: &SyntaxNode) -> ConsoleResult<BlockCommand> {
         return match &cmd_node.ast_reflection_style {
-            ASTReflectionStyle::Reflection(node_name) => match node_name.as_str() {
+            AstReflectionStyle::Reflection(node_name) => match node_name.as_str() {
                 ".Block.CommentCmd" => self.to_comment_cmd(cmd_node),
                 ".Block.DefineCmd" => self.to_define_cmd(cmd_node),
                 ".Block.StartCmd" => {
@@ -601,7 +601,7 @@ impl BlockParser {
         for each_elem in &cmd_node.subelems {
             match each_elem {
                 SyntaxNodeChild::Node(each_node) => {
-                    if each_node.ast_reflection_style == ASTReflectionStyle::Reflection(".Rule.ArgID".to_string()) {
+                    if each_node.ast_reflection_style == AstReflectionStyle::Reflection(".Rule.ArgID".to_string()) {
                         let new_arg_id = each_node.join_child_leaf_values();
 
                         if args.contains(&new_arg_id) {
@@ -978,18 +978,18 @@ impl BlockParser {
                     match style_node.get_leaf_child_at(self.cons.clone(), 0) {
                         Ok(leaf) => {
                             if leaf.value == "##" {
-                                ASTReflectionStyle::Expansion
+                                AstReflectionStyle::Expansion
                             } else {
-                                ASTReflectionStyle::Reflection(style_node.join_child_leaf_values())
+                                AstReflectionStyle::Reflection(style_node.join_child_leaf_values())
                             }
                         },
                         Err(()) => {
                             self.cons.borrow_mut().pop_log();
-                            ASTReflectionStyle::from_config(false, true, String::new())
+                            AstReflectionStyle::from_config(false, true, String::new())
                         },
                     }
                 },
-                None => ASTReflectionStyle::from_config(false, false, String::new()),
+                None => AstReflectionStyle::from_config(false, false, String::new()),
             };
 
             // note: Choice または Expr ノード
@@ -1007,7 +1007,7 @@ impl BlockParser {
             };
 
             match &choice_or_expr_node.ast_reflection_style {
-                ASTReflectionStyle::Reflection(name) => {
+                AstReflectionStyle::Reflection(name) => {
                     let new_elem = match name.as_str() {
                         ".Rule.Choice" => {
                             let mut new_choice = Box::new(self.to_rule_choice_elem(choice_or_expr_node.get_node_child_at(self.cons.clone(), 0)?, generics_args)?);
@@ -1150,7 +1150,7 @@ impl BlockParser {
             match &seq_elem {
                 SyntaxNodeChild::Node(node) => {
                     match &seq_elem.get_ast_reflection_style() {
-                        ASTReflectionStyle::Reflection(name) => if name == ".Rule.Seq" {
+                        AstReflectionStyle::Reflection(name) => if name == ".Rule.Seq" {
                             let new_child = self.to_seq_elem(node, generics_args)?;
                             children.push(new_child);
                         },
@@ -1178,7 +1178,7 @@ impl BlockParser {
     fn to_rule_expr_elem(&mut self, expr_node: &SyntaxNode, generics_args: &Vec<String>) -> ConsoleResult<RuleExpression> {
         let expr_child_node = expr_node.get_node_child_at(self.cons.clone(), 0)?;
         let (pos, kind, value) = match &expr_child_node.ast_reflection_style {
-            ASTReflectionStyle::Reflection(name) => {
+            AstReflectionStyle::Reflection(name) => {
                 match name.as_str() {
                     ".Rule.ArgID" => (expr_child_node.get_position(Some(self.cons.clone()))?, RuleExpressionKind::ArgId, self.to_argument_id(self.rule_name.clone(), expr_child_node.join_child_leaf_values())),
                     ".Rule.CharClass" => (expr_child_node.get_position(Some(self.cons.clone()))?, RuleExpressionKind::CharClass, format!("[{}]", expr_child_node.join_child_leaf_values())),
@@ -1340,7 +1340,7 @@ impl BlockParser {
             match each_elem {
                 SyntaxNodeChild::Node(node) => {
                     match node.ast_reflection_style {
-                        ASTReflectionStyle::Reflection(_) => {
+                        AstReflectionStyle::Reflection(_) => {
                             let escseq_char = node.get_leaf_child_at(self.cons.clone(), 0)?.value.as_str();
 
                             s += match escseq_char {
@@ -1364,7 +1364,7 @@ impl BlockParser {
                 },
                 SyntaxNodeChild::Leaf(leaf) => {
                     match leaf.ast_reflection_style {
-                        ASTReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
+                        AstReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
                         _ => (),
                     }
                 },
