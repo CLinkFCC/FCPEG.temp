@@ -20,6 +20,41 @@ use crate::tree::*;
 use cons_util::cons::*;
 use cons_util::file::*;
 
+#[derive(Clone, Copy)]
+pub struct Raw<T> {
+    ptr: *mut T,
+}
+
+impl<T> Raw<T> {
+    pub fn new(v: T) -> Raw<T> {
+        return Raw::<T> {
+            ptr: Box::into_raw(Box::new(v)),
+        };
+    }
+
+    pub fn as_ref(&self) -> &T {
+        return unsafe {
+            &*self.ptr
+        };
+    }
+
+    pub fn as_mut_ref(&mut self) -> &mut T {
+        return unsafe {
+            &mut *self.ptr
+        };
+    }
+
+    pub fn borrow(self) -> Box<T> {
+        return unsafe {
+            Box::from_raw(self.ptr)
+        };
+    }
+
+    unsafe fn raw_drop(&mut self) {
+        drop(Box::from_raw(self.ptr));
+    }
+}
+
 pub struct FCPEGParser {
     cons: Rc<RefCell<Console>>,
     rule_map: Arc<Box<RuleMap>>,

@@ -601,12 +601,12 @@ impl BlockParser {
         for each_elem in &cmd_node.subelems {
             match each_elem {
                 SyntaxNodeChild::Node(each_node) => {
-                    if each_node.ast_reflection_style == AstReflectionStyle::Reflection(".Rule.ArgID".to_string()) {
-                        let new_arg_id = each_node.join_child_leaf_values();
+                    if each_node.as_ref().ast_reflection_style == AstReflectionStyle::Reflection(".Rule.ArgID".to_string()) {
+                        let new_arg_id = each_node.as_ref().join_child_leaf_values();
 
                         if args.contains(&new_arg_id) {
                             self.cons.borrow_mut().append_log(BlockParsingLog::ArgumentIDIsDuplicate {
-                                pos: each_node.get_position(Some(self.cons.clone()))?,
+                                pos: each_node.as_ref().get_position(Some(self.cons.clone()))?,
                                 arg_id: new_arg_id.clone(),
                             }.get_log());
                         }
@@ -740,7 +740,7 @@ impl BlockParser {
                 Some(loop_node) => {
                     match loop_node.get_child_at(self.cons.clone(), 0)? {
                         SyntaxNodeChild::Node(range_node) => {
-                            let raw_range = self.to_raw_range(range_node)?;
+                            let raw_range = self.to_raw_range(range_node.as_ref())?;
 
                             let raw_loop_range_txt = {
                                 let min_num_txt = if raw_range.is_min_num_specified {
@@ -845,13 +845,13 @@ impl BlockParser {
                             loop_range
                         },
                         SyntaxNodeChild::Leaf(leaf) => {
-                            let kind_str = leaf.value.as_str();
+                            let kind_str = leaf.as_ref().value.as_str();
 
                             match kind_str {
-                                "?" | "*" | "+" => LoopRange::from(&leaf.value),
+                                "?" | "*" | "+" => LoopRange::from(&leaf.as_ref().value),
                                 _ => {
                                     self.cons.borrow_mut().append_log(BlockParsingLog::LoopSymbolAtLeafIsUnknown {
-                                        leaf_uuid: leaf.uuid.clone(),
+                                        leaf_uuid: leaf.as_ref().uuid.clone(),
                                         symbol: kind_str.to_string(),
                                     }.get_log());
 
@@ -1151,14 +1151,14 @@ impl BlockParser {
                 SyntaxNodeChild::Node(node) => {
                     match &seq_elem.get_ast_reflection_style() {
                         AstReflectionStyle::Reflection(name) => if name == ".Rule.Seq" {
-                            let new_child = self.to_seq_elem(node, generics_args)?;
+                            let new_child = self.to_seq_elem(node.as_ref(), generics_args)?;
                             children.push(new_child);
                         },
                         _ => (),
                     }
                 },
                 SyntaxNodeChild::Leaf(leaf) => {
-                    match leaf.value.as_str() {
+                    match leaf.as_ref().value.as_str() {
                         ":" | "," => group_kind = RuleGroupKind::Choice,
                         _ => (),
                     }
@@ -1339,9 +1339,9 @@ impl BlockParser {
         for each_elem in &str_node.subelems {
             match each_elem {
                 SyntaxNodeChild::Node(node) => {
-                    match node.ast_reflection_style {
+                    match node.as_ref().ast_reflection_style {
                         AstReflectionStyle::Reflection(_) => {
-                            let escseq_char = node.get_leaf_child_at(self.cons.clone(), 0)?.value.as_str();
+                            let escseq_char = node.as_ref().get_leaf_child_at(self.cons.clone(), 0)?.value.as_str();
 
                             s += match escseq_char {
                                 "\\" => "\\",
@@ -1351,7 +1351,7 @@ impl BlockParser {
                                 "z" => "\0",
                                 _ => {
                                     self.cons.borrow_mut().append_log(BlockParsingLog::EscapeSequenceCharacterIsUnknown {
-                                        pos: node.get_position(Some(self.cons.clone()))?,
+                                        pos: node.as_ref().get_position(Some(self.cons.clone()))?,
                                         escseq_char: escseq_char.to_string(),
                                     }.get_log());
 
@@ -1363,8 +1363,8 @@ impl BlockParser {
                     }
                 },
                 SyntaxNodeChild::Leaf(leaf) => {
-                    match leaf.ast_reflection_style {
-                        AstReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
+                    match leaf.as_ref().ast_reflection_style {
+                        AstReflectionStyle::Reflection(_) => s += leaf.as_ref().value.as_ref(),
                         _ => (),
                     }
                 },

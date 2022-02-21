@@ -427,9 +427,9 @@ impl ConfigurationParser {
         for each_char_elem in value_node.get_reflectable_children() {
             match each_char_elem {
                 // note: エスケープ文字
-                SyntaxNodeChild::Node(node) => raw_values += &self.to_esc_seq_string(node)?,
+                SyntaxNodeChild::Node(node) => raw_values += &self.to_esc_seq_string(node.as_ref())?,
                 // note: 通常文字
-                SyntaxNodeChild::Leaf(leaf) => raw_values += &leaf.value,
+                SyntaxNodeChild::Leaf(leaf) => raw_values += &leaf.as_ref().value,
             }
         }
 

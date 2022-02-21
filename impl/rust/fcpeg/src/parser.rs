@@ -393,7 +393,7 @@ impl SyntaxParser {
                     for each_elem in node_children {
                         match &each_elem {
                             SyntaxNodeChild::Node(node) => {
-                                if node.subelems.len() != 0 {
+                                if node.as_ref().subelems.len() != 0 {
                                     children.push(each_elem.clone());
                                 }
                             },
@@ -482,7 +482,7 @@ impl SyntaxParser {
                                         for each_elem in node_children {
                                             match &each_elem {
                                                 SyntaxNodeChild::Node(node) => {
-                                                    if node.subelems.len() != 0 {
+                                                    if node.as_ref().subelems.len() != 0 {
                                                         children.push(each_elem.clone());
                                                     }
                                                 },
@@ -545,11 +545,11 @@ impl SyntaxParser {
                                                     let new_child = SyntaxNodeChild::from_node_args(v.clone(), each_subgroup.ast_reflection_style.clone());
 
                                                     match new_child {
-                                                        SyntaxNodeChild::Node(node) if node.subelems.len() == 0 => (),
+                                                        SyntaxNodeChild::Node(node) if node.as_ref().subelems.len() == 0 => (),
                                                         _ => {
                                                             match new_child {
-                                                                SyntaxNodeChild::Node(new_node) if new_node.ast_reflection_style.is_expandable() => {
-                                                                    children.append(&mut new_node.subelems.clone());
+                                                                SyntaxNodeChild::Node(new_node) if new_node.as_ref().ast_reflection_style.is_expandable() => {
+                                                                    children.append(&mut new_node.as_ref().subelems.clone());
                                                                 },
                                                                 _ => children.push(new_child),
                                                             }
@@ -586,11 +586,11 @@ impl SyntaxParser {
                                         let new_child = SyntaxNodeChild::from_node_args(v.clone(), each_group.ast_reflection_style.clone());
 
                                         match new_child {
-                                            SyntaxNodeChild::Node(node) if node.subelems.len() == 0 => (),
+                                            SyntaxNodeChild::Node(node) if node.as_ref().subelems.len() == 0 => (),
                                             _ => {
                                                 match new_child {
-                                                    SyntaxNodeChild::Node(new_node) if new_node.ast_reflection_style.is_expandable() => {
-                                                        children.append(&mut new_node.subelems.clone());
+                                                    SyntaxNodeChild::Node(new_node) if new_node.as_ref().ast_reflection_style.is_expandable() => {
+                                                        children.append(&mut new_node.as_ref().subelems.clone());
                                                     },
                                                     _ => children.push(new_child),
                                                 }
@@ -619,7 +619,7 @@ impl SyntaxParser {
                         SyntaxParsingResultKind::Success(node_children) => {
                             for each_elem in node_children {
                                 match each_elem {
-                                    SyntaxNodeChild::Node(node) if node.subelems.len() == 0 => (),
+                                    SyntaxNodeChild::Node(node) if node.as_ref().subelems.len() == 0 => (),
                                     _ => children.push(each_elem.clone()),
                                 }
                             }
@@ -692,7 +692,7 @@ impl SyntaxParser {
                 SyntaxParsingResultKind::Success(node) => {
                     for each_node in node {
                         match each_node {
-                            SyntaxNodeChild::Node(node) if node.subelems.len() == 0 => (),
+                            SyntaxNodeChild::Node(node) if node.as_ref().subelems.len() == 0 => (),
                             _ => children.push(each_node.clone()),
                         }
                     }
@@ -912,8 +912,8 @@ impl SyntaxParser {
 
                                         for each_elem in result_elems {
                                             match each_elem {
-                                                SyntaxNodeChild::Node(node) if node.is_reflectable() => joined_str += &node.join_child_leaf_values(),
-                                                SyntaxNodeChild::Leaf(leaf) if leaf.is_reflectable() => joined_str += &leaf.value,
+                                                SyntaxNodeChild::Node(node) if node.as_ref().is_reflectable() => joined_str += &node.as_ref().join_child_leaf_values(),
+                                                SyntaxNodeChild::Leaf(leaf) if leaf.as_ref().is_reflectable() => joined_str += &leaf.as_ref().value,
                                                 _ => (),
                                             }
                                         }
@@ -1087,11 +1087,11 @@ impl SyntaxParser {
                             _ => expr.ast_reflection_style.clone(),
                         };
 
-                        let node = SyntaxNodeChild::from_node_args(node.subelems.clone(), sub_ast_reflection_style);
+                        let node = SyntaxNodeChild::from_node_args(node.as_ref().subelems.clone(), sub_ast_reflection_style);
 
                         if expr.ast_reflection_style.is_expandable() {
                             match node {
-                                SyntaxNodeChild::Node(node) => node.subelems,
+                                SyntaxNodeChild::Node(node) => node.borrow().subelems,
                                 _ => vec![node],
                             }
                         } else {

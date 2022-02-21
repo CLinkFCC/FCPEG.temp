@@ -4,6 +4,7 @@ use std::io::*;
 use std::io::Write;
 use std::rc::Rc;
 
+use crate::Raw;
 use crate::cons::*;
 
 use cons_util::*;
@@ -133,7 +134,7 @@ impl SyntaxTree {
 
     pub fn from_node_child_args(subelems: Vec<SyntaxNodeChild>, ast_reflection_style: AstReflectionStyle) -> SyntaxTree {
         return SyntaxTree {
-            child: SyntaxNodeChild::Node(Box::new(SyntaxNode::new(Uuid::new_v4(), subelems, ast_reflection_style))),
+            child: SyntaxNodeChild::Node(Raw::new(SyntaxNode::new(Uuid::new_v4(), subelems, ast_reflection_style))),
         };
     }
 
@@ -146,27 +147,35 @@ impl SyntaxTree {
     }
 }
 
+impl Drop for SyntaxTree {
+    fn drop(&mut self) {
+        unsafe {
+            self.child.raw_drop();
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum SyntaxNodeChild {
-    Node(Box<SyntaxNode>),
-    Leaf(Box<SyntaxLeaf>),
+    Node(Raw<SyntaxNode>),
+    Leaf(Raw<SyntaxLeaf>),
 }
 
 impl SyntaxNodeChild {
     pub fn from_node_args(subelems: Vec<SyntaxNodeChild>, ast_reflection_style: AstReflectionStyle) -> SyntaxNodeChild {
-        return SyntaxNodeChild::Node(Box::new(SyntaxNode::new(Uuid::new_v4(), subelems, ast_reflection_style)));
+        return SyntaxNodeChild::Node(Raw::new(SyntaxNode::new(Uuid::new_v4(), subelems, ast_reflection_style)));
     }
 
     pub fn from_leaf_args(pos: CharacterPosition, value: String, ast_reflection: AstReflectionStyle) -> SyntaxNodeChild {
-        return SyntaxNodeChild::Leaf(Box::new(SyntaxLeaf::new(Uuid::new_v4(), pos, value, ast_reflection)));
+        return SyntaxNodeChild::Leaf(Raw::new(SyntaxLeaf::new(Uuid::new_v4(), pos, value, ast_reflection)));
     }
 
     pub fn get_node(&self, cons: Rc<RefCell<Console>>) -> ConsoleResult<&SyntaxNode> {
         return match self {
-            SyntaxNodeChild::Node(node) => Ok(node),
+            SyntaxNodeChild::Node(node) => Ok(node.as_ref()),
             SyntaxNodeChild::Leaf(leaf) => {
                 cons.borrow_mut().append_log(TreeLog::LeafExpectedToBeNode {
-                    leaf_uuid: leaf.uuid.clone(),
+                    leaf_uuid: leaf.as_ref().uuid.clone(),
                 }.get_log());
 
                 return Err(());
@@ -178,12 +187,12 @@ impl SyntaxNodeChild {
         return match self {
             SyntaxNodeChild::Node(node) => {
                 cons.borrow_mut().append_log(TreeLog::NodeExpectedToBeLeaf {
-                    node_uuid: node.uuid.clone(),
+                    node_uuid: node.as_ref().uuid.clone(),
                 }.get_log());
 
                 return Err(());
             },
-            SyntaxNodeChild::Leaf(leaf) => Ok(leaf),
+            SyntaxNodeChild::Leaf(leaf) => Ok(leaf.as_ref()),
         };
     }
 
@@ -196,22 +205,22 @@ impl SyntaxNodeChild {
 
     pub fn is_reflectable(&self) -> bool {
         return match self {
-            SyntaxNodeChild::Node(node) => node.is_reflectable(),
-            SyntaxNodeChild::Leaf(leaf) => leaf.is_reflectable(),
+            SyntaxNodeChild::Node(node) => node.as_ref().is_reflectable(),
+            SyntaxNodeChild::Leaf(leaf) => leaf.as_ref().is_reflectable(),
         };
     }
 
     pub fn get_ast_reflection_style(&self) -> AstReflectionStyle {
         return match self {
-            SyntaxNodeChild::Node(node) => node.ast_reflection_style.clone(),
-            SyntaxNodeChild::Leaf(leaf) => leaf.ast_reflection_style.clone(),
+            SyntaxNodeChild::Node(node) => node.as_ref().ast_reflection_style.clone(),
+            SyntaxNodeChild::Leaf(leaf) => leaf.as_ref().ast_reflection_style.clone(),
         };
     }
 
     pub fn set_ast_reflection_style(&mut self, ast_reflection_style: AstReflectionStyle) {
         match self {
-            SyntaxNodeChild::Node(node) => node.ast_reflection_style = ast_reflection_style,
-            SyntaxNodeChild::Leaf(leaf) => leaf.ast_reflection_style = ast_reflection_style,
+            SyntaxNodeChild::Node(node) => node.as_mut_ref().ast_reflection_style = ast_reflection_style,
+            SyntaxNodeChild::Leaf(leaf) => leaf.as_mut_ref().ast_reflection_style = ast_reflection_style,
         }
     }
 
@@ -221,8 +230,15 @@ impl SyntaxNodeChild {
 
     pub fn print_with_details(&self, nest: usize, writer: &mut BufWriter<StdoutLock>, ignore_hidden_elems: bool) {
         match self {
-            SyntaxNodeChild::Node(node) => node.print_with_details(nest, writer, ignore_hidden_elems),
-            SyntaxNodeChild::Leaf(leaf) => leaf.print_with_details(nest, writer, ignore_hidden_elems),
+            SyntaxNodeChild::Node(node) => node.as_ref().print_with_details(nest, writer, ignore_hidden_elems),
+            SyntaxNodeChild::Leaf(leaf) => leaf.as_ref().print_with_details(nest, writer, ignore_hidden_elems),
+        }
+    }
+
+    unsafe fn raw_drop(&mut self) {
+        match self {
+            SyntaxNodeChild::Node(node) => node.raw_drop(),
+            SyntaxNodeChild::Leaf(leaf) => leaf.raw_drop(),
         }
     }
 }
@@ -268,8 +284,8 @@ impl SyntaxNode {
         for each_elem in &self.subelems {
             match each_elem {
                 SyntaxNodeChild::Node(node) => {
-                    match &node.ast_reflection_style {
-                        AstReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => return Some(node),
+                    match &node.as_ref().ast_reflection_style {
+                        AstReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => return Some(node.as_ref()),
                         _ => (),
                     }
                 },
@@ -287,8 +303,8 @@ impl SyntaxNode {
         for each_elem in &self.subelems {
             match each_elem {
                 SyntaxNodeChild::Node(node) => {
-                    match &node.ast_reflection_style {
-                        AstReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => nodes.push(node),
+                    match &node.as_ref().ast_reflection_style {
+                        AstReflectionStyle::Reflection(name) if patterns.iter().any(|s| s == name) => nodes.push(node.as_ref()),
                         _ => (),
                     }
                 },
@@ -303,11 +319,11 @@ impl SyntaxNode {
     pub fn get_position(&self, cons: Option<Rc<RefCell<Console>>>) -> ConsoleResult<CharacterPosition> {
         for each_child in self.get_children() {
             match each_child {
-                SyntaxNodeChild::Node(each_node) => match each_node.get_position(cons.clone()) {
+                SyntaxNodeChild::Node(each_node) => match each_node.as_ref().get_position(cons.clone()) {
                     Ok(v) => return Ok(v),
                     Err(_) => (),
                 },
-                SyntaxNodeChild::Leaf(each_leaf) => return Ok(each_leaf.pos.clone()),
+                SyntaxNodeChild::Leaf(each_leaf) => return Ok(each_leaf.as_ref().pos.clone()),
             }
         };
 
@@ -380,11 +396,11 @@ impl SyntaxNode {
         for each_elem in &self.subelems {
             match each_elem {
                 SyntaxNodeChild::Node(node) => {
-                    s += node.join_child_leaf_values().as_str();
+                    s += node.as_ref().join_child_leaf_values().as_str();
                 },
                 SyntaxNodeChild::Leaf(leaf) => {
-                    match leaf.ast_reflection_style {
-                        AstReflectionStyle::Reflection(_) => s += leaf.value.as_ref(),
+                    match leaf.as_ref().ast_reflection_style {
+                        AstReflectionStyle::Reflection(_) => s += leaf.as_ref().value.as_ref(),
                         _ => (),
                     }
                 },
