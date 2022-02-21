@@ -20,7 +20,7 @@ use crate::tree::*;
 use cons_util::cons::*;
 use cons_util::file::*;
 
-#[derive(Clone, Copy)]
+#[derive(Copy)]
 pub struct Raw<T> {
     ptr: *mut T,
 }
@@ -32,13 +32,19 @@ impl<T> Raw<T> {
         };
     }
 
+    pub fn from(v: *mut T) -> Raw<T> {
+        return Raw::<T> {
+            ptr: v,
+        };
+    }
+
     pub fn as_ref(&self) -> &T {
         return unsafe {
             &*self.ptr
         };
     }
 
-    pub fn as_mut_ref(&mut self) -> &mut T {
+    pub fn as_mut_ref(&self) -> &mut T {
         return unsafe {
             &mut *self.ptr
         };
@@ -52,6 +58,12 @@ impl<T> Raw<T> {
 
     unsafe fn raw_drop(&mut self) {
         drop(Box::from_raw(self.ptr));
+    }
+}
+
+impl<T> Clone for Raw<T> {
+    fn clone(&self) -> Self {
+        return Raw::from(self.as_mut_ref() as *mut T);
     }
 }
 

@@ -120,7 +120,6 @@ impl Display for AstReflectionStyle {
     }
 }
 
-#[derive(Clone)]
 pub struct SyntaxTree {
     child: SyntaxNodeChild,
 }
@@ -243,7 +242,6 @@ impl SyntaxNodeChild {
     }
 }
 
-#[derive(Clone)]
 pub struct SyntaxNode {
     pub uuid: Uuid,
     pub subelems: Vec<SyntaxNodeChild>,
@@ -441,7 +439,6 @@ impl SyntaxNode {
     }
 }
 
-#[derive(Clone)]
 pub struct SyntaxLeaf {
     pub uuid: Uuid,
     pub pos: CharacterPosition,
