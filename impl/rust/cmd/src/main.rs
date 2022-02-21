@@ -250,7 +250,7 @@ fn output_parsing_console(cons: &mut Console, parsing_result: Option<SyntaxParsi
         let mut log_files = vec![LogFile::new(LogFileKind::ConsoleLogs, "cons.log".to_string())];
 
         match parsing_result {
-            Some(v) => log_files.push(LogFile::new(LogFileKind::TextLines(*v.to_string_lines()), "parsing.log".to_string())),
+            Some(v) => log_files.push(LogFile::new(LogFileKind::TextLines(v.to_string_lines()), "parsing.log".to_string())),
             None => (),
         }
 

@@ -110,7 +110,7 @@ impl SyntaxParsingResultKind {
 pub struct SyntaxParsingResult {
     pub kind: SyntaxParsingResultKind,
     pub parsed_elem: String,
-    pub children: Box<Vec<SyntaxParsingResult>>,
+    pub children: Vec<SyntaxParsingResult>,
 }
 
 impl SyntaxParsingResult {
@@ -118,7 +118,7 @@ impl SyntaxParsingResult {
         return SyntaxParsingResult {
             kind: SyntaxParsingResultKind::Success(node_children),
             parsed_elem: parsed_elem,
-            children: Box::new(result_children),
+            children: result_children,
         };
     }
 
@@ -126,7 +126,7 @@ impl SyntaxParsingResult {
         return SyntaxParsingResult {
             kind: SyntaxParsingResultKind::Failure,
             parsed_elem: parsed_elem,
-            children: Box::new(children),
+            children: children,
         };
     }
 
@@ -134,12 +134,12 @@ impl SyntaxParsingResult {
         return self.kind.is_successful();
     }
 
-    pub fn to_string_lines(&self) -> Box<Vec<String>> {
+    pub fn to_string_lines(&self) -> Vec<String> {
         return self.to_string_lines_with_indent(0);
     }
 
-    fn to_string_lines_with_indent(&self, indent_count: usize) -> Box<Vec<String>> {
-        let mut lines = Box::new(Vec::<String>::new());
+    fn to_string_lines_with_indent(&self, indent_count: usize) -> Vec<String> {
+        let mut lines = Vec::<String>::new();
         let result_txt = if self.kind.is_successful() { "ok" } else { "no" };
         let txt = format!("{}[{}] {}", "  ".repeat(indent_count), result_txt, self.parsed_elem);
         lines.push(txt.to_string());
@@ -164,10 +164,10 @@ pub struct SyntaxParser {
     src_path: String,
     src_content: Box<String>,
     loop_limit: usize,
-    arg_maps: Box<Vec<ArgumentMap>>,
-    rule_stack: Box<Vec<(CharacterPosition, String)>>,
-    regex_map: Box<HashMap<String, Regex>>,
-    memoized_map: Box<MemoizationMap>,
+    arg_maps: Vec<ArgumentMap>,
+    rule_stack: Vec<(CharacterPosition, String)>,
+    regex_map: HashMap<String, Regex>,
+    memoized_map: MemoizationMap,
     enable_memoization: bool,
     // spec: スキッピング規則のパースをしているかどうか
     is_skipping_now: bool,
@@ -187,10 +187,10 @@ impl SyntaxParser {
             src_path: src_path,
             src_content: src_content,
             loop_limit: 65536,
-            arg_maps: Box::new(Vec::new()),
-            rule_stack: Box::new(Vec::new()),
-            regex_map: Box::new(RegexMap::new()),
-            memoized_map: Box::new(MemoizationMap::new()),
+            arg_maps: Vec::new(),
+            rule_stack: Vec::new(),
+            regex_map: RegexMap::new(),
+            memoized_map: MemoizationMap::new(),
             enable_memoization: enable_memoization,
             is_skipping_now: false,
             is_skipped_by_noskip_once: false,
@@ -230,7 +230,7 @@ impl SyntaxParser {
                 parser.cons.borrow_mut().append_log(SyntaxParsingLog::ParsingFailedAtRule {
                     pos: parser.get_char_position(),
                     rule_id: start_rule_id.clone(),
-                    rule_stack: *parser.rule_stack.clone(),
+                    rule_stack: parser.rule_stack.clone(),
                 }.get_log());
 
                 return (Err(()), Some(parsing_result));
@@ -245,7 +245,7 @@ impl SyntaxParser {
             parser.cons.borrow_mut().append_log(SyntaxParsingLog::ParsingFailedAtRule {
                 pos: parser.get_char_position(),
                 rule_id: start_rule_id.clone(),
-                rule_stack: *parser.rule_stack.clone(),
+                rule_stack: parser.rule_stack.clone(),
             }.get_log());
 
             return (Err(()), Some(parsing_result));
