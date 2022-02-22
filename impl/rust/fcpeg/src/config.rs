@@ -315,7 +315,7 @@ impl ConfigurationParser {
     fn parse(cons: Rc<RefCell<Console>>, src_path: String, src_content: Box<String>) -> ConsoleResult<Box<PropertyMap>> {
         let block_map = ConfigurationBlock::get_block_map();
         let rule_map = Arc::new(Box::new(RuleMap::new(vec![block_map], DEFAULT_START_RULE_ID.to_string())?));
-        let tree = SyntaxParser::parse(cons.clone(), rule_map, src_path, src_content, true).0?;
+        let tree = SyntaxParser::parse(cons.clone(), rule_map, src_path, src_content, true)?;
 
         let mut config_parser = ConfigurationParser {
             cons: cons.clone(),

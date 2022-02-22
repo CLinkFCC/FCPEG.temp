@@ -302,7 +302,7 @@ impl BlockParser {
     }
 
     fn to_syntax_tree(&mut self, rule_map: Arc<Box<RuleMap>>, enable_memoization: bool) -> ConsoleResult<SyntaxTree> {
-        let tree = SyntaxParser::parse(self.cons.clone(), rule_map, self.file_path.clone(), self.file_content.clone(), enable_memoization).0?;
+        let tree = SyntaxParser::parse(self.cons.clone(), rule_map, self.file_path.clone(), self.file_content.clone(), enable_memoization)?;
         return Ok(tree);
     }
 
