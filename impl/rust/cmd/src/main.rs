@@ -16,10 +16,10 @@ use cons_util::file::*;
 
 #[derive(Clone, PartialEq)]
 enum Translator {
-    // note: log titles
+    // log titles
     CommandList,
     QuitParsingWithCaretC,
-    // note: descriptions
+    // descriptions
     RawDescription { msg: String },
 }
 
@@ -33,7 +33,7 @@ impl ConsoleLogTranslator for Translator {
         let s = translate!{
             translator => self,
             lang => lang,
-            // note: log titles
+            // log titles
             Translator::CommandList => {
                 Language::English => "command list",
                 Language::Japanese => "コマンドリスト",
@@ -43,7 +43,7 @@ impl ConsoleLogTranslator for Translator {
                 Language::Japanese => "^C でパースを終了します",
             },
 
-            // note: descriptions
+            // descriptions
             Translator::RawDescription { msg } => {
                 Language::English => msg,
                 Language::Japanese => msg,
@@ -244,7 +244,7 @@ fn output_parsing_console(cons: &mut Console) {
 
 struct FileChangeDetector {
     cons: Rc<RefCell<Console>>,
-    // note: <file_path, last_modified>
+    // <file_path, last_modified>
     file_map: HashMap<String, SystemTime>,
 }
 

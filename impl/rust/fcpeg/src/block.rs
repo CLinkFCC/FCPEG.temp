@@ -12,7 +12,7 @@ use regex::Regex;
 pub struct BlockMap {}
 
 impl BlockMap {
-    pub fn from_fcpeg(src: InputSource) -> BlockMap {
+    pub fn from_fcpeg(_src: InputSource) -> BlockMap {
         unimplemented!();
     }
 }
@@ -74,7 +74,7 @@ impl RuleMap {
         return RuleMap(map);
     }
 
-    pub fn from_block_map(cons: &mut Console, block_map: BlockMap) -> RuleMap {
+    pub fn from_block_map(_cons: &mut Console, _block_map: BlockMap) -> RuleMap {
         unimplemented!();
     }
 

@@ -8,7 +8,6 @@ use crate::block::*;
 
 use std::fmt::{Display, Formatter};
 
-use cons_util::*;
 use cons_util::cons::*;
 use cons_util::file::*;
 
@@ -126,13 +125,11 @@ impl FcpegParser {
         return Ok(FcpegParser::new(rule_map));
     }
 
-    pub fn disable_memoization(mut self) -> FcpegParser {
+    pub fn disable_memoization(&mut self) {
         self.enable_memoization = false;
-        return self;
     }
 
-    pub fn parse(&self, cons: &mut Console, input: InputSource) {
+    pub fn parse(&self, _cons: &mut Console, _input: InputSource) {
         unimplemented!();
-        // return SyntaxParser::parse(cons, &self.rule_map, input, self.enable_memoization);
     }
 }

@@ -23,9 +23,9 @@ impl Language {
 
 #[derive(Clone, PartialEq)]
 pub enum Translator {
-    // note: log titles
+    // log titles
     UnexpectedEof,
-    // note: descriptions
+    // descriptions
     AtDescription { pos: CharacterPosition },
     RawDescription { msg: String },
 }
@@ -40,12 +40,12 @@ impl ConsoleLogTranslator for Translator {
         let s = translate!{
             translator => self,
             lang => lang,
-            // note: log titles
+            // log titles
             Translator::UnexpectedEof => {
                 Language::English => "unexpected EOF",
                 Language::Japanese => "予期しない EOF",
             },
-            // note: descriptions
+            // descriptions
             Translator::AtDescription { pos } => {
                 Language::English => format!("\tat:\t{}", pos),
                 Language::Japanese => format!("\t箇所:\t{}", pos),
