@@ -1,15 +1,13 @@
 [package]
 name = "fcpeg"
-version = "1.2.0-alpha+0"
-authors = ["Garnet3106 <manage@gant.work>"]
-edition = "2018"
+version = "0.1.0"
+edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+js = []
 
 [dependencies]
-cons-util = { path = "../../../../../ChesLang/cons-util" }
-colored = "2.0"
-num-traits = "0.2"
-once_cell = "1"
+cons-util = { path = "C:/Users/Garnet3106/Desktop/Media/Docs/Repos/cons-util" }
+num-traits = "0"
 regex = "1"
-uuid = { version = "0", features = ["v4"] }
+wasm-bindgen = "0"

@@ -1,0 +1,4 @@
+[Main]{
+    + use A,
+    Main <- A : B C,
+}

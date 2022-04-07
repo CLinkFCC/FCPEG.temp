@@ -2,6 +2,7 @@
 
 docs/spec/_draft/*
 
+impl/rust/_fcpeg
 impl/rust/fcpeg/target
 impl/rust/cmd/target
 impl/rust/cmd/src/*.cfg

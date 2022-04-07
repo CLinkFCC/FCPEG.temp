@@ -1,104 +1,138 @@
 pub mod block;
-pub mod config;
 pub mod cons;
-pub mod file;
-pub mod parser;
-pub mod rule;
-pub mod tree;
-
-use std::cell::RefCell;
-use std::collections::*;
-use std::rc::Rc;
-use std::sync::Arc;
+pub mod il;
+pub mod js;
+pub mod test;
 
 use crate::block::*;
-use crate::file::*;
-use crate::parser::*;
-use crate::rule::*;
-use crate::tree::*;
 
+use std::fmt::{Display, Formatter};
+
+use cons_util::*;
 use cons_util::cons::*;
 use cons_util::file::*;
 
-#[derive(Copy)]
-pub struct Raw<T> {
-    ptr: *mut T,
+use num_traits::Num;
+
+#[derive(Clone, PartialEq)]
+pub enum Infinitable<T: Clone + Display + Num + PartialEq> {
+    Finite(T),
+    Infinite,
 }
 
-impl<T> Raw<T> {
-    pub fn new(v: T) -> Raw<T> {
-        return Raw::<T> {
-            ptr: Box::into_raw(Box::new(v)),
-        };
-    }
-
-    pub fn from(v: *mut T) -> Raw<T> {
-        return Raw::<T> {
-            ptr: v,
-        };
-    }
-
-    pub fn as_ref(&self) -> &T {
-        return unsafe {
-            &*self.ptr
-        };
-    }
-
-    pub fn as_mut_ref(&self) -> &mut T {
-        return unsafe {
-            &mut *self.ptr
-        };
-    }
-
-    pub fn borrow(self) -> Box<T> {
-        return unsafe {
-            Box::from_raw(self.ptr)
-        };
-    }
-
-    unsafe fn raw_drop(&mut self) {
-        drop(Box::from_raw(self.ptr));
+impl<T: Clone + Display + Num + PartialEq> Infinitable<T> {
+    pub fn is_infinite(&self) -> bool {
+        return *self == Infinitable::<T>::Infinite;
     }
 }
 
-impl<T> Clone for Raw<T> {
-    fn clone(&self) -> Self {
-        return Raw::from(self.as_mut_ref() as *mut T);
+impl<T: Clone + Display + Num + PartialEq> Display for Infinitable<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Infinitable::Finite(v) => v.to_string(),
+            Infinitable::Infinite => "Infinite".to_string(),
+        };
+
+        return write!(f, "{}", s);
     }
 }
 
-pub struct FCPEGParser {
-    cons: Rc<RefCell<Console>>,
-    rule_map: Arc<Box<RuleMap>>,
+#[derive(Clone, PartialEq)]
+pub enum InputSource {
+    Raw { content: String },
+    File { path: String, content: String },
+}
+
+impl InputSource {
+    pub fn raw(content: String) -> InputSource {
+        return InputSource::Raw { content: content };
+    }
+
+    pub fn file(path: String) -> FileManResult<InputSource> {
+        let content = FileMan::read_all(&path)?;
+        return Ok(InputSource::File { path: path, content: content });
+    }
+
+    pub fn into_content(self) -> String {
+        return match self {
+            InputSource::Raw { content } => content,
+            InputSource::File { path: _, content } => content,
+        };
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub struct CharacterPosition {
+    pub file_path: Option<String>,
+    pub index: usize,
+    pub line: usize,
+    pub column: usize,
+}
+
+impl CharacterPosition {
+    pub fn new(file_path: Option<String>, index: usize, line: usize, column: usize) -> CharacterPosition {
+        return CharacterPosition {
+            file_path: file_path,
+            index: index,
+            line: line,
+            column: column,
+        };
+    }
+
+    pub fn get_empty() -> CharacterPosition {
+        return CharacterPosition {
+            file_path: None,
+            index: 0,
+            line: 0,
+            column: 0,
+        };
+    }
+}
+
+impl Display for CharacterPosition {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let file_path_text = match self.file_path.clone() {
+            Some(path) => format!("{}:", path),
+            None => String::new(),
+        };
+
+        return write!(f, "{}{}:{}", file_path_text, self.line + 1, self.column + 1);
+    }
+}
+
+pub struct FcpegParser {
+    rule_map: RuleMap,
     enable_memoization: bool,
 }
 
-impl FCPEGParser {
-    pub fn load(cons: Rc<RefCell<Console>>, fcpeg_file_path: String, lib_fcpeg_file_map: HashMap<String, String>, enable_memoization: bool) -> ConsoleResult<FCPEGParser> {
-        let mut fcpeg_file_map = FCPEGFileMap::load(cons.clone(), fcpeg_file_path, lib_fcpeg_file_map)?;
-        let rule_map = BlockParser::get_rule_map(cons.clone(), &mut fcpeg_file_map, true)?;
-
-        let parser = FCPEGParser {
-            cons: cons,
+impl FcpegParser {
+    pub fn new(rule_map: RuleMap) -> FcpegParser {
+        return FcpegParser {
             rule_map: rule_map,
-            enable_memoization: enable_memoization,
+            enable_memoization: true,
         };
-
-        return Ok(parser);
     }
 
-    pub fn parse(&mut self, input_file_path: String) -> ConsoleResult<SyntaxTree> {
-        let input_file_content = match FileMan::read_all(&input_file_path) {
-            Ok(v) => Box::new(v),
-            Err(e) => {
-                self.cons.borrow_mut().append_log(e.get_log());
-                return Err(());
-            },
-        };
+    pub fn from_fcpeg(cons: &mut Console, src: InputSource) -> ConsoleResult<FcpegParser> {
+        let block_map = BlockMap::from_fcpeg(src);
+        let rule_map = RuleMap::from_block_map(cons, block_map);
+        return Ok(FcpegParser::new(rule_map));
+    }
 
-        return match SyntaxParser::parse(self.cons.clone(), self.rule_map.clone(), input_file_path, input_file_content, self.enable_memoization) {
-            Ok(v) => Ok(v),
-            Err(()) => Err(()),
-        };
+    pub fn from_fcpil(cons: &mut Console, src: InputSource) -> ConsoleResult<FcpegParser> {
+        let content = src.into_content();
+        let lines = content.split('\n').collect::<Vec<&str>>();
+        let rule_map = RuleMap::from_fcpil(cons, lines)?;
+        return Ok(FcpegParser::new(rule_map));
+    }
+
+    pub fn disable_memoization(mut self) -> FcpegParser {
+        self.enable_memoization = false;
+        return self;
+    }
+
+    pub fn parse(&self, cons: &mut Console, input: InputSource) {
+        unimplemented!();
+        // return SyntaxParser::parse(cons, &self.rule_map, input, self.enable_memoization);
     }
 }
