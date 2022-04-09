@@ -1,4 +1,4 @@
-use crate::InputSource;
+use crate::{GeneralSource, MultilineSource};
 use crate::il::FcpilParser;
 
 use std::cell::RefCell;
@@ -12,7 +12,7 @@ use regex::Regex;
 pub struct BlockMap {}
 
 impl BlockMap {
-    pub fn from_fcpeg(_src: InputSource) -> BlockMap {
+    pub fn from_fcpeg(_src: GeneralSource) -> BlockMap {
         unimplemented!();
     }
 }
@@ -78,8 +78,8 @@ impl RuleMap {
         unimplemented!();
     }
 
-    pub fn from_fcpil(cons: &mut Console, lines: Vec<&str>) -> ConsoleResult<RuleMap> {
-        return FcpilParser::parse(cons, lines);
+    pub fn from_fcpil(cons: &mut Console, src: MultilineSource) -> ConsoleResult<RuleMap> {
+        return FcpilParser::parse(cons, src);
     }
 }
 

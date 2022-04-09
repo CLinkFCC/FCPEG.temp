@@ -1,4 +1,4 @@
-use crate::CharacterPosition;
+use crate::SourcePosition;
 
 use cons_util::translate;
 use cons_util::cons::*;
@@ -26,7 +26,7 @@ pub enum Translator {
     // log titles
     UnexpectedEof,
     // descriptions
-    AtDescription { pos: CharacterPosition },
+    AtDescription { pos: SourcePosition },
     RawDescription { msg: String },
 }
 
