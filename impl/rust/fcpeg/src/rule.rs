@@ -9,6 +9,10 @@ use cons_util::cons::{Console, ConsoleResult};
 
 use regex::Regex;
 
+pub trait FcpegFormat {
+    fn to_fcpeg(&self) -> String;
+}
+
 pub trait FcpilFormat {
     fn to_fcpil(&self) -> String;
 }
@@ -129,8 +133,8 @@ pub enum RuleElement {
 impl FcpilFormat for RuleElement {
     fn to_fcpil(&self) -> String {
         return match self {
-            RuleElement::Group(group) => format!("{}", group),
-            RuleElement::Expression(expr) => format!("{}", expr),
+            RuleElement::Group(group) => format!("{}", group.to_fcpil()),
+            RuleElement::Expression(expr) => format!("{}", expr.to_fcpil()),
         };
     }
 }
@@ -153,15 +157,13 @@ impl AstReflectionStyle {
     }
 }
 
-impl Display for AstReflectionStyle {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let s = match self {
+impl FcpegFormat for AstReflectionStyle {
+    fn to_fcpeg(&self) -> String {
+        return match self {
             AstReflectionStyle::Reflective(reflect_name) => format!("#{}", reflect_name.clone()),
             AstReflectionStyle::Expansive => "##".to_string(),
             AstReflectionStyle::Unreflective => String::new(),
         };
-
-        return write!(f, "{}", s);
     }
 }
 
@@ -171,8 +173,15 @@ pub enum RuleGroupKind {
     Sequence,
 }
 
-thread_local!{
-    static RULE_GROUP_INDEX_COUNT: RefCell<usize> = RefCell::new(0);
+impl Display for RuleGroupKind {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let s = match self {
+            RuleGroupKind::Choice => "Choice",
+            RuleGroupKind::Sequence => "Sequence",
+        };
+
+        return write!(f, "{}", s);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -185,19 +194,23 @@ pub struct RuleGroup {
 
 impl RuleGroup {
     pub fn new(kind: RuleGroupKind, subelems: Vec<RuleElement>, ast_reflection_style: AstReflectionStyle) -> RuleGroup {
+        thread_local!{
+            static RULE_GROUP_INDEX_COUNT: RefCell<usize> = RefCell::new(0);
+        }
+
         /*
          * Initialize with 0 due to the following compilation error:
-         * > borrow of possibly-uninitialized variable: `index`
+         * > borrow of possibly-uninitialized variable: `new_index`
          */
-        let mut index = 0usize;
+        let mut new_index = 0usize;
 
         RULE_GROUP_INDEX_COUNT.with(|count| {
-            index = *count.borrow();
+            new_index = *count.borrow();
             *count.borrow_mut() += 1;
         });
 
         return RuleGroup {
-            index: index,
+            index: new_index,
             kind: kind,
             subelems: subelems,
             ast_reflection_style: ast_reflection_style,
@@ -209,12 +222,12 @@ impl FcpilFormat for RuleGroup {
     fn to_fcpil(&self) -> String {
         let seqs_fmt = self.subelems.iter().map(|each_elem| {
             return match each_elem {
-                RuleElement::Group(each_group) => each_group.to_string(),
-                RuleElement::Expression(each_expr) => format!("{}", each_expr),
+                RuleElement::Group(each_group) => each_group.to_fcpil(),
+                RuleElement::Expression(each_expr) => each_expr.to_fcpil(),
             };
         }).collect::<Vec<String>>();
 
-        return format!("({}){}", seqs_fmt.join(":"), self.ast_reflection_style);
+        return format!("({}){}", seqs_fmt.join(":"), self.ast_reflection_style.to_fcpeg());
     }
 }
 
@@ -227,10 +240,10 @@ pub enum RuleExpressionKind {
     Wildcard,
 }
 
-impl Display for RuleExpressionKind {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let s = match self {
-            RuleExpressionKind::Argument(name) => name.to_string(),
+impl FcpegFormat for RuleExpressionKind {
+    fn to_fcpeg(&self) -> String {
+        return match self {
+            RuleExpressionKind::Argument(name) => name.clone(),
             RuleExpressionKind::CharacterClass(regex) => regex.to_string(),
             RuleExpressionKind::Id(id) => id.to_string(),
             RuleExpressionKind::String(value) => format!("\"{}\"", value)
@@ -239,8 +252,6 @@ impl Display for RuleExpressionKind {
                 .replace("\"", "\\\""),
             RuleExpressionKind::Wildcard => ".".to_string(),
         };
-
-        write!(f, "{}", s)
     }
 }
 
@@ -259,9 +270,9 @@ impl RuleExpression {
     }
 }
 
-impl Display for RuleExpression {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let expr_txt = self.kind.to_string();
-        return write!(f, "{}{}", expr_txt, self.ast_reflection_style);
+impl FcpilFormat for RuleExpression {
+    fn to_fcpil(&self) -> String {
+        let expr_fmt = self.kind.to_fcpeg();
+        return format!("{}{}", expr_fmt, self.ast_reflection_style.to_fcpeg());
     }
 }
