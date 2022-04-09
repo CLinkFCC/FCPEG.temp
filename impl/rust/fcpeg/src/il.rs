@@ -1,5 +1,5 @@
 use crate::*;
-use crate::block::*;
+use crate::rule::*;
 use crate::cons::Translator;
 
 use std::collections::HashMap;
@@ -22,14 +22,14 @@ impl ConsoleLogger for FcpilParsingLog {
     }
 }
 
-pub struct FcpilParser {
-    src: MultilineSource,
+pub struct FcpilParser<'a> {
+    src: &'a MultilineSource,
     line_i: usize,
     char_i: usize,
 }
 
-impl FcpilParser {
-    fn new(src: MultilineSource) -> FcpilParser {
+impl<'a> FcpilParser<'a> {
+    fn new(src: &'a MultilineSource) -> FcpilParser<'a> {
         return FcpilParser {
             src: src,
             line_i: 0,
@@ -39,10 +39,9 @@ impl FcpilParser {
 
     pub fn parse(cons: &mut Console, src: MultilineSource) -> ConsoleResult<RuleMap> {
         let mut map = HashMap::<RuleId, Rule>::new();
-        let lines = src.as_content_ref();
-        let mut parser = FcpilParser::new(src);
+        let mut parser = FcpilParser::new(&src);
 
-        for each_line in lines {
+        for each_line in src.as_content_ref() {
             let (rule_id, rule) = parser.parse_line(each_line).consume(cons)?;
             map.insert(rule_id, rule);
         }

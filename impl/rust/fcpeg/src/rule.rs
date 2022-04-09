@@ -9,6 +9,10 @@ use cons_util::cons::{Console, ConsoleResult};
 
 use regex::Regex;
 
+pub trait FcpilFormat {
+    fn to_fcpil(&self) -> String;
+}
+
 pub struct BlockMap {}
 
 impl BlockMap {
@@ -89,6 +93,12 @@ impl std::fmt::Debug for RuleMap {
     }
 }
 
+impl Into<HashMap<RuleId, Rule>> for RuleMap {
+    fn into(self) -> HashMap<RuleId, Rule> {
+        return self.0;
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rule {
     id: RuleId,
@@ -104,9 +114,9 @@ impl Rule {
     }
 }
 
-impl Display for Rule {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        return write!(f, "{} <- {}", self.id.get_rule_name(), self.elem);
+impl FcpilFormat for Rule {
+    fn to_fcpil(&self) -> String {
+        return format!("{} {}", self.id, self.elem.to_fcpil());
     }
 }
 
@@ -116,12 +126,12 @@ pub enum RuleElement {
     Expression(RuleExpression),
 }
 
-impl Display for RuleElement {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+impl FcpilFormat for RuleElement {
+    fn to_fcpil(&self) -> String {
         return match self {
-            RuleElement::Group(group) => write!(f, "{}", group),
-            RuleElement::Expression(expr) => write!(f, "{}", expr),
-        }
+            RuleElement::Group(group) => format!("{}", group),
+            RuleElement::Expression(expr) => format!("{}", expr),
+        };
     }
 }
 
@@ -161,17 +171,6 @@ pub enum RuleGroupKind {
     Sequence,
 }
 
-impl Display for RuleGroupKind {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let s = match self {
-            RuleGroupKind::Choice => "Choice",
-            RuleGroupKind::Sequence => "Sequence",
-        };
-
-        return write!(f, "{}", s);
-    }
-}
-
 thread_local!{
     static RULE_GROUP_INDEX_COUNT: RefCell<usize> = RefCell::new(0);
 }
@@ -206,19 +205,16 @@ impl RuleGroup {
     }
 }
 
-impl Display for RuleGroup {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let mut seq_text = Vec::<String>::new();
+impl FcpilFormat for RuleGroup {
+    fn to_fcpil(&self) -> String {
+        let seqs_fmt = self.subelems.iter().map(|each_elem| {
+            return match each_elem {
+                RuleElement::Group(each_group) => each_group.to_string(),
+                RuleElement::Expression(each_expr) => format!("{}", each_expr),
+            };
+        }).collect::<Vec<String>>();
 
-        for each_elem in &self.subelems {
-            match each_elem {
-                RuleElement::Group(each_group) => seq_text.push(each_group.to_string()),
-                RuleElement::Expression(each_expr) => seq_text.push(format!("{}", each_expr)),
-            }
-        }
-
-        let separator = " : ";
-        return write!(f, "{}", format!("({}){}", seq_text.join(separator), self.ast_reflection_style));
+        return format!("({}){}", seqs_fmt.join(":"), self.ast_reflection_style);
     }
 }
 

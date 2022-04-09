@@ -1,13 +1,12 @@
-pub mod block;
+pub mod rule;
 pub mod cons;
 pub mod il;
 pub mod js;
 pub mod test;
 
-use crate::block::*;
+use crate::rule::*;
 
 use std::fmt::{Display, Formatter};
-use std::path::PathBuf;
 
 use cons_util::cons::*;
 use cons_util::file::*;
@@ -46,57 +45,57 @@ pub type MultilineSourceRef<'a> = Source<&'a Vec<String>>;
 #[derive(Clone, PartialEq)]
 pub enum Source<T: Clone + PartialEq> {
     Raw { content: T },
-    File { path: PathBuf, content: T },
+    File { path: FilePath, content: T },
 }
 
 impl GeneralSource {
-    fn file(path: PathBuf) -> FileManResult<GeneralSource> {
-        let content = FileMan::read_all(&path)?;
+    pub fn file(path: FilePath) -> FileManResult<GeneralSource> {
+        let content = path.read()?;
         return Ok(GeneralSource::File { path: path, content: content });
     }
 }
 
 impl MultilineSource {
-    fn file(path: PathBuf) -> FileManResult<MultilineSource> {
-        let content = FileMan::read_lines(&path)?;
+    pub fn file(path: FilePath) -> FileManResult<MultilineSource> {
+        let content = path.read_lines()?;
         return Ok(MultilineSource::File { path: path, content: content });
     }
 }
 
 impl<T: Clone + PartialEq> Source<T> {
-    fn raw(content: T) -> Source<T> {
+    pub fn raw(content: T) -> Source<T> {
         return Source::Raw { content: content };
     }
 
-    fn is_raw(&self) -> bool {
+    pub fn is_raw(&self) -> bool {
         return match self {
             Source::<T>::Raw { content: _ } => true,
             _ => false,
         };
     }
 
-    fn is_file(&self) -> bool {
+    pub fn is_file(&self) -> bool {
         return match self {
             Source::<T>::File { path: _, content: _ } => true,
             _ => false,
         };
     }
 
-    fn get_file_path(&self) -> Option<&PathBuf> {
+    pub fn get_file_path(&self) -> Option<&FilePath> {
         return match self {
             Source::<T>::File { path, content: _ } => Some(&path),
             _ => None,
         };
     }
 
-    fn as_content_ref(&self) -> &T {
+    pub fn as_content_ref(&self) -> &T {
         return match self {
             Source::<T>::Raw { content } => &content,
             Source::<T>::File { path: _, content } => &content,
         };
     }
 
-    fn into_content(self) -> T {
+    pub fn into_content(self) -> T {
         return match self {
             Source::<T>::Raw { content } => content,
             Source::<T>::File { path: _, content } => content,
@@ -122,7 +121,7 @@ impl SourcePosition {
         let file_path = src.get_file_path();
 
         match file_path {
-            Some(v) => return SourcePosition::FileColumn { file_path: v.into_os_string().into_string().unwrap(), index: index, line: line, column: column },
+            Some(v) => return SourcePosition::FileColumn { file_path: v.to_string(), index: index, line: line, column: column },
             None => (),
         }
 
@@ -134,10 +133,10 @@ impl Display for SourcePosition {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         let s = match self {
             SourcePosition::Line { line } => format!("<string>:{}", line),
-            SourcePosition::Column { index, line, column } => format!("<string>:{}:{}", line, column),
+            SourcePosition::Column { index: _, line, column } => format!("<string>:{}:{}", line, column),
             SourcePosition::File { file_path } => format!("{}", file_path),
             SourcePosition::FileLine { file_path, line } => format!("{}:{}", file_path, line),
-            SourcePosition::FileColumn { file_path, index, line, column } => format!("{}:{}:{}", file_path, line, column),
+            SourcePosition::FileColumn { file_path, index: _, line, column } => format!("{}:{}:{}", file_path, line, column),
         };
 
         return write!(f, "{}", s);
