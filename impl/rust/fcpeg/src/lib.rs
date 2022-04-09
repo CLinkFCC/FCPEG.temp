@@ -172,6 +172,6 @@ impl FcpegParser {
     }
 
     pub fn parse(&self, _cons: &mut Console, _input: GeneralSource) {
-        unimplemented!();
+        todo!();
     }
 }

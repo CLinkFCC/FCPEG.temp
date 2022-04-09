@@ -21,7 +21,7 @@ pub struct BlockMap {}
 
 impl BlockMap {
     pub fn from_fcpeg(_src: GeneralSource) -> BlockMap {
-        unimplemented!();
+        todo!();
     }
 }
 
@@ -83,7 +83,7 @@ impl RuleMap {
     }
 
     pub fn from_block_map(_cons: &mut Console, _block_map: BlockMap) -> RuleMap {
-        unimplemented!();
+        todo!();
     }
 
     pub fn from_fcpil(cons: &mut Console, src: MultilineSource) -> ConsoleResult<RuleMap> {
