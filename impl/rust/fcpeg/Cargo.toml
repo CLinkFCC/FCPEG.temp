@@ -10,4 +10,5 @@ js = []
 cons-util = { path = "C:/Users/Garnet3106/Desktop/Media/Docs/Repos/cons-util" }
 num-traits = "0"
 regex = "1"
+tokio = { version = "1", features = ["full"] }
 wasm-bindgen = "0"

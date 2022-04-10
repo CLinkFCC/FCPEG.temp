@@ -1,4 +1,5 @@
 use crate::SourcePosition;
+use crate::rule::RuleId;
 
 use cons_util::translate;
 use cons_util::cons::*;
@@ -24,7 +25,8 @@ impl Language {
 #[derive(Clone, PartialEq)]
 pub enum Translator {
     // log titles
-    UnexpectedEof,
+    ExpectedExpressionOrGroupFoundLinebreak,
+    RuleIdIsDuplicate { rule_id: RuleId },
     // descriptions
     AtDescription { pos: SourcePosition },
     RawDescription { msg: String },
@@ -41,9 +43,13 @@ impl ConsoleLogTranslator for Translator {
             translator => self,
             lang => lang,
             // log titles
-            Translator::UnexpectedEof => {
-                Language::English => "unexpected EOF",
-                Language::Japanese => "予期しない EOF",
+            Translator::ExpectedExpressionOrGroupFoundLinebreak => {
+                Language::English => "expected expression or group, found linebreak",
+                Language::Japanese => "表現字句もしくはグループが必要ですが、改行が見つかりました",
+            },
+            Translator::RuleIdIsDuplicate { rule_id } => {
+                Language::English => format!("規則 ID `{}` が重複しています", rule_id),
+                Language::Japanese => format!("rule ID {} is duplicate", rule_id),
             },
             // descriptions
             Translator::AtDescription { pos } => {

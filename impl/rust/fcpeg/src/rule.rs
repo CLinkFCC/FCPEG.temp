@@ -1,11 +1,11 @@
-use crate::{GeneralSource, MultilineSource};
-use crate::il::FcpilParser;
+use crate::{GeneralSource, MultilineSource, SourcePosition};
+use crate::il::{FcpilParser, FcpilParsingResult};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
-use cons_util::cons::{Console, ConsoleResult};
+use cons_util::cons::*;
 
 use regex::Regex;
 
@@ -51,12 +51,6 @@ impl RuleId {
     }
 }
 
-impl std::fmt::Debug for RuleId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "{:?}", self.0);
-    }
-}
-
 impl Into<String> for RuleId {
     fn into(self) -> String {
         return self.0;
@@ -86,14 +80,8 @@ impl RuleMap {
         todo!();
     }
 
-    pub fn from_fcpil(cons: &mut Console, src: MultilineSource) -> ConsoleResult<RuleMap> {
-        return FcpilParser::parse(cons, src);
-    }
-}
-
-impl std::fmt::Debug for RuleMap {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        return write!(f, "{:?}", self.0);
+    pub fn from_fcpil(src: MultilineSource) -> FcpilParsingResult<RuleMap> {
+        return FcpilParser::parse(src);
     }
 }
 
@@ -103,15 +91,17 @@ impl Into<HashMap<RuleId, Rule>> for RuleMap {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Rule {
-    id: RuleId,
-    elem: RuleElement,
+    pub pos: SourcePosition,
+    pub id: RuleId,
+    pub elem: RuleElement,
 }
 
 impl Rule {
-    pub fn new(id: RuleId, elem: RuleElement) -> Rule {
+    pub fn new(pos: SourcePosition, id: RuleId, elem: RuleElement) -> Rule {
         return Rule {
+            pos: pos,
             id: id,
             elem: elem,
         };
@@ -124,7 +114,7 @@ impl FcpilFormat for Rule {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum RuleElement {
     Group(RuleGroup),
     Expression(RuleExpression),
@@ -139,7 +129,7 @@ impl FcpilFormat for RuleElement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum AstReflectionStyle {
     // arg: 反映名 (reflection name)
     Reflective(String),
@@ -167,7 +157,7 @@ impl FcpegFormat for AstReflectionStyle {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum RuleGroupKind {
     Choice,
     Sequence,
@@ -184,7 +174,7 @@ impl Display for RuleGroupKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RuleGroup {
     pub index: usize,
     pub kind: RuleGroupKind,
@@ -221,17 +211,17 @@ impl RuleGroup {
 impl FcpilFormat for RuleGroup {
     fn to_fcpil(&self) -> String {
         let seqs_fmt = self.subelems.iter().map(|each_elem| {
-            return match each_elem {
+            match each_elem {
                 RuleElement::Group(each_group) => each_group.to_fcpil(),
                 RuleElement::Expression(each_expr) => each_expr.to_fcpil(),
-            };
+            }
         }).collect::<Vec<String>>();
 
         return format!("({}){}", seqs_fmt.join(":"), self.ast_reflection_style.to_fcpeg());
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum RuleExpressionKind {
     Argument(String),
     CharacterClass(Regex),
@@ -255,7 +245,7 @@ impl FcpegFormat for RuleExpressionKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RuleExpression {
     pub kind: RuleExpressionKind,
     pub ast_reflection_style: AstReflectionStyle,

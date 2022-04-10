@@ -4,6 +4,7 @@ pub mod il;
 pub mod js;
 pub mod test;
 
+use crate::il::FcpilParsingResult;
 use crate::rule::*;
 
 use std::fmt::{Display, Formatter};
@@ -162,8 +163,8 @@ impl FcpegParser {
         return Ok(FcpegParser::new(rule_map));
     }
 
-    pub fn from_fcpil(cons: &mut Console, src: MultilineSource) -> ConsoleResult<FcpegParser> {
-        let rule_map = RuleMap::from_fcpil(cons, src)?;
+    pub fn from_fcpil(src: MultilineSource) -> FcpilParsingResult<FcpegParser> {
+        let rule_map = RuleMap::from_fcpil(src)?;
         return Ok(FcpegParser::new(rule_map));
     }
 
