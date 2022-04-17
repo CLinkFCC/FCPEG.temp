@@ -1,10 +1,17 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
-use std::thread::sleep;
+use {
+    std::{
+        collections::HashMap,
+        time::{
+            Duration,
+            SystemTime
+        },
+        thread::sleep,
+    },
 
-use cons_util::file::*;
+    cons_util::file::*,
+};
 
 struct FileChangeDetector<'a> {
     callback: Box<dyn Fn()>,

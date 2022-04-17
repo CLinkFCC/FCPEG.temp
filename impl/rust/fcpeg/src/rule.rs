@@ -25,7 +25,7 @@ impl BlockMap {
     }
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct RuleId(pub String);
 
 impl RuleId {

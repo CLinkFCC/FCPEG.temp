@@ -1,5 +1,4 @@
 pub mod rule;
-pub mod cons;
 pub mod il;
 pub mod js;
 pub mod test;
@@ -104,7 +103,7 @@ impl<T: Clone + PartialEq> Source<T> {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SourcePosition {
     Line { line: usize },
     Column { index: usize, line: usize, column: usize },

@@ -8,6 +8,7 @@ js = []
 
 [dependencies]
 cons-util = { path = "C:/Users/Garnet3106/Desktop/Media/Docs/Repos/cons-util" }
+cons-util-derive = { path = "C:/Users/Garnet3106/Desktop/Media/Docs/Repos/cons-util-derive" }
 num-traits = "0"
 regex = "1"
 tokio = { version = "1", features = ["full"] }

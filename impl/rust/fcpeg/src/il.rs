@@ -1,27 +1,31 @@
-use crate::*;
-use crate::rule::*;
-use crate::cons::Translator;
+use {
+    crate::{
+        *,
+        rule::*,
+    },
 
-use std::collections::HashMap;
+    std::collections::HashMap,
 
-use cons_util::*;
-use cons_util::cons::*;
+    cons_util::cons::*,
+};
 
 pub type FcpilParsingResult<T> = Result<T, FcpilParsingLog>;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, cons_util_derive::ConsoleLogTranslator, Debug, PartialEq)]
 pub enum FcpilParsingLog {
+    #[translate(
+        kind = "E",
+        en = "expected expression or group, found linebreak\n\tat: {pos}",
+        ja = "表現字句もしくはグループが必要ですが、改行が見つかりました\n\t位置: {pos}",
+    )]
     ExpectedExpressionOrGroupFoundLinebreak { pos: SourcePosition },
-    RuleIdIsDuplicate { pos: SourcePosition, rule_id: RuleId },
-}
 
-impl ConsoleLogger for FcpilParsingLog {
-    fn get_log(&self) -> ConsoleLog {
-        return match self {
-            FcpilParsingLog::ExpectedExpressionOrGroupFoundLinebreak { pos } => log!(Error, Translator::ExpectedExpressionOrGroupFoundLinebreak, Translator::AtDescription { pos: pos.clone() }),
-            FcpilParsingLog::RuleIdIsDuplicate { pos, rule_id } => log!(Error, Translator::RuleIdIsDuplicate { rule_id: rule_id.clone() }, Translator::AtDescription { pos: pos.clone() }),
-        };
-    }
+    #[translate(
+        kind = "E",
+        en = "rule ID `{rule_id}` is duplicate\n\tat: {pos}",
+        ja = "規則 ID `{rule_id}` が重複しています\n\t位置: {pos}",
+    )]
+    RuleIdIsDuplicate { pos: SourcePosition, rule_id: RuleId },
 }
 
 pub struct FcpilParser<'a> {
